@@ -8,6 +8,7 @@ import shutil
 import re
 
 from qsome import inp_reader
+from pyscf import gto
 
 
 def_filename = "default.inp"
@@ -39,6 +40,9 @@ basis aug-cc-pVDZ
 smearsigma 0.1
 unit angstrom
 initguess minao
+damp 0.2
+shift 0.1
+subcycles 4
 end
 
 subsystem
@@ -49,6 +53,8 @@ smearsigma 0.01
 unit bohr
 freeze
 initguess supmol
+damp 0.1
+shift 0.2
 end
 
 embed
@@ -58,23 +64,22 @@ embed
  conv 1e-4
  grad 1e-4
  diis 2
- subcycles 4
  update_fock 2
- damp 0.2
- shift 0.1
  initguess atom
  setfermi -4
 end
 
 ct_method u
+basis 3-21g
 ct_settings
  conv 1e-3
  grad 1e-2
  cycles 300
  damp 0.1
  shift 0.3
- smearsig 0.2
+ smearsigma 0.2
  initguess 1e
+ includeghost
 end
 
 active_method caspt2[2,2]
@@ -89,7 +94,7 @@ active_settings
  cycles 500
  damp 0.1
  shift 0.2
- smearsig 0.1
+ smearsigma 0.1
  initguess readchk
 end
 
@@ -237,12 +242,17 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.subsystem[0].basis, 'aug-cc-pvdz') 
         self.assertEqual(inp.subsystem[0].smearsigma, 0.1) 
         self.assertEqual(inp.subsystem[0].unit, 'angstrom')
+        self.assertEqual(inp.subsystem[0].subcycles, 4)
+        self.assertEqual(inp.subsystem[0].damp, 0.2)
+        self.assertEqual(inp.subsystem[0].shift, 0.1)
         self.assertEqual(inp.subsystem[0].initguess, 'minao')
 
         self.assertEqual(inp.subsystem[1].charge, 2)
         self.assertEqual(inp.subsystem[1].spin, -2) 
         self.assertEqual(inp.subsystem[1].smearsigma, 0.01) 
         self.assertEqual(inp.subsystem[1].unit, 'bohr')
+        self.assertEqual(inp.subsystem[1].damp, 0.1)
+        self.assertEqual(inp.subsystem[1].shift, 0.2)
         self.assertTrue(inp.subsystem[1].freeze)
         self.assertEqual(inp.subsystem[1].initguess, 'supmol')
 
@@ -253,21 +263,19 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.embed.conv, 1e-4)
         self.assertEqual(inp.embed.grad, 1e-4)
         self.assertEqual(inp.embed.diis, 2)
-        self.assertEqual(inp.embed.subcycles, 4)
         self.assertEqual(inp.embed.update_fock, 2)
-        self.assertEqual(inp.embed.damp, 0.2)
-        self.assertEqual(inp.embed.shift, 0.1)
         self.assertEqual(inp.embed.initguess, 'atom')
         self.assertEqual(inp.embed.setfermi, -4.0)
 
         #Check CT settings
+        self.assertEqual(inp.basis, '3-21g')
         self.assertEqual(inp.ct_method, 'u')
         self.assertEqual(inp.ct_settings.conv, 1e-3)
         self.assertEqual(inp.ct_settings.grad, 1e-2)
         self.assertEqual(inp.ct_settings.cycles, 300)
         self.assertEqual(inp.ct_settings.damp, 0.1)
         self.assertEqual(inp.ct_settings.shift, 0.3)
-        self.assertEqual(inp.ct_settings.smearsig, 0.2)
+        self.assertEqual(inp.ct_settings.smearsigma, 0.2)
         self.assertEqual(inp.ct_settings.initguess, '1e')
 
         #Check active settings
@@ -277,7 +285,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.active_settings.cycles, 500)
         self.assertEqual(inp.active_settings.damp, 0.1)
         self.assertEqual(inp.active_settings.shift, 0.2)
-        self.assertEqual(inp.active_settings.smearsig, 0.1)
+        self.assertEqual(inp.active_settings.smearsigma, 0.1)
         self.assertEqual(inp.active_settings.initguess, 'readchk')
 
         #Check system settings
@@ -338,10 +346,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['ft_conv'], 1e-4)
         self.assertEqual(sup_kwargs['ft_grad'], 1e-4)
         self.assertEqual(sup_kwargs['ft_diis'], 2)
-        self.assertEqual(sup_kwargs['ft_subcycles'], 4)
         self.assertEqual(sup_kwargs['ft_update_fock'], 2)
-        self.assertEqual(sup_kwargs['ft_damp'], 0.2)
-        self.assertEqual(sup_kwargs['ft_shift'], 0.1)
         self.assertEqual(sup_kwargs['ft_initguess'], 'atom')
         self.assertEqual(sup_kwargs['ft_setfermi'], -4.)
 
@@ -353,6 +358,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['damp'], 0.1)
         self.assertEqual(sup_kwargs['shift'], 0.3)
         self.assertEqual(sup_kwargs['initguess'], '1e')
+        self.assertEqual(sup_kwargs['includeghost'], True)
 
         #System settings
         self.assertEqual(sup_kwargs['filename'], path + exp_set_filename)
@@ -387,12 +393,53 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
     def test_default_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
-        sub_kwargs = in_obj.env_subsystem_kwargs
+        sub_kwargs = in_obj.env_subsystem_kwargs[0]
+
+        self.assertEqual(sub_kwargs['env_method'], 'pbe')
+        self.assertEqual(sub_kwargs['filename'], path + def_filename)
+
+        sub_kwargs = in_obj.env_subsystem_kwargs[1]
+
+        self.assertEqual(sub_kwargs['env_method'], 'pbe')
+        self.assertEqual(sub_kwargs['filename'], path + def_filename)
 
     def test_exp_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + exp_set_filename)
-        sub_kwargs = in_obj.env_subsystem_kwargs
+        sub_kwargs = in_obj.env_subsystem_kwargs[0]
+
+        self.assertEqual(sub_kwargs['env_method'], 'pbe')
+        self.assertEqual(sub_kwargs['filename'], path + exp_set_filename)
+
+        # subsystem specific options
+        self.assertEqual(sub_kwargs['smearsigma'], 0.1)
+        self.assertEqual(sub_kwargs['initguess'], 'minao')
+        self.assertEqual(sub_kwargs['damp'], 0.2)
+        self.assertEqual(sub_kwargs['shift'], 0.1)
+        self.assertEqual(sub_kwargs['subcycles'], 4)
+
+        # other options
+        self.assertEqual(sub_kwargs['grid'], 5)
+        self.assertEqual(sub_kwargs['verbose'], 1)
+        self.assertEqual(sub_kwargs['analysis'], True)
+        self.assertEqual(sub_kwargs['debug'], True)
+
+        sub_kwargs = in_obj.env_subsystem_kwargs[1]
+        self.assertEqual(sub_kwargs['env_method'], 'pbe')
+        self.assertEqual(sub_kwargs['filename'], path + exp_set_filename)
+
+        # subsystem specific options
+        self.assertEqual(sub_kwargs['smearsigma'], 0.01)
+        self.assertEqual(sub_kwargs['initguess'], 'supmol')
+        self.assertEqual(sub_kwargs['freeze'], True)
+
+        # other options
+        self.assertEqual(sub_kwargs['damp'], 0.1)
+        self.assertEqual(sub_kwargs['shift'], 0.2)
+        self.assertEqual(sub_kwargs['grid'], 5)
+        self.assertEqual(sub_kwargs['verbose'], 1)
+        self.assertEqual(sub_kwargs['analysis'], True)
+        self.assertEqual(sub_kwargs['debug'], True)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -419,10 +466,26 @@ class TestActiveSubSystemKwargs(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + def_filename)
         sub_kwargs = in_obj.active_subsystem_kwargs
 
+        self.assertEqual(sub_kwargs['active_method'], 'hf')
+
     def test_exp_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + exp_set_filename)
         sub_kwargs = in_obj.active_subsystem_kwargs
+        self.assertEqual(sub_kwargs['active_method'], 'caspt2[2,2]')
+        self.assertEqual(sub_kwargs['localize_orbitals'], True)
+        self.assertEqual(sub_kwargs['active_orbs'], [4,5])
+
+        # subsystem specific options
+        self.assertEqual(sub_kwargs['smearsigma'], 0.1)
+        self.assertEqual(sub_kwargs['initguess'], 'readchk')
+
+        # other options
+        self.assertEqual(sub_kwargs['conv'], 1e-10)
+        self.assertEqual(sub_kwargs['grad'], 1e-11)
+        self.assertEqual(sub_kwargs['cycles'], 500)
+        self.assertEqual(sub_kwargs['damp'], 0.1)
+        self.assertEqual(sub_kwargs['shift'], 0.2)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -434,11 +497,176 @@ class TestGenMols(unittest.TestCase):
     def setUp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
 
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+        os.mkdir(path)
+
         with open(path+def_filename, "w") as f:
             f.write(default_str)
 
         with open(path+exp_set_filename, "w") as f:
             f.write(exp_set_str)
+
+        with open(path+partial_ghost_filename, "w") as f:
+            f.write(partial_ghost_str)
+
+        with open(path+ghost_filename, "w") as f:
+            f.write(ghost_str)
+
+        with open(path+mixed_basis_filename, "w") as f:
+            f.write(mixed_basis_str)
+
+    def test_def_inp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + def_filename)
+        mols = in_obj.subsys_mols
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[0].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[0].basis, he_pyscf_basis)
+        self.assertEqual(mols[0].charge, 0)
+        self.assertEqual(mols[0].spin, 0)
+        self.assertEqual(mols[0].unit, 'angstrom')
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[1].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[1].basis, he_pyscf_basis)
+        self.assertEqual(mols[1].charge, 0)
+        self.assertEqual(mols[1].spin, 0)
+        self.assertEqual(mols[1].unit, 'angstrom')
+
+    def test_exp_set_inp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + exp_set_filename)
+        mols = in_obj.subsys_mols
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[0].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
+
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.subsystem[0].basis, 'C')} 
+        self.assertEqual(mols[0].basis, c_pyscf_basis)
+        self.assertEqual(mols[0].charge, -1)
+        self.assertEqual(mols[0].spin, 1)
+        self.assertEqual(mols[0].unit, 'angstrom')
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[1].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
+
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
+        self.assertEqual(mols[1].basis, c_pyscf_basis)
+        self.assertEqual(mols[1].charge, 2)
+        self.assertEqual(mols[1].spin, -2)
+        self.assertEqual(mols[1].unit, 'bohr')
+        
+    def test_partial_ghost_inp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + partial_ghost_filename)
+        mols = in_obj.subsys_mols
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[0].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[0].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[0].atom[1][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[1][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0].basis['ghost:1'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0].charge, 0)
+        self.assertEqual(mols[0].spin, 0)
+        self.assertEqual(mols[0].unit, 'angstrom')
+
+    def test_ghost_inp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + ghost_filename)
+        mols = in_obj.subsys_mols
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[0].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[0].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[0].atom[1][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[1][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0].basis['ghost:1'], he_pyscf_basis['He'])
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[1].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[1].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[1].atom[1][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[1].atom[1][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[1].atom[1][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[1].basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[1].basis['ghost:1'], he_pyscf_basis['He'])
+
+        self.assertEqual(mols[0].charge, 0)
+        self.assertEqual(mols[0].spin, 0)
+        self.assertEqual(mols[0].unit, 'angstrom')
+
+    def test_mixed_basis_inp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + mixed_basis_filename)
+        mols = in_obj.subsys_mols
+
+        curr_atom = in_obj.inp.subsystem[0].atoms[0]
+        self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[0].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[0].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.subsystem[0].basis, 'He')} 
+        self.assertEqual(mols[0].basis, he_pyscf_basis)
+        self.assertEqual(mols[0].charge, 0)
+        self.assertEqual(mols[0].spin, 0)
+        self.assertEqual(mols[0].unit, 'angstrom')
+
+        curr_atom = in_obj.inp.subsystem[1].atoms[0]
+        self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
+        self.assertEqual(mols[1].atom[0][1][0], float(curr_atom.group(2)))
+        self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
+        self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
+
+        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        self.assertEqual(mols[1].basis, he_pyscf_basis)
+        self.assertEqual(mols[1].charge, 0)
+        self.assertEqual(mols[1].spin, 0)
+        self.assertEqual(mols[1].unit, 'angstrom')
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

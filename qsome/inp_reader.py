@@ -8,15 +8,17 @@ import input_reader
 import sys
 import re
 
+from pyscf import gto
+
 class InpReader:
 
     def __init__(self, filename):
         self.read_input(filename)
 
         self.get_supersystem_kwargs()
-        self.env_subsystem_kwargs = None
-        self.active_subsystem_kwargs = None
-        self.subsys_mols = []
+        self.get_env_subsystem_kwargs()
+        self.get_active_subsystem_kwargs()
+        self.gen_mols()
 
     def read_input(self, filename):
         '''Reads a formatted pySCF input file, and generates
@@ -44,6 +46,9 @@ class InpReader:
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         subsys.add_boolean_key('freeze')                        
         subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        subsys.add_line_key('damp', type=float)         # SCF damping parameter
+        subsys.add_line_key('shift', type=float)        # SCF level-shift parameter
+        subsys.add_line_key('subcycles', type=int)      # number of subsys diagonalizations
 
         # add embedding block
         embed = reader.add_block_key('embed', required=True)
@@ -52,10 +57,7 @@ class InpReader:
         embed.add_line_key('grad', type=float)         # f&t conv tolerance
         embed.add_line_key('env_method', type=str)      
         embed.add_line_key('diis', type=int)           # start DIIS (0 to turn off)
-        embed.add_line_key('subcycles', type=int)      # number of subsys diagonalizations
         embed.add_line_key('update_fock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
-        embed.add_line_key('damp', type=float)         # SCF damping parameter
-        embed.add_line_key('shift', type=float)        # SCF level-shift parameter
         embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
 
         # This section needs work.
@@ -80,17 +82,18 @@ class InpReader:
         ct_settings.add_line_key('cycles', type=int)
         ct_settings.add_line_key('damp', type=float)         # SCF damping parameter
         ct_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
-        ct_settings.add_line_key('smearsig', type=float)   # supermolecular dft smearing
+        ct_settings.add_line_key('smearsigma', type=float)   # supermolecular dft smearing
         ct_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        ct_settings.add_boolean_key('includeghost') 
 
-        reader.add_line_key('active_method', type=str)                  # Active method
+        reader.add_line_key('active_method', type=str, required=True)                  # Active method
         active_settings = reader.add_block_key('active_settings')
         active_settings.add_line_key('conv', type=float)       
         active_settings.add_line_key('grad', type=float)       
         active_settings.add_line_key('cycles', type=int)       
         active_settings.add_line_key('damp', type=float)         # SCF damping parameter
         active_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
-        active_settings.add_line_key('smearsig', type=float)        # SCF level-shift parameter
+        active_settings.add_line_key('smearsigma', type=float)        # SCF level-shift parameter
         active_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
 
         cas_settings = reader.add_block_key('cas_settings')         # CAS method settings
@@ -171,12 +174,6 @@ class InpReader:
                 self.supersystem_kwargs['ft_grad'] = self.inp.embed.grad
             if self.inp.embed.diis:
                 self.supersystem_kwargs['ft_diis'] = self.inp.embed.diis
-            if self.inp.embed.subcycles:
-                self.supersystem_kwargs['ft_subcycles'] = self.inp.embed.subcycles
-            if self.inp.embed.damp:
-                self.supersystem_kwargs['ft_damp'] = self.inp.embed.damp
-            if self.inp.embed.shift:
-                self.supersystem_kwargs['ft_shift'] = self.inp.embed.shift
             if self.inp.embed.setfermi:
                 self.supersystem_kwargs['ft_setfermi'] = self.inp.embed.setfermi
             if self.inp.embed.initguess:
@@ -195,10 +192,12 @@ class InpReader:
                 self.supersystem_kwargs['damp'] = self.inp.ct_settings.damp
             if self.inp.ct_settings.shift:
                 self.supersystem_kwargs['shift'] = self.inp.ct_settings.shift
-            if self.inp.ct_settings.smearsig:
-                self.supersystem_kwargs['smearsig'] = self.inp.ct_settings.smearsig
+            if self.inp.ct_settings.smearsigma:
+                self.supersystem_kwargs['smearsigma'] = self.inp.ct_settings.smearsigma
             if self.inp.ct_settings.initguess:
                 self.supersystem_kwargs['initguess'] = self.inp.ct_settings.initguess
+            if self.inp.ct_settings.includeghost:
+                self.supersystem_kwargs['includeghost'] = self.inp.ct_settings.includeghost
 
         if self.inp.grid:
             self.supersystem_kwargs['grid'] = self.inp.grid
@@ -211,19 +210,87 @@ class InpReader:
 
         
 
-    def get_env_subsystem_args(self):
-        pass
-    def get_active_subsystem_args(self):
-        pass
-    def gen_mols():
+    def get_env_subsystem_kwargs(self):
+        
+        # There is certainly a better way to do this. But this works.
+        # subsystem universal settings
+        universal_subsys_settings = {}
+        universal_subsys_settings['filename'] = self.inp.filename
+        universal_subsys_settings['env_method'] = self.inp.embed.env_method
+        if self.inp.grid:
+            universal_subsys_settings['grid'] = self.inp.grid
+        if self.inp.verbose:
+            universal_subsys_settings['verbose'] = self.inp.verbose
+        if self.inp.analysis:
+            universal_subsys_settings['analysis'] = self.inp.analysis
+        if self.inp.debug:
+            universal_subsys_settings['debug'] = self.inp.debug
+        
+        self.env_subsystem_kwargs = []
+        for subsystem in self.inp.subsystem:
+            subsys_settings = {}
+            if subsystem.smearsigma:
+                subsys_settings['smearsigma'] = subsystem.smearsigma
+            if subsystem.damp:
+                subsys_settings['damp'] = subsystem.damp
+            if subsystem.shift:
+                subsys_settings['shift'] = subsystem.shift
+            if subsystem.subcycles:
+                subsys_settings['subcycles'] = subsystem.subcycles
+            if subsystem.freeze:
+                subsys_settings['freeze'] = subsystem.freeze
+            if subsystem.initguess:
+                subsys_settings['initguess'] = subsystem.initguess
+            
+            subsys_settings.update(universal_subsys_settings.copy())
+            self.env_subsystem_kwargs.append(subsys_settings.copy())
+            
+
+
+
+    def get_active_subsystem_kwargs(self):
+        self.active_subsystem_kwargs = {}
+        self.active_subsystem_kwargs['active_method'] = self.inp.active_method
+        if self.inp.cas_settings:
+            if self.inp.cas_settings.localize_orbitals:
+                self.active_subsystem_kwargs['localize_orbitals'] = self.inp.cas_settings.localize_orbitals
+            if self.inp.cas_settings.active_orbs:
+                self.active_subsystem_kwargs['active_orbs'] = self.inp.cas_settings.active_orbs
+
+        if self.inp.active_settings:
+            if self.inp.active_settings.conv:
+                self.active_subsystem_kwargs['conv'] = self.inp.active_settings.conv 
+            if self.inp.active_settings.grad:
+                self.active_subsystem_kwargs['grad'] = self.inp.active_settings.grad 
+            if self.inp.active_settings.cycles:
+                self.active_subsystem_kwargs['cycles'] = self.inp.active_settings.cycles
+            if self.inp.active_settings.damp:
+                self.active_subsystem_kwargs['damp'] = self.inp.active_settings.damp
+            if self.inp.active_settings.shift:
+                self.active_subsystem_kwargs['shift'] = self.inp.active_settings.shift
+            if self.inp.active_settings.smearsigma:
+                 self.active_subsystem_kwargs['smearsigma'] = self.inp.active_settings.smearsigma
+            if self.inp.active_settings.initguess:
+                self.active_subsystem_kwargs['initguess'] = self.inp.active_settings.initguess
+             
+    
+        
+    def gen_mols(self):
+
         self.subsys_mols = []
-        for subsystem in self.inp.subsystems:
-            atom_list = subsystem.atom_list
+        for subsystem in self.inp.subsystem:
+            atom_list = subsystem.atoms
             mol = gto.Mole()
             mol.atom = []
             mol.ghosts = []
             mol.basis = {}
             ghbasis = []
+
+            if subsystem.basis:
+                basis = subsystem.basis
+            else:
+                basis = self.inp.basis
+
             for atom in atom_list:
                 if 'ghost.' in atom.group(1).lower() or 'gh.' in atom.group(1).lower():
                     atom_name = atom.group(1).split('.')[1]
@@ -239,9 +306,13 @@ class InpReader:
                         float(atom.group(3)), float(atom.group(4)))])
                     mol.basis.update({atom_name: gto.basis.load(basis, atom_name)})
 
-            mol.charge = subsystem.charge
-            mol.spin = spin
-            mol.units = units
-            mol.verbose = verbose
+            if subsystem.charge:
+                mol.charge = subsystem.charge
+            if subsystem.spin:
+                mol.spin = subsystem.spin
+            if subsystem.unit:
+                mol.unit = subsystem.unit
+            if self.inp.verbose:
+                mol.verbose = self.inp.verbose
             mol.build(dump_input=False)
-        pass
+            self.subsys_mols.append(mol) 
