@@ -179,7 +179,7 @@ class InpReader:
             if self.inp.embed.initguess:
                 self.supersystem_kwargs['ft_initguess'] = self.inp.embed.initguess
             if self.inp.embed.update_fock:
-                self.supersystem_kwargs['ft_update_fock'] = self.inp.embed.update_fock
+                self.supersystem_kwargs['ft_updatefock'] = self.inp.embed.update_fock
 
         if self.inp.ct_settings:
             if self.inp.ct_settings.cycles:
