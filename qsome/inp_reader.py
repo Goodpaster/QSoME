@@ -57,7 +57,7 @@ class InpReader:
         embed.add_line_key('grad', type=float)         # f&t conv tolerance
         embed.add_line_key('env_method', type=str)      
         embed.add_line_key('diis', type=int)           # start DIIS (0 to turn off)
-        embed.add_line_key('update_fock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
+        embed.add_line_key('updatefock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
         embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
 
         # This section needs work.
@@ -93,8 +93,6 @@ class InpReader:
         active_settings.add_line_key('cycles', type=int)       
         active_settings.add_line_key('damp', type=float)         # SCF damping parameter
         active_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
-        active_settings.add_line_key('smearsigma', type=float)        # SCF level-shift parameter
-        active_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
 
         cas_settings = reader.add_block_key('cas_settings')         # CAS method settings
         cas_settings.add_boolean_key('localize_orbitals')           # Localize orbitals prior to CAS
@@ -178,8 +176,8 @@ class InpReader:
                 self.supersystem_kwargs['ft_setfermi'] = self.inp.embed.setfermi
             if self.inp.embed.initguess:
                 self.supersystem_kwargs['ft_initguess'] = self.inp.embed.initguess
-            if self.inp.embed.update_fock:
-                self.supersystem_kwargs['ft_updatefock'] = self.inp.embed.update_fock
+            if self.inp.embed.updatefock:
+                self.supersystem_kwargs['ft_updatefock'] = self.inp.embed.updatefock
 
         if self.inp.ct_settings:
             if self.inp.ct_settings.cycles:
@@ -259,19 +257,15 @@ class InpReader:
 
         if self.inp.active_settings:
             if self.inp.active_settings.conv:
-                self.active_subsystem_kwargs['conv'] = self.inp.active_settings.conv 
+                self.active_subsystem_kwargs['active_conv'] = self.inp.active_settings.conv 
             if self.inp.active_settings.grad:
-                self.active_subsystem_kwargs['grad'] = self.inp.active_settings.grad 
+                self.active_subsystem_kwargs['active_grad'] = self.inp.active_settings.grad 
             if self.inp.active_settings.cycles:
-                self.active_subsystem_kwargs['cycles'] = self.inp.active_settings.cycles
+                self.active_subsystem_kwargs['active_cycles'] = self.inp.active_settings.cycles
             if self.inp.active_settings.damp:
-                self.active_subsystem_kwargs['damp'] = self.inp.active_settings.damp
+                self.active_subsystem_kwargs['active_damp'] = self.inp.active_settings.damp
             if self.inp.active_settings.shift:
-                self.active_subsystem_kwargs['shift'] = self.inp.active_settings.shift
-            if self.inp.active_settings.smearsigma:
-                 self.active_subsystem_kwargs['smearsigma'] = self.inp.active_settings.smearsigma
-            if self.inp.active_settings.initguess:
-                self.active_subsystem_kwargs['initguess'] = self.inp.active_settings.initguess
+                self.active_subsystem_kwargs['active_shift'] = self.inp.active_settings.shift
              
     
         

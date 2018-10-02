@@ -64,7 +64,7 @@ embed
  conv 1e-4
  grad 1e-4
  diis 2
- update_fock 2
+ updatefock 2
  initguess atom
  setfermi -4
 end
@@ -94,8 +94,6 @@ active_settings
  cycles 500
  damp 0.1
  shift 0.2
- smearsigma 0.1
- initguess readchk
 end
 
 grid 5
@@ -263,7 +261,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.embed.conv, 1e-4)
         self.assertEqual(inp.embed.grad, 1e-4)
         self.assertEqual(inp.embed.diis, 2)
-        self.assertEqual(inp.embed.update_fock, 2)
+        self.assertEqual(inp.embed.updatefock, 2)
         self.assertEqual(inp.embed.initguess, 'atom')
         self.assertEqual(inp.embed.setfermi, -4.0)
 
@@ -285,8 +283,6 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.active_settings.cycles, 500)
         self.assertEqual(inp.active_settings.damp, 0.1)
         self.assertEqual(inp.active_settings.shift, 0.2)
-        self.assertEqual(inp.active_settings.smearsigma, 0.1)
-        self.assertEqual(inp.active_settings.initguess, 'readchk')
 
         #Check system settings
         self.assertEqual(inp.grid, 5)
@@ -346,7 +342,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['ft_conv'], 1e-4)
         self.assertEqual(sup_kwargs['ft_grad'], 1e-4)
         self.assertEqual(sup_kwargs['ft_diis'], 2)
-        self.assertEqual(sup_kwargs['ft_update_fock'], 2)
+        self.assertEqual(sup_kwargs['ft_updatefock'], 2)
         self.assertEqual(sup_kwargs['ft_initguess'], 'atom')
         self.assertEqual(sup_kwargs['ft_setfermi'], -4.)
 
@@ -476,16 +472,12 @@ class TestActiveSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['localize_orbitals'], True)
         self.assertEqual(sub_kwargs['active_orbs'], [4,5])
 
-        # subsystem specific options
-        self.assertEqual(sub_kwargs['smearsigma'], 0.1)
-        self.assertEqual(sub_kwargs['initguess'], 'readchk')
-
         # other options
-        self.assertEqual(sub_kwargs['conv'], 1e-10)
-        self.assertEqual(sub_kwargs['grad'], 1e-11)
-        self.assertEqual(sub_kwargs['cycles'], 500)
-        self.assertEqual(sub_kwargs['damp'], 0.1)
-        self.assertEqual(sub_kwargs['shift'], 0.2)
+        self.assertEqual(sub_kwargs['active_conv'], 1e-10)
+        self.assertEqual(sub_kwargs['active_grad'], 1e-11)
+        self.assertEqual(sub_kwargs['active_cycles'], 500)
+        self.assertEqual(sub_kwargs['active_damp'], 0.1)
+        self.assertEqual(sub_kwargs['active_shift'], 0.2)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
