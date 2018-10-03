@@ -1,2 +1,2 @@
 # QSoME
-Quantum Solid and Molecular Embedding
+Quantum Solid state and Molecular Embedding
