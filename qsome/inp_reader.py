@@ -278,7 +278,7 @@ class InpReader:
             mol.atom = []
             mol.ghosts = []
             mol.basis = {}
-            ghbasis = []
+            nghost = 0
 
             if subsystem.basis:
                 basis = subsystem.basis
@@ -288,9 +288,9 @@ class InpReader:
             for atom in atom_list:
                 if 'ghost.' in atom.group(1).lower() or 'gh.' in atom.group(1).lower():
                     atom_name = atom.group(1).split('.')[1]
-                    ghbasis.append(atom_name)
+                    nghost += 1
                     mol.ghosts.append(atom_name)
-                    ghost_name = 'ghost:{0}'.format(len(ghbasis))
+                    ghost_name = f'ghost:{nghost}'
                     mol.atom.append([ghost_name, (float(atom.group(2)), 
                         float(atom.group(3)), float(atom.group(4)))])
                     mol.basis.update({ghost_name: gto.basis.load(basis, atom_name)})

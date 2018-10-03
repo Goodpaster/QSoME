@@ -2,6 +2,7 @@
 # Daniel Graham
 
 from qsome import subsystem
+from pyscf import gto
 import os
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
@@ -10,6 +11,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                  grid=4, verbose=4, analysis=False, debug=False):
 
         self.mol = mol
+        self.load_basis()
         self.env_method = env_method
 
         #Check if none
@@ -32,6 +34,28 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.verbose = verbose
         self.analysis = analysis
         self.debug = debug
+
+    def load_basis(self):
+
+        # a function to turn a basis string ('3-21g') into a basis dictionary for use in concat mols.
+        if isinstance(self.mol.basis, str):
+            new_basis = {}
+            nghost = 0
+            for i in range(self.mol.natm):
+                if 'ghost.' in self.mol.atom[i][0] or 'gh.' in self.mol.atom[i][0]: 
+                    nghost += 1
+                    atom_name = self.mol.atom[i][0].split('.')[1]
+                    ghost_name = f'ghost:{nghost}'
+                    self.mol.atom[i][0] = ghost_name
+                    new_basis.update({ghost_name: gto.basis.load(self.mol.basis, atom_name)})
+                else:
+                    atom_name = self.mol.atom[i][0]
+                    new_basis.update({atom_name: gto.basis.load(self.mol.basis, atom_name)})
+            self.mol.basis = new_basis
+            self.mol.build(dump_input=False)
+        else:
+            return True
+        
 
     def init_density(self):
         pass
