@@ -50,6 +50,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.concat_mols()
         self.init_density()
 
+    def sub2sup(self):
+        pass
+
     def init_density(self):
         pass
 
