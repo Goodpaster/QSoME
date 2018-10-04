@@ -2,16 +2,16 @@
 # Daniel Graham
 
 from qsome import subsystem
-from pyscf import gto
+from pyscf import gto, scf, dft
 import os
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def __init__(self, mol, env_method, filename=None, smearsigma=0, damp=0, 
-                 shift=0, subcycles=1, freeze=False, initguess='minao',
-                 grid=4, verbose=4, analysis=False, debug=False):
+                 shift=0, subcycles=1, freeze=False, initguess=None,
+                 grid_level=4, verbose=4, analysis=False, debug=False):
 
         self.mol = mol
-        self.load_basis()
+        self.mol.basis = self.mol._basis # Always save basis as internal pyscf format
         self.env_method = env_method
 
         #Check if none
@@ -30,32 +30,44 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         self.initguess = initguess
 
-        self.grid = grid
+        self.grid_level = grid_level
         self.verbose = verbose
         self.analysis = analysis
         self.debug = debug
+        self.init_env_scf()
+        self.dmat = [None, None] # alpha and beta dmat
 
-    def load_basis(self):
+        self.env_mo_coeff = None
+        self.env_mo_occ = None
+        self.env_mo_energy = None
 
-        # a function to turn a basis string ('3-21g') into a basis dictionary for use in concat mols.
-        if isinstance(self.mol.basis, str):
-            new_basis = {}
-            nghost = 0
-            for i in range(self.mol.natm):
-                if 'ghost.' in self.mol.atom[i][0] or 'gh.' in self.mol.atom[i][0]: 
-                    nghost += 1
-                    atom_name = self.mol.atom[i][0].split('.')[1]
-                    ghost_name = f'ghost:{nghost}'
-                    self.mol.atom[i][0] = ghost_name
-                    new_basis.update({ghost_name: gto.basis.load(self.mol.basis, atom_name)})
-                else:
-                    atom_name = self.mol.atom[i][0]
-                    new_basis.update({atom_name: gto.basis.load(self.mol.basis, atom_name)})
-            self.mol.basis = new_basis
-            self.mol.build(dump_input=False)
+    def init_env_scf(self):
+
+        if self.env_method[0] == 'u':
+            if self.env_method[1:] == 'hf':
+                scf_obj = scf.UHF(self.mol) 
+            else:
+                scf_obj = scf.UKS(self.mol)
+                scf_obj.xc = self.env_method[1:]
+                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+        elif self.env_method[:2] == 'ro':
+            if self.env_method[2:] == 'hf':
+                scf_obj = scf.ROHF(self.mol) 
+            else:
+                scf_obj = scf.ROKS(self.mol)
+                scf_obj.xc = self.env_method[2:]
+                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
         else:
-            return True
-        
+            if self.env_method == 'hf' or self.env_method[1:] == 'hf':
+               scf_obj = scf.RHF(self.mol) 
+            else:
+                scf_obj = scf.RKS(self.mol)
+                scf_obj.xc = self.env_method
+                if self.env_method[0] == 'r':
+                    scf_obj.xc = self.env_method[1:]
+                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+
+        self.env_scf = scf_obj
 
     def init_density(self):
         pass
@@ -88,6 +100,10 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         self.active_cycles = active_cycles
         self.active_damp = active_damp
         self.active_shift = active_shift
+
+        self.active_mo_coeff = None
+        self.active_mo_occ = None
+        self.active_mo_energy = None
  
         super().__init__(mol, env_method, **kwargs)
 

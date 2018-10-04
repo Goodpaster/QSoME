@@ -358,7 +358,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
 
         #System settings
         self.assertEqual(sup_kwargs['filename'], path + exp_set_filename)
-        self.assertEqual(sup_kwargs['grid'], 5)
+        self.assertEqual(sup_kwargs['grid_level'], 5)
         self.assertEqual(sup_kwargs['verbose'], 1)
         self.assertEqual(sup_kwargs['analysis'], True)
         self.assertEqual(sup_kwargs['debug'], True)
@@ -415,7 +415,7 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['subcycles'], 4)
 
         # other options
-        self.assertEqual(sub_kwargs['grid'], 5)
+        self.assertEqual(sub_kwargs['grid_level'], 5)
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)
@@ -432,7 +432,7 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
         # other options
         self.assertEqual(sub_kwargs['damp'], 0.1)
         self.assertEqual(sub_kwargs['shift'], 0.2)
-        self.assertEqual(sub_kwargs['grid'], 5)
+        self.assertEqual(sub_kwargs['grid_level'], 5)
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)

@@ -198,7 +198,7 @@ class InpReader:
                 self.supersystem_kwargs['includeghost'] = self.inp.ct_settings.includeghost
 
         if self.inp.grid:
-            self.supersystem_kwargs['grid'] = self.inp.grid
+            self.supersystem_kwargs['grid_level'] = self.inp.grid
         if self.inp.verbose:
             self.supersystem_kwargs['verbose'] = self.inp.verbose
         if self.inp.analysis:
@@ -216,7 +216,7 @@ class InpReader:
         universal_subsys_settings['filename'] = self.inp.filename
         universal_subsys_settings['env_method'] = self.inp.embed.env_method
         if self.inp.grid:
-            universal_subsys_settings['grid'] = self.inp.grid
+            universal_subsys_settings['grid_level'] = self.inp.grid
         if self.inp.verbose:
             universal_subsys_settings['verbose'] = self.inp.verbose
         if self.inp.analysis:
