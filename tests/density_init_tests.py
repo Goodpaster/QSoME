@@ -109,7 +109,7 @@ class TestSuperSystemDensity(unittest.TestCase):
 
         self.assertTrue(np.array_equal(subsystems[1].dmat[0] + subsystems[1].dmat[1], pyscf_dmat))
          
-         
+    @unittest.skip('skipping supermol calc')         
     def test_supmol_init(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -132,6 +132,7 @@ class TestSuperSystemDensity(unittest.TestCase):
         pyscf_dmat = sup_scf.make_rdm1()
         self.assertTrue(np.array_equal(supersystem.dmat[0] + supersystem.dmat[1], pyscf_dmat))
 
+    @unittest.skip('skipping supermol calc')         
     def test_readchk_init(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way

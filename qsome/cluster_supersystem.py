@@ -12,7 +12,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, ct_method, proj_oper='huz', filename=None,
                  ft_cycles=100, ft_conv=1e-8, ft_grad=1e-8, ft_diis=1, 
-                 ft_setfermi=0, ft_initguess=None, ft_updatefock=0, 
+                 ft_setfermi=None, ft_initguess=None, ft_updatefock=0, 
                  cycles=100, conv=1e-8, grad=1e-8, damp=0, shift=0, 
                  smearsigma=0, initguess=None, includeghost=False, 
                  grid_level=4, verbose=3, analysis=False, debug=False):
@@ -63,6 +63,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.gen_sub2sup()
         self.init_ct_scf()
         self.init_density()
+
+        self.fock = [None, None]
+        self.hcore = self.ct_scf.get_hcore()
+        self.proj_pot = [[None, None] for i in range(len(subsystems))]
+        self.smat = self.ct_scf.get_ovlp()
+
+        self.update_fock()
+        self.ft_fermi = [[0., 0.] for i in range(len(subsystems))]
 
     def gen_sub2sup(self):
         nao = np.array([ self.subsystems[i].mol.nao_nr() for i in range(len(self.subsystems)) ])
@@ -327,7 +335,80 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         pass
 
     def update_fock(self):
-        pass
+        self.fock = [np.copy(self.hcore), np.copy(self.hcore)]
+
+        # Optimization: Rather than recalculate the full V, only calculate the V for densities which changed. 
+        # get 2e matrix
+        nS = self.mol.nao_nr()
+        dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        for i in range(len(self.subsystems)):
+            dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].dmat[0]
+            dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].dmat[1]
+
+        if self.ct_method[0] == 'u' or self.ct_method[:2] == 'ro':
+            V = self.ct_scf.get_veff(mol=self.mol, dm=dm)
+            V_a = V[0]
+            V_b = V[1]
+        else:
+            V_a = self.ct_scf.get_veff(mol=self.mol, dm=dm[0])
+            V_b = self.ct_scf.get_veff(mol=self.mol, dm=dm[1])
+        self.fock[0] += V_a
+        self.fock[1] += V_b
+
+    def update_proj_op(self):
+        # currently updates both at once. Can easily modify to only update one subsystem, however I don't think it will improve the speed.
+        s2s = self.sub2sup
+        for i in range(len(self.subsystems)):
+            A = i
+            nA = self.subsystems[A].mol.nao_nr()
+            SAA = self.smat[np.ix_(s2s[A], s2s[A])]
+            POp = [np.zeros((nA, nA)), np.zeros((nA, nA))]
+
+            # cycle over all other subsystems
+            for B in range(len(self.subsystems)):
+                if B==A: continue
+
+                SAB = self.smat[np.ix_(s2s[A], s2s[B])]
+                SBA = self.smat[np.ix_(s2s[B], s2s[A])]
+
+                # get mu-parameter projection operator
+                if isinstance(self.proj_oper, int) or isinstance(self.proj_oper, float):
+                    POp[0] += self.proj_oper * np.dot( SAB, np.dot( self.subsystems[B].dmat[0], SBA ))
+                    POp[1] += self.proj_oper * np.dot( SAB, np.dot( self.subsystems[B].dmat[1], SBA ))
+
+                elif self.proj_oper in ('huzinaga', 'huz'):
+                    FAB = [None, None]
+                    FAB[0] = self.fock[0][np.ix_(s2s[A], s2s[B])]
+                    FAB[1] = self.fock[1][np.ix_(s2s[A], s2s[B])]
+                    FDS = [None, None]
+                    FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
+                    FDS[1] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
+                    POp[0] += - 0.5 * ( FDS[0] + FDS[0].transpose() ) #May not need 0.5 cause divide into alpha and beta
+                    POp[1] += - 0.5 * ( FDS[0] + FDS[0].transpose() )
+
+                elif self.proj_oper in ('huzinagafermi', 'huzfermi'):
+                    FAB = [None, None]
+                    FAB[0] = self.fock[0][np.ix_(s2s[A], s2s[B])]
+                    FAB[1] = self.fock[1][np.ix_(s2s[A], s2s[B])]
+                    #The max of the fermi energy
+                    efermi = [None, None]
+                    if self.ft_setfermi is None:
+                        efermi[0] = max([fermi[0] for fermi in self.ft_fermi])
+                        efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
+                    else:
+                        efermi[0] = self.ft_setfermi
+                        efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
+
+                    FAB[0] -= SAB * efermi
+                    FAB[1] -= SAB * efermi #could probably specify fermi for each alpha or beta electron.
+
+                    FDS = [None, None]
+                    FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
+                    FDS[0] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
+                    POp[0] += - 0.5 * ( FDS[0] + FDS[0].transpose() ) #may not need 0.5
+                    POp[1] += - 0.5 * ( FDS[1] + FDS[1].transpose() )
+
+            self.proj_pot[i] = POp.copy()
 
     def read_chkfile(self):
         if os.path.isfile(self.chk_filename):
@@ -482,4 +563,69 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         sub_sys_data.create_dataset('mo_energy', data=subsystem.env_mo_energy)
 
     def freeze_and_thaw(self):
-        pass
+        #Optimization: rather than recalculate vA use the existing fock and subtract out the block that is double counted.
+
+        print("".center(80, '*'))
+        print("Freeze-and-Thaw".center(80))
+        print("".center(80, '*'))
+         
+        s2s = self.sub2sup
+        ft_err = 1.
+        ft_iter = 0 
+        while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
+            # cycle over subsystems
+            ft_err = 0 
+            ft_iter += 1
+            for i in range(len(self.subsystems)):
+                subsystem = self.subsystems[i]
+                if not subsystem.frozen:
+                    if self.fock_update >= i:
+                        self.update_fock()
+
+                    #this will slow down calculation. 
+                    sub_old_e = subsystem.get_env_energy()
+                    sub_old_dm = subsystem.dmat.copy()
+
+                    self.update_proj_pot() #could use i as input and only get for that sub.
+                    FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
+                    FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
+             
+                    SAA = self.smat[np.ix_(s2s[i], s2s[i])]
+                    #I don't think this changes. Could probably set in the initialize.
+                    sub_hcore = copy(self.hcore[np.ix_(s2s[i], s2s[i])])
+                    subsystem.env_scf.get_hcore = lambda *args: sub_hcore
+
+                    subsystem.update_fock()
+                    froz_veff = [None, None]
+                    froz_veff[0] = (FAA[0] - sub_hcore - subsystem.env_vA[0])
+                    froz_veff[1] = (FAA[0] - sub_hcore - subsystem.emb_vA[1])
+                    subsystem.update_emb_pot(froz_veff)
+                    subsystem.update_proj_pot(self.proj_pot[i])
+                    # diagonalize here.
+                    subsystem.diagonalize()
+                    # save to file. could be done in larger cycles.
+                    self.save_chkfile()
+                    ddm = sp.linalg.norm(subsystem.dmat[0] - sub_old_dm[0])
+                    ddm += sp.linalg.norm(subsystem.dmat[1] - sub_old_dm[1])
+                    proj_e = np.trace(np.dot(subsystem.dmat[0], self.proj_pot[i][0]))
+                    proj_e += np.trace(np.dot(subsystem.dmat[1], self.proj_pot[i][1]))
+                    ft_err += ddm
+
+                    self.ft_fermi[i] = subsystem.fermi
+                    #This will slow down execution.
+                    sub_new_e = subsystem.get_env_energy()
+                    dE = abs(sub_old_e - sub_new_e)
+
+                    # print output to console.
+                    print(f"iter: {ft_iter:>3d}:{subsystem.sub_num:<2d}  |dE|: {dE:12.6e}   |ddm|: {ddm:12.6e}   |Tr[DP]|: {proj_e:12.6e}")
+
+        print("".center(80))
+        if(ft_err > self.ft_conv):
+            print("".center(80))
+            print" Freeze-and-Thaw NOT converged".center(80))
+
+        # print subsystem energies 
+        for subsystem in self.subsystems:
+            print(f"Subsystem {subsystem.sub_num} Energy: {subsystem.get_emb_energy():12.8f}")
+        print("".center(80))
+        print("".center(80, '*'))

@@ -275,7 +275,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, 1e-8)
         self.assertEqual(supersystem.ft_diis, 1)
-        self.assertEqual(supersystem.ft_setfermi, 0)
+        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, None)
         self.assertEqual(supersystem.ft_updatefock, 0)
 
@@ -292,6 +292,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.analysis, False)
         self.assertEqual(supersystem.debug, False)
 
+    @unittest.skip('skipping supermol calc')
     def test_from_inp_exp_set(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -365,7 +366,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, 1e-8)
         self.assertEqual(supersystem.ft_diis, 1)
-        self.assertEqual(supersystem.ft_setfermi, 0)
+        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, None)
         self.assertEqual(supersystem.ft_updatefock, 0)
 
