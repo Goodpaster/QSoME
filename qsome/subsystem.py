@@ -14,11 +14,11 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def update_proj_op(self, new_POp):
+    def update_proj_pot(self, new_POp):
         pass
 
     @abstractmethod
-    def update_embedding_pot(self, new_emb_pot):
+    def update_emb_pot(self, new_emb_pot):
         pass
 
     @abstractmethod

@@ -24,6 +24,7 @@ end
 embed
  env_method pbe
  huzinaga
+ cycles 20
 end
 
 basis 3-21g
@@ -174,7 +175,7 @@ class TestProjectionConstruction(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        supersystem.update_proj_op()
+        supersystem.update_proj_pot()
 
     def test_ghost(self):
         subsystems = []
@@ -191,7 +192,7 @@ class TestProjectionConstruction(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        supersystem.update_proj_op()
+        supersystem.update_proj_pot()
 
     def test_widesep(self):
         subsystems = []
@@ -208,7 +209,7 @@ class TestProjectionConstruction(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        supersystem.update_proj_op()
+        supersystem.update_proj_pot()
 
         self.assertEqual(np.sum(supersystem.proj_pot[0][0]), 0.0)
         self.assertEqual(np.sum(supersystem.proj_pot[0][1]), 0.0)

@@ -4,6 +4,10 @@
 from qsome import subsystem
 from pyscf import gto, scf, dft
 import os
+
+import numpy as np
+import scipy as sp
+
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def __init__(self, mol, env_method, filename=None, smearsigma=0, damp=0, 
@@ -35,12 +39,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.analysis = analysis
         self.debug = debug
         self.init_env_scf()
-        self.hcore = self.env_scf.get_hcore()
-        self.dmat = [None, None] # alpha and beta dmat
 
-        self.env_mo_coeff = None
-        self.env_mo_occ = None
-        self.env_mo_energy = None
+
 
     def init_env_scf(self):
 
@@ -69,20 +69,25 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
 
         self.env_scf = scf_obj
+        self.env_hcore = self.env_scf.get_hcore()
+        self.env_mo_coeff = [np.zeros_like(self.env_hcore), np.zeros_like(self.env_hcore)]
+        self.env_mo_occ = [np.zeros_like(self.env_hcore[0]), np.zeros_like(self.env_hcore[0])]
+        self.env_mo_energy = self.env_mo_occ.copy()
+        self.dmat = self.env_mo_coeff.copy() # alpha and beta dmat
 
     def init_density(self):
         pass
     def get_env_elec_energy(self):
-        hcore_e = np.einsum('ij, ji', self.emb_hcore, self.dmat).real
-        e_coul = np.einsum('ij,ji', self.emb_vA, self.dmat).real * 0.5 
-        e_coul = np.einsum('ij,ji', self.emb_vA, self.dmat).real * 0.5 
-        e_emb = np.einsum('ij,ji', self.emb_pot, self.dmat).real * 0.5 #Testing. I think this needs *0.5 though.
+        hcore_e = np.einsum('ij, ji', self.env_hcore, (self.dmat[0] + self.dmat[1])).real
+        e_coul = np.einsum('ij,ji', self.env_V[0], self.dmat[0]).real * 0.5 
+        e_coul = np.einsum('ij,ji', self.env_V[1], self.dmat[1]).real * 0.5 
+        #e_emb = np.einsum('ij,ji', self.emb_pot, self.dmat[0]).real
         return hcore_e + e_coul
 
     def get_env_energy(self):
         return self.get_env_elec_energy() + self.env_scf.energy_nuc()
 
-    def update_proj_op(self, new_POp):
+    def update_proj_pot(self, new_POp):
         self.proj_pot = new_POp
 
     def update_emb_pot(self, new_emb_pot):
@@ -110,54 +115,75 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def diagonalize(self):
         #Smat may not be necessary. May be able to get from the mol object.
         # finish this method
-        nA = self.fock.shape[0]
-        N = np.zeros((nA))
-        N[:self.mol.nelectron//2] = 2.
+        nA_a = self.fock[0].shape[0]
+        nA_b = self.fock[1].shape[0]
+        N = [np.zeros((nA_a)), np.zeros((nA_b))]
+        N[0][:self.mol.nelec[0]] = 1.
+        N[1][:self.mol.nelec[0]] = 1.
+
+        #Need to include subcycle possibility.
 
         if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
             emb_fock = [None, None]
             emb_fock[0] = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
             #This is the costly part. I think.
-            E, C = sp.linalg.eigh(emb_fock[0], self.env_scf.get_ovlp())
-            self.mo_energy[0] = E
-            self.mo_coeff[0] = C
+            E_a, C_a = sp.linalg.eigh(emb_fock[0], self.env_scf.get_ovlp())
             emb_fock[1] = self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
             #This is the costly part. I think.
-            E, C = sp.linalg.eigh(emb_fock[1], self.env_scf.get_ovlp())
-            self.mo_energy[1] = E
-            self.mo_coeff[1] = C
+            E_b, C_b = sp.linalg.eigh(emb_fock[1], self.env_scf.get_ovlp())
+            self.env_mo_energy = [E_a, E_b]
+            self.env_mo_coeff = [C_a, C_b]
         else:
             #This is the costly part. I think.
             emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
             E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
-            self.mo_energy[0] = E
-            self.mo_coeff[0] = C
-            self.mo_energy[1] = E
-            self.mo_coeff[1] = C
+            self.env_mo_energy = [E, E]
+            self.env_mo_coeff = [C, C]
         
         # get fermi energy
-        nocc_orbs = mol.nelectron // 2
-        e_sorted = np.sort(E)
-        if (len(e_sorted) > nocc_orbs):
-            fermi = (e_sorted[nocc_orbs] + e_sorted[nocc_orbs -1]) / 2.
+        nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
+        e_sorted = [np.sort(self.env_mo_energy[0]), np.sort(self.env_mo_energy[1])]
+        fermi = [None, None]
+        if (len(e_sorted[0]) > nocc_orbs[0]):
+            fermi[0] = (e_sorted[0][nocc_orbs[0]] + e_sorted[0][nocc_orbs[0] -1]) / 2.
         else:
-            fermi = 0.    #Minimal basis
+            fermi[0] = 0.    #Minimal basis
+        if (len(e_sorted[1]) > nocc_orbs[1]):
+            fermi[1] = (e_sorted[1][nocc_orbs[1]] + e_sorted[1][nocc_orbs[1] -1]) / 2.
+        else:
+            fermi[1] = 0.    #Minimal basis
 
-        if smear_sigma > 0.:
-            mo_occ = ( E - fermi ) / smear_sigma
-            ie = np.where( mo_occ < 1000 )
-            i0 = np.where( mo_occ >= 1000 )
-            mo_occ[ie] = 2. / ( np.exp( mo_occ[ie] ) + 1. )
-            mo_occ[i0] = 0.
+        #Smear sigma may not be right for single elctron
+        mo_occ = [np.zeros_like(self.env_mo_energy[0]), np.zeros_like(self.env_mo_energy[1])]
+        if self.smearsigma > 0.:
+            mo_occ[0] = ( self.env_mo_energy[0] - fermi[0] ) / self.smearsigma
+            ie = np.where( mo_occ[0] < 1000 )
+            i0 = np.where( mo_occ[0] >= 1000 )
+            mo_occ[0][ie] = 1. / ( np.exp( mo_occ[0][ie] ) + 1. )
+            mo_occ[0][i0] = 0.
+
+            mo_occ[1] = ( self.env_mo_energy[1] - fermi[1] ) / self.smearsigma
+            ie = np.where( mo_occ[1] < 1000 )
+            i0 = np.where( mo_occ[1] >= 1000 )
+            mo_occ[1][ie] = 1. / ( np.exp( mo_occ[1][ie] ) + 1. )
+            mo_occ[1][i0] = 0.
 
         else:
-            mo_occ = np.zeros_like(E)
-            if (len(e_sorted) > nocc_orbs):
-                mo_occ[E<fermi] = 2.
+            if (len(e_sorted[0]) > nocc_orbs[0]):
+                mo_occ[0][self.env_mo_energy[0]<fermi[0]] = 1.
             else:
-                mo_occ[:] = 2.
+                mo_occ[0][:] = 1.
 
-        Dnew = np.dot((C * mo_occ), C.transpose().conjugate())
+            if (len(e_sorted[1]) > nocc_orbs[1]):
+                mo_occ[1][self.env_mo_energy[1]<fermi[1]] = 1.
+            else:
+                mo_occ[1][:] = 1.
+
+        self.env_mo_occ = mo_occ
+        self.fermi = fermi
+        self.dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]), self.env_mo_coeff[0].transpose().conjugate())
+        self.dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]), self.env_mo_coeff[1].transpose().conjugate())
+
 
 
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
