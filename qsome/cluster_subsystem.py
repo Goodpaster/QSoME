@@ -75,14 +75,23 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_mo_energy = self.env_mo_occ.copy()
         self.dmat = self.env_mo_coeff.copy() # alpha and beta dmat
 
-    def init_density(self):
-        pass
+    def init_density(self, dmat):
+        self.dmat = dmat
+        self.update_fock()
+        self.emb_pot = [np.zeros_like(self.env_hcore), np.zeros_like(self.env_hcore)]
+
     def get_env_elec_energy(self):
         hcore_e = np.einsum('ij, ji', self.env_hcore, (self.dmat[0] + self.dmat[1])).real
-        e_coul = np.einsum('ij,ji', self.env_V[0], self.dmat[0]).real * 0.5 
-        e_coul = np.einsum('ij,ji', self.env_V[1], self.dmat[1]).real * 0.5 
-        #e_emb = np.einsum('ij,ji', self.emb_pot, self.dmat[0]).real
-        return hcore_e + e_coul
+        if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
+            e_coul = (np.einsum('ij,ji', self.env_V[0], self.dmat[0]) + 
+                      np.einsum('ij,ji', self.env_V[1], self.dmat[1])).real * 0.5
+            e_emb = (np.einsum('ij,ji', self.emb_pot[0], self.dmat[0]) + 
+                     np.einsum('ij,ji', self.emb_pot[1], self.dmat[1])).real * 0.5
+        else:
+            e_coul = (np.einsum('ij,ji', self.env_V[0], (self.dmat[0] + self.dmat[1])).real * 0.5)
+            e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real * 0.5)
+        #There is some kind of double counting happening where e_coul is too large. Can't just add electronic of each to get the total energy.
+        return hcore_e + e_coul + e_emb
 
     def get_env_energy(self):
         return self.get_env_elec_energy() + self.env_scf.energy_nuc()
@@ -91,16 +100,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.proj_pot = new_POp
 
     def update_emb_pot(self, new_emb_pot):
-        self.emb_pot = new_emb_pot
+        self.emb_pot = new_emb_pot 
 
     def update_fock(self):
-        self.env_hcore = self.env_scf.get_hcore() #could probably just use the saved value
         if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
             self.env_V = self.env_scf.get_veff(dm=self.dmat)
         else:
-            Va = self.env_scf.get_veff(dm=self.dmat[0])
-            Vb = self.env_scf.get_veff(dm=self.dmat[1])
-            self.env_V = [Va, Vb]
+            V = self.env_scf.get_veff(dm=(self.dmat[0] + self.dmat[1]))
+            self.env_V = [V, V]
 
         self.fock = [self.env_hcore + self.env_V[0], self.env_hcore + self.env_V[1]]
 

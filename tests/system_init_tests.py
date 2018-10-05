@@ -176,14 +176,14 @@ class TestSuperSystem(unittest.TestCase):
 
         self.assertEqual(concat_mol.atom[0][0].split(':')[0], subsystems[0].mol.atom[0][0])
         #assesrtAlmostEqual
-        self.assertTrue(abs(concat_mol.atom[0][1][0] - (1.88972612457 * float(subsystems[0].mol.atom[0][1][0]))) < 1e-8) # convert to bohr
-        self.assertTrue(abs(concat_mol.atom[0][1][1] - (1.88972612457 * float(subsystems[0].mol.atom[0][1][1]))) < 1e-8) # convert to bohr
-        self.assertTrue(abs(concat_mol.atom[0][1][2] - (1.88972612457 * float(subsystems[0].mol.atom[0][1][2]))) < 1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[0][1][0], (1.88972612457 * float(subsystems[0].mol.atom[0][1][0])), delta=1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[0][1][1], (1.88972612457 * float(subsystems[0].mol.atom[0][1][1])), delta=1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[0][1][2], (1.88972612457 * float(subsystems[0].mol.atom[0][1][2])), delta=1e-8) # convert to bohr
 
         self.assertEqual(concat_mol.atom[1][0].split(':')[0], subsystems[1].mol.atom[0][0])
-        self.assertTrue(abs(concat_mol.atom[1][1][0] - (1.88972612457 * float(subsystems[1].mol.atom[0][1][0]))) < 1e-8) # convert to bohr
-        self.assertTrue(abs(concat_mol.atom[1][1][1] - (1.88972612457 * float(subsystems[1].mol.atom[0][1][1]))) < 1e-8) # convert to bohr
-        self.assertTrue(abs(concat_mol.atom[1][1][2] - (1.88972612457 * float(subsystems[1].mol.atom[0][1][2]))) < 1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[1][1][0], (1.88972612457 * float(subsystems[1].mol.atom[0][1][0])), delta=1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[1][1][1], (1.88972612457 * float(subsystems[1].mol.atom[0][1][1])), delta=1e-8) # convert to bohr
+        self.assertAlmostEqual(concat_mol.atom[1][1][2], (1.88972612457 * float(subsystems[1].mol.atom[0][1][2])), delta=1e-8) # convert to bohr
         self.assertEqual(len(concat_mol.basis.keys()), 2)
 
     def test_concat_mols_ghost(self):

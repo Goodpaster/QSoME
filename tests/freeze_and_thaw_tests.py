@@ -133,8 +133,8 @@ class TestFockConstruction(unittest.TestCase):
         supersystem.update_fock()
 
         pyscf_fock = [None, None]
-        pyscf_fock[0] = supersystem.ct_scf.get_fock(dm=(supersystem.ct_scf.get_init_guess()/2.)) 
-        pyscf_fock[1] = supersystem.ct_scf.get_fock(dm=(supersystem.ct_scf.get_init_guess()/2.)) 
+        pyscf_fock[0] = supersystem.ct_scf.get_fock(dm=(supersystem.ct_scf.get_init_guess())) 
+        pyscf_fock[1] = supersystem.ct_scf.get_fock(dm=(supersystem.ct_scf.get_init_guess())) 
         self.assertTrue(np.array_equal(supersystem.fock, pyscf_fock))
 
     def tearDown(self):
@@ -304,6 +304,9 @@ class TestFreezeAndThaw(unittest.TestCase):
 
         supersystem.freeze_and_thaw()
         # compare dft-in-dft to full system energy
+        sup_mo_e = supersystem.supermolecular_energy()
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
     def test_widesep(self):
         subsystems = []
@@ -319,8 +322,13 @@ class TestFreezeAndThaw(unittest.TestCase):
         supersystem_kwargs = in_obj.supersystem_kwargs
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
         supersystem.freeze_and_thaw()
+
         # compare dft-in-dft to full system energy
+        sup_mo_e = supersystem.supermolecular_energy()
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
 
     def tearDown(self):
