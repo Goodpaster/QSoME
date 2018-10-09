@@ -4,7 +4,7 @@
 import re
 from qsome import subsystem
 from pyscf import gto, scf, dft, cc
-from pyscf.cc import ccsd_t, ccsd_t_lambda_slow, ccsd_t_rdm_slow
+from pyscf.cc import ccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 import os
 
 from functools import reduce
@@ -262,7 +262,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def __init__(self, mol, env_method, filename=None, smearsigma=0, damp=0, 
                  shift=0, subcycles=1, freeze=False, initguess=None,
-                 grid_level=4, verbose=4, analysis=False, debug=False):
+                 grid_level=4, verbose=3, analysis=False, debug=False, rhocutoff=1e-20):
 
         self.mol = mol
         self.mol.basis = self.mol._basis # Always save basis as internal pyscf format
@@ -284,6 +284,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         self.initguess = initguess
 
+        self.rho_cutoff = rhocutoff
+
         self.grid_level = grid_level
         self.verbose = verbose
         self.analysis = analysis
@@ -300,14 +302,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             else:
                 scf_obj = scf.UKS(self.mol)
                 scf_obj.xc = self.env_method[1:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
         elif self.env_method[:2] == 'ro':
             if self.env_method[2:] == 'hf':
                 scf_obj = scf.ROHF(self.mol) 
             else:
                 scf_obj = scf.ROKS(self.mol)
                 scf_obj.xc = self.env_method[2:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
         else:
             if self.env_method == 'hf' or self.env_method[1:] == 'hf':
                scf_obj = scf.RHF(self.mol) 
@@ -316,9 +318,15 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 scf_obj.xc = self.env_method
                 if self.env_method[0] == 'r':
                     scf_obj.xc = self.env_method[1:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
 
         self.env_scf = scf_obj
+
+        # basic scf settings
+        self.env_scf.verbose = self.verbose
+        self.env_scf.damp = self.damp
+        self.env_scf.level_shift = self.shift
+
         self.env_hcore = self.env_scf.get_hcore()
         self.env_mo_coeff = [np.zeros_like(self.env_hcore), np.zeros_like(self.env_hcore)]
         self.env_mo_occ = [np.zeros_like(self.env_hcore[0]), np.zeros_like(self.env_hcore[0])]
@@ -332,6 +340,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.emb_pot = [np.zeros_like(self.env_hcore), np.zeros_like(self.env_hcore)]
 
     def get_env_elec_energy(self):
+        #This is not correct for dft methods.
         hcore_e = np.einsum('ij, ji', self.env_hcore, (self.dmat[0] + self.dmat[1])).real
         if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
             e_coul = (np.einsum('ij,ji', self.env_V[0], self.dmat[0]) + 
@@ -371,88 +380,88 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         pass
     def save_orbitals(self):
         pass
-
     def get_env_proj_energy(self):
         pass
 
     def diagonalize(self):
-        #Smat may not be necessary. May be able to get from the mol object.
+
         # finish this method
         nA_a = self.fock[0].shape[0]
         nA_b = self.fock[1].shape[0]
         N = [np.zeros((nA_a)), np.zeros((nA_b))]
         N[0][:self.mol.nelec[0]] = 1.
-        N[1][:self.mol.nelec[0]] = 1.
+        N[1][:self.mol.nelec[1]] = 1.
 
         #Need to include subcycle possibility.
-
-        if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
-            emb_fock = [None, None]
-            emb_fock[0] = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
-            #This is the costly part. I think.
-            E_a, C_a = sp.linalg.eigh(emb_fock[0], self.env_scf.get_ovlp())
-            emb_fock[1] = self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
-            #This is the costly part. I think.
-            E_b, C_b = sp.linalg.eigh(emb_fock[1], self.env_scf.get_ovlp())
-            self.env_mo_energy = [E_a, E_b]
-            self.env_mo_coeff = [C_a, C_b]
-        else:
-            #This is the costly part. I think.
-            emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
-            E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
-            self.env_mo_energy = [E, E]
-            self.env_mo_coeff = [C, C]
+        for i in range(self.subcycles):
+            if i > 0:
+                self.update_fock()
+                print ('update')
+            if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
+                emb_fock = [None, None]
+                emb_fock[0] = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
+                #This is the costly part. I think.
+                E_a, C_a = sp.linalg.eigh(emb_fock[0], self.env_scf.get_ovlp())
+                emb_fock[1] = self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
+                #This is the costly part. I think.
+                E_b, C_b = sp.linalg.eigh(emb_fock[1], self.env_scf.get_ovlp())
+                self.env_mo_energy = [E_a, E_b]
+                self.env_mo_coeff = [C_a, C_b]
+            else:
+                #This is the costly part. I think.
+                emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
+                E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
+                self.env_mo_energy = [E, E]
+                self.env_mo_coeff = [C, C]
         
-        # get fermi energy
-        nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
-        e_sorted = [np.sort(self.env_mo_energy[0]), np.sort(self.env_mo_energy[1])]
-        fermi = [None, None]
-        if (len(e_sorted[0]) > nocc_orbs[0]):
-            fermi[0] = (e_sorted[0][nocc_orbs[0]] + e_sorted[0][nocc_orbs[0] -1]) / 2.
-        else:
-            fermi[0] = 0.    #Minimal basis
-        if (len(e_sorted[1]) > nocc_orbs[1]):
-            fermi[1] = (e_sorted[1][nocc_orbs[1]] + e_sorted[1][nocc_orbs[1] -1]) / 2.
-        else:
-            fermi[1] = 0.    #Minimal basis
-
-        #Smear sigma may not be right for single elctron
-        mo_occ = [np.zeros_like(self.env_mo_energy[0]), np.zeros_like(self.env_mo_energy[1])]
-        if self.smearsigma > 0.:
-            mo_occ[0] = ( self.env_mo_energy[0] - fermi[0] ) / self.smearsigma
-            ie = np.where( mo_occ[0] < 1000 )
-            i0 = np.where( mo_occ[0] >= 1000 )
-            mo_occ[0][ie] = 1. / ( np.exp( mo_occ[0][ie] ) + 1. )
-            mo_occ[0][i0] = 0.
-
-            mo_occ[1] = ( self.env_mo_energy[1] - fermi[1] ) / self.smearsigma
-            ie = np.where( mo_occ[1] < 1000 )
-            i0 = np.where( mo_occ[1] >= 1000 )
-            mo_occ[1][ie] = 1. / ( np.exp( mo_occ[1][ie] ) + 1. )
-            mo_occ[1][i0] = 0.
-
-        else:
+            # get fermi energy
+            nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
+            e_sorted = [np.sort(self.env_mo_energy[0]), np.sort(self.env_mo_energy[1])]
+            fermi = [None, None]
             if (len(e_sorted[0]) > nocc_orbs[0]):
-                mo_occ[0][self.env_mo_energy[0]<fermi[0]] = 1.
+                fermi[0] = (e_sorted[0][nocc_orbs[0]] + e_sorted[0][nocc_orbs[0] -1]) / 2.
             else:
-                mo_occ[0][:] = 1.
-
+                fermi[0] = 0.    #Minimal basis
             if (len(e_sorted[1]) > nocc_orbs[1]):
-                mo_occ[1][self.env_mo_energy[1]<fermi[1]] = 1.
+                fermi[1] = (e_sorted[1][nocc_orbs[1]] + e_sorted[1][nocc_orbs[1] -1]) / 2.
             else:
-                mo_occ[1][:] = 1.
+                fermi[1] = 0.    #Minimal basis
 
-        self.env_mo_occ = mo_occ
-        self.fermi = fermi
-        self.dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]), self.env_mo_coeff[0].transpose().conjugate())
-        self.dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]), self.env_mo_coeff[1].transpose().conjugate())
+            #Smear sigma may not be right for single elctron
+            mo_occ = [np.zeros_like(self.env_mo_energy[0]), np.zeros_like(self.env_mo_energy[1])]
+            if self.smearsigma > 0.:
+                mo_occ[0] = ( self.env_mo_energy[0] - fermi[0] ) / self.smearsigma
+                ie = np.where( mo_occ[0] < 1000 )
+                i0 = np.where( mo_occ[0] >= 1000 )
+                mo_occ[0][ie] = 1. / ( np.exp( mo_occ[0][ie] ) + 1. )
+                mo_occ[0][i0] = 0.
 
+                mo_occ[1] = ( self.env_mo_energy[1] - fermi[1] ) / self.smearsigma
+                ie = np.where( mo_occ[1] < 1000 )
+                i0 = np.where( mo_occ[1] >= 1000 )
+                mo_occ[1][ie] = 1. / ( np.exp( mo_occ[1][ie] ) + 1. )
+                mo_occ[1][i0] = 0.
 
+            else:
+                if (len(e_sorted[0]) > nocc_orbs[0]):
+                    mo_occ[0][self.env_mo_energy[0]<fermi[0]] = 1.
+                else:
+                    mo_occ[0][:] = 1.
+
+                if (len(e_sorted[1]) > nocc_orbs[1]):
+                    mo_occ[1][self.env_mo_energy[1]<fermi[1]] = 1.
+                else:
+                    mo_occ[1][:] = 1.
+
+            self.env_mo_occ = mo_occ
+            self.fermi = fermi
+            self.dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]), self.env_mo_coeff[0].transpose().conjugate())
+            self.dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]), self.env_mo_coeff[1].transpose().conjugate())
 
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, active_method, localize_orbitals=False, active_orbs=None,
-                 active_conv=1e-8, active_grad=None, active_cycles=100, 
+                 active_conv=1e-9, active_grad=None, active_cycles=100, 
                  active_damp=0, active_shift=0, **kwargs):
 
         self.active_method = active_method
@@ -482,7 +491,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.conv_tol = self.active_conv
                 self.active_scf.conv_tol_grad = self.active_grad
                 self.active_scf.max_cycle = self.active_cycles
-                self.active_scf.get_hcore = self.env_hcore
+                self.active_scf.level_shift = self.active_shift
+                self.active_scf.damp = self.active_damp
+                self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: uhf_get_fock(self.active_scf, self.emb_pot, *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: uhf_energy_elec(self.active_scf, self.emb_pot, *args, **kwargs)
                 self.active_scf.kernel()
@@ -507,17 +518,23 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.conv_tol = self.active_conv
                 self.active_scf.conv_tol_grad = self.active_grad
                 self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.level_shift = self.active_shift
+                self.active_scf.damp = self.active_damp
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+
                 self.active_energy = self.active_scf.kernel()
-                self.active_dmat = self.active_scf.make_rdm1()
+                # this slows down execution.
+                # self.active_dmat = self.active_scf.make_rdm1()
 
             elif self.active_method == 'ccsd' or self.active_method == 'ccsd(t)':
                 self.active_scf = scf.RHF(self.mol)
                 self.active_scf.conv_tol = self.active_conv
                 self.active_scf.conv_tol_grad = self.active_grad
                 self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.level_shift = self.active_shift
+                self.active_scf.damp = self.active_damp
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
@@ -532,11 +549,15 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 if self.active_method == 'ccsd(t)':
                     ecc_t = ccsd_t.kernel(mCCSD, mCCSD.ao2mo())
                     self.active_energy += ecc_t
-                    l1, l2 = ccsd_t_lambda.kernel(mCCSD, new_eris, t1, t2,)[1:]
-                    self.active_dmat = ccsd_t_rdm_slow.make_rdm1(mCCSD, t1, t2, l1, l2, eris=new_eris)
+                    l1, l2 = ccsd_t_lambda_slow.kernel(mCCSD, new_eris, t1, t2,)[1:]
+                    # this slows down execution.
+                    # self.active_dmat = ccsd_t_rdm_slow.make_rdm1(mCCSD, t1, t2, l1, l2, eris=new_eris)
                 else:
-                    self.active_dmat = mCCSD.make_rdm1()
+                    # this slows down execution.
+                    # self.active_dmat = mCCSD.make_rdm1()
+                    pass
 
+        return self.active_energy
  
 class ClusterExcitedSubSystem(ClusterActiveSubSystem):
 

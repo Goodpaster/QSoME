@@ -105,14 +105,10 @@ class TestHFEnergy(unittest.TestCase):
             ct_method, **supersystem_kwargs)
         supersystem.freeze_and_thaw()
         supersystem.env_in_env_energy()
-        supersystem.get_emb_energy()
-
-        he_pyscf = scf.RHF(subsystems[0].mol)
-        he_e = he_pyscf.kernel()
-        self.assertNotAlmostEqual(subsystem[0].active_energy,he_e, delta=1e-8)
-      
+        supersystem.get_active_energy()
         #not sure how to tests.
 
+    @unittest.skip
     def test_ghost(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -139,7 +135,9 @@ class TestHFEnergy(unittest.TestCase):
             ct_method, **supersystem_kwargs)
         supersystem.freeze_and_thaw()
         supersystem.env_in_env_energy()
-        supersystem.get_emb_energy()
+        supersystem.get_active_energy()
+        
+        # unsure how to test.
 
     def test_widesep(self):
         subsystems = []
@@ -167,17 +165,26 @@ class TestHFEnergy(unittest.TestCase):
             ct_method, **supersystem_kwargs)
         supersystem.freeze_and_thaw()
         supersystem.env_in_env_energy()
-        supersystem.get_emb_energy()
+        supersystem.get_active_energy()
 
         # subsystem energies should be equal to individual He atoms
         he_pyscf = scf.RHF(subsystems[0].mol)
         he_e = he_pyscf.kernel()
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy, he_e, delta=1e-8)
+
+        he2_pyscf = dft.RKS(subsystems[1].mol)
+        he2_pyscf.grids = supersystem.grids
+        he2_pyscf.xc = supersystem.subsystems[1].env_scf.xc 
+        he2_pyscf.small_rho_cutoff = supersystem.rho_cutoff
+        he2_e = he2_pyscf.kernel()
+
+        total_energy = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
+        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-9)
         
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):
             shutil.rmtree(path)    
+
 class TestCCSDEnergy(unittest.TestCase):
 
     def setUp(self):
@@ -223,7 +230,7 @@ class TestCCSDEnergy(unittest.TestCase):
             ct_method, **supersystem_kwargs)
         supersystem.freeze_and_thaw()
         supersystem.env_in_env_energy()
-        supersystem.get_emb_energy()
+        supersystem.get_active_energy()
 
         # subsystem energies should be equal to individual He atoms
         he_pyscf = scf.RHF(subsystems[0].mol)
@@ -231,14 +238,23 @@ class TestCCSDEnergy(unittest.TestCase):
         mCCSD = cc.CCSD(he_pyscf)
         ecc, t1, t2 = mCCSD.kernel()
         ecc += ccsd_t.kernel(mCCSD, mCCSD.ao2mo())
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy, he_e + ecc, delta=1e-8)
-        
+
+        he_e += ecc
+
+        he2_pyscf = dft.RKS(subsystems[1].mol)
+        he2_pyscf.grids = supersystem.grids
+        he2_pyscf.xc = supersystem.subsystems[1].env_scf.xc 
+        he2_pyscf.small_rho_cutoff = supersystem.rho_cutoff
+        he2_e = he2_pyscf.kernel()
+
+        total_energy = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
+        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-9)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):
             shutil.rmtree(path)    
-class TestCASEnergy(unittest.TestCase):
+class TestMREnergy(unittest.TestCase):
 
     def setUp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -260,7 +276,47 @@ class TestCASEnergy(unittest.TestCase):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):
             shutil.rmtree(path)    
+
 class TestFCIEnergy(unittest.TestCase):
+
+    def setUp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+        os.mkdir(path)
+
+        with open(path+def_filename, 'w') as f:
+            f.write(default_str)
+
+        with open(path+ghost_filename, 'w') as f:
+            f.write(ghost_str)
+
+        with open(path+widesep_filename, 'w') as f:
+            f.write(widesep_str)
+    def tearDown(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way.
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+
+class TestMLEnergy(unittest.TestCase):
+
+    def setUp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+        os.mkdir(path)
+
+        with open(path+def_filename, 'w') as f:
+            f.write(default_str)
+
+        with open(path+ghost_filename, 'w') as f:
+            f.write(ghost_str)
+
+        with open(path+widesep_filename, 'w') as f:
+            f.write(widesep_str)
+
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):

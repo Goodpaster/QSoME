@@ -10,7 +10,7 @@ class SuperSystem(ABC):
         pass
 
     @abstractmethod
-    def supermolecular_energy(self):
+    def get_supersystem_energy(self):
         pass
 
     @abstractmethod

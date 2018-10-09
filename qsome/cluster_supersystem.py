@@ -3,20 +3,41 @@
 
 import os
 from qsome import supersystem
-from pyscf import gto, scf, dft
+from pyscf import gto, scf, dft, lib
+
+import functools
+import time
 
 import numpy as np
 import scipy as sp
 import h5py
 
+def time_method(function_name=None):
+    def real_decorator(func):
+        @functools.wraps(func)
+        def wrapper_time_method(*args, **kwargs):
+            ts = time.time()
+            result = func(*args, **kwargs)
+            te = time.time()
+            if function_name is None:
+                name = func.__name__.upper()
+            else:
+                name = function_name
+            elapsed_t = (te - ts)
+            print( f'{name:40} {elapsed_t:.4f}s')
+            return result
+        return wrapper_time_method 
+    return real_decorator
+
 class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, ct_method, proj_oper='huz', filename=None,
-                 ft_cycles=100, ft_conv=1e-8, ft_grad=1e-8, ft_diis=1, 
+                 ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=1, 
                  ft_setfermi=None, ft_initguess=None, ft_updatefock=0, 
-                 cycles=100, conv=1e-8, grad=1e-8, damp=0, shift=0, 
+                 cycles=100, conv=1e-9, grad=None, damp=0, shift=0, 
                  smearsigma=0, initguess=None, includeghost=False, 
-                 grid_level=4, verbose=3, analysis=False, debug=False):
+                 grid_level=4, verbose=3, analysis=False, debug=False, 
+                 rhocutoff=1e-20):
 
         self.subsystems = subsystems
         self.ct_method = ct_method
@@ -32,7 +53,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_cycles = ft_cycles
         self.ft_conv = ft_conv
         self.ft_grad = ft_grad
-        self.ft_diis = ft_diis
+        if ft_diis == 0:
+            self.ft_diis = None
+        elif ft_diis >= 1:
+            # I think there are other diis methods.
+            self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
         self.ft_setfermi = ft_setfermi
         self.ft_initguess = ft_initguess
         self.ft_updatefock = ft_updatefock
@@ -41,6 +66,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.cycles = cycles
         self.conv = conv
         self.grad = grad
+        self.rho_cutoff = rhocutoff
         self.damp = damp
         self.shift = shift
         self.smearsigma = smearsigma
@@ -50,7 +76,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # general system settings
         self.grid_level = grid_level
         self.verbose = verbose
-        self.analysis = analysis
+        self.analysis = analysis #provide a more detailed analysis at higher computational cost
         self.debug = debug
 
         # These are also stored in the pyscf object, but if we do a custom diagonalizaiton, they must be stored separately.
@@ -123,14 +149,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             else:
                 scf_obj = scf.UKS(self.mol)
                 scf_obj.xc = self.ct_method[1:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
         elif self.ct_method[:2] == 'ro':
             if self.ct_method[2:] == 'hf':
                 scf_obj = scf.ROHF(self.mol) 
             else:
                 scf_obj = scf.ROKS(self.mol)
                 scf_obj.xc = self.ct_method[2:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
         else:
             if self.ct_method == 'hf' or self.ct_method[1:] == 'hf':
                scf_obj = scf.RHF(self.mol) 
@@ -139,9 +165,20 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 scf_obj.xc = self.ct_method
                 if self.ct_method[0] == 'r':
                     scf_obj.xc = self.ct_method[1:]
-                scf_obj.small_rho_cutoff = 1e-20 #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
+                scf_obj.small_rho_cutoff = self.rho_cutoff #this prevents pruning. Also slows down code. Can probably remove and use default in pyscf (1e-7)
 
         self.ct_scf = scf_obj
+
+        # scf settings.
+        self.ct_scf.max_cycle = self.cycles
+        self.ct_scf.conv_tol = self.conv
+        self.ct_scf.conv_tol_grad = self.grad
+        self.ct_scf.damp = self.damp
+        self.ct_scf.level_shift = self.shift
+        self.ct_scf.verbose = self.verbose
+
+        #how to include sigmasmear? Currently not in pyscf
+
         self.smat = self.ct_scf.get_ovlp()
         self.mo_coeff = [np.zeros_like(self.smat), np.zeros_like(self.smat)]
         self.mo_occ = [np.zeros_like(self.smat[0]), np.zeros_like(self.smat[0])]
@@ -149,7 +186,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fock = self.mo_coeff.copy()
         self.hcore = self.ct_scf.get_hcore()
         self.proj_pot = [[None, None] for i in range(len(self.subsystems))]
+        self.ct_energy = None
 
+    @time_method("Initialize Densities")
     def init_density(self):
 
         # Finish reading from chkfile
@@ -167,7 +206,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         #Initiate all subsystem densities.
         sup_calc = any([subsystem.initguess == 'supmol' or (subsystem.initguess is None and (self.ft_initguess == 'supmol' or self.initguess == 'supmol')) for subsystem in self.subsystems])
         if sup_calc:
-            self.supermolecular_energy()
+            self.get_supersystem_energy()
         s2s = self.sub2sup
         readchk_init = any([subsystem.initguess == 'readchk' or (subsystem.initguess is None and (self.ft_initguess == 'readchk' or self.initguess == 'readchk')) for subsystem in self.subsystems])
         if readchk_init:
@@ -327,32 +366,33 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         mol.build(dump_input=False)
         return mol
 
-    def supermolecular_energy(self):
+    @time_method("SuperSystem Energy")
+    def get_supersystem_energy(self):
 
-        #init_dmat = self.ct_scf.get_init_guess()
-        print ("".center(80,'*'))
-        print("  SuperSystem Calculation  ".center(80))
-        print ("".center(80,'*'))
-        self.ct_scf.scf()
-        self.dmat = self.ct_scf.make_rdm1()
-        if self.dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
-            t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
-            self.dmat = t_d
-            self.mo_coeff = [self.ct_scf.mo_coeff, self.ct_scf.mo_coeff]
-            self.mo_occ = [self.ct_scf.mo_occ/2, self.ct_scf.mo_occ/2]
-            self.mo_energy = [self.ct_scf.mo_energy, self.ct_scf.mo_energy]
-        
-        self.save_chkfile()
-        print("".center(80,'*'))
-        return self.ct_scf.energy_tot()
+        if self.ct_energy is None:
+            print ("".center(80,'*'))
+            print("  SuperSystem Calculation  ".center(80))
+            print ("".center(80,'*'))
+            self.ct_scf.scf()
+            self.dmat = self.ct_scf.make_rdm1()
+            if self.dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
+                t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
+                self.dmat = t_d
+                self.mo_coeff = [self.ct_scf.mo_coeff, self.ct_scf.mo_coeff]
+                self.mo_occ = [self.ct_scf.mo_occ/2, self.ct_scf.mo_occ/2]
+                self.mo_energy = [self.ct_scf.mo_energy, self.ct_scf.mo_energy]
+            
+            self.save_chkfile()
+            self.ct_energy = self.ct_scf.energy_tot()
+            print("".center(80,'*'))
+        return self.ct_energy
 
+    @time_method("SubSystem Energies")
     def get_emb_subsys_energy(self):
 
         #Ideally this would be done using the subsystem object, however given how dft energies are calculated this does not seem like a viable option right now.
 
         #This works. but could be optimized
-
-        #self.env_in_env_energy()
 
         nS = self.mol.nao_nr()
         for i in range(len(self.subsystems)):
@@ -367,7 +407,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     sub_scf = scf.UKS(self.mol) 
                     sub_scf.xc = subsystem.env_scf.xc
                     sub_scf.grids = self.grids
-                    sub_scf.small_rho_cutoff = 1e-20
+                    sub_scf.small_rho_cutoff = self.rho_cutoff
                 subsystem.env_energy = sub_scf.energy_tot(dm=dm_subsys)
             else:
                 if subsystem.env_method[1:] == 'hf' or subsystem.env_method == 'hf':
@@ -376,7 +416,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     sub_scf = scf.RKS(self.mol) 
                     sub_scf.xc = subsystem.env_scf.xc
                     sub_scf.grids = self.grids
-                    sub_scf.small_rho_cutoff = 1e-20
+                    sub_scf.small_rho_cutoff = self.rho_cutoff
 
                 subsystem.env_energy = sub_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0]
 
@@ -402,7 +442,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         sub1_scf = scf.UKS(self.mol) 
                         sub1_scf.xc = subsystem_1.env_scf.xc
                         sub1_scf.grids = self.grids
-                        sub1_scf.small_rho_cutoff = 1e-20
+                        sub1_scf.small_rho_cutoff = self.rho_cutoff
                     sub1_interaction = (sub1_scf.energy_elec(dm=dm_subsys)[0] -
                                        subsystem_1.env_energy - subsystem_2.env_energy) / 2.
                 else:
@@ -412,7 +452,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         sub1_scf = scf.RKS(self.mol) 
                         sub1_scf.xc = subsystem_1.env_scf.xc
                         sub1_scf.grids = self.grids
-                        sub1_scf.small_rho_cutoff = 1e-20
+                        sub1_scf.small_rho_cutoff = self.rho_cutoff
                     sub1_interaction = (sub1_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
                                        subsystem_1.env_energy - subsystem_2.env_energy) / 2.
 
@@ -423,7 +463,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         sub2_scf = scf.UKS(self.mol) 
                         sub2_scf.xc = subsystem_2.env_scf.xc
                         sub2_scf.grids = self.grids
-                        sub2_scf.small_rho_cutoff = 1e-20
+                        sub2_scf.small_rho_cutoff = self.rho_cutoff
                     sub2_interaction = (sub2_scf.energy_elec(dm=dm_subsys)[0] -
                                        subsystem_1.env_energy - subsystem_2.env_energy) / 2.
                 else:
@@ -433,16 +473,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         sub2_scf = scf.RKS(self.mol) 
                         sub2_scf.xc = subsystem_2.env_scf.xc
                         sub2_scf.grids = self.grids
-                        sub2_scf.small_rho_cutoff = 1e-20
+                        sub2_scf.small_rho_cutoff = self.rho_cutoff
                     sub2_interaction = (sub2_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
                                        subsystem_1.env_energy - subsystem_2.env_energy) / 2.
 
                 subsystem_1.env_energy += sub1_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_1
                 subsystem_2.env_energy += sub2_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_2
 
-    def get_emb_energy(self):
+    @time_method("Active Energy")
+    def get_active_energy(self):
+        #This is crude. 
         self.subsystems[0].get_active_in_env_energy()
+
+    def get_active_in_env_energy(self):
+        pass
                  
+    @time_method("Env. in Env. Energy")
     def env_in_env_energy(self):
         print ("".center(80,'*'))
         print("  Env-in-Env Calculation  ".center(80))
@@ -457,12 +503,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         else:
             self.env_energy = self.ct_scf.energy_tot(dm=(dm_env[0] + dm_env[1]))
 
-        #veff = self.ct_scf.get_veff(dm=(dm_env[0] + dm_env[1]))
         print(f"  Energy: {self.env_energy}  ".center(80))
         print("".center(80,'*'))
-        # This doesn't work. Hcore is right, but the coulombic is wrong. Too large. Maybe double counting.
-        
- 
         return self.env_energy
 
     def get_proj_op(self):
@@ -472,6 +514,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         pass
 
     def update_fock(self):
+
         self.fock = [np.copy(self.hcore), np.copy(self.hcore)]
 
         # Optimization: Rather than recalculate the full V, only calculate the V for densities which changed. 
@@ -492,6 +535,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         self.fock[0] += V_a
         self.fock[1] += V_b
+
+        # Using DIIS results in incorrect energies. Maybe specify space and min_space to get better results
+        #if not self.ft_diis is None:
+        #    self.fock[0] = self.ft_diis[0].update(self.fock[0])
+        #    self.fock[1] = self.ft_diis[1].update(self.fock[1])
 
     def update_proj_pot(self):
         # currently updates both at once. Can easily modify to only update one subsystem, however I don't think it will improve the speed.
@@ -608,6 +656,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     sub_sys_data.create_dataset('mo_occ', data=subsystem.env_mo_occ)
                     sub_sys_data.create_dataset('mo_energy', data=subsystem.env_mo_energy)
 
+    @time_method("Freeze and Thaw")
     def freeze_and_thaw(self):
         #Optimization: rather than recalculate vA use the existing fock and subtract out the block that is double counted.
 
@@ -629,9 +678,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         self.update_fock()
 
                     subsystem.update_fock()
+
                     #this will slow down calculation. 
-                    self.get_emb_subsys_energy()
-                    sub_old_e = subsystem.get_env_energy()
+                    if self.analysis:
+                        self.get_emb_subsys_energy()
+                        sub_old_e = subsystem.get_env_energy()
+
                     sub_old_dm = subsystem.dmat.copy()
 
                     self.update_proj_pot() #could use i as input and only get for that sub.
@@ -658,13 +710,18 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     ft_err += ddm
 
                     self.ft_fermi[i] = subsystem.fermi
+
                     #This will slow down execution.
-                    self.get_emb_subsys_energy()
-                    sub_new_e = subsystem.get_env_energy()
-                    dE = abs(sub_old_e - sub_new_e)
+                    if self.analysis:
+                        self.get_emb_subsys_energy()
+                        sub_new_e = subsystem.get_env_energy()
+                        dE = abs(sub_old_e - sub_new_e)
 
                     # print output to console.
-                    print(f"iter: {ft_iter:>3d}:{i:<2d}  |dE|: {dE:12.6e}   |ddm|: {ddm:12.6e}   |Tr[DP]|: {proj_e:12.6e}")
+                    if self.analysis:
+                        print(f"iter: {ft_iter:>3d}:{i:<2d}  |dE|: {dE:12.6e}   |ddm|: {ddm:12.6e}   |Tr[DP]|: {proj_e:12.6e}")
+                    else:
+                        print(f"iter: {ft_iter:>3d}:{i:<2d}  |ddm|: {ddm:12.6e}   |Tr[DP]|: {proj_e:12.6e}")
 
         print("".center(80))
         if(ft_err > self.ft_conv):
@@ -678,3 +735,4 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print(f"Subsystem {i} Energy: {subsystem.get_env_energy():12.8f}")
         print("".center(80))
         print("".center(80, '*'))
+

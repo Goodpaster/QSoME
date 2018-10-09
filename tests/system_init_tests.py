@@ -8,7 +8,7 @@ import shutil
 import re
 
 from qsome import inp_reader, cluster_subsystem, cluster_supersystem
-from pyscf import gto
+from pyscf import gto, lib
 
 def_filename = "default.inp"
 default_str = """
@@ -96,6 +96,7 @@ active_settings
 end
 
 grid 5
+rhocutoff 1e-4
 verbose 1
 gencube test1
 compden test2
@@ -273,21 +274,23 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.filename, path+def_filename)
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
-        self.assertEqual(supersystem.ft_grad, 1e-8)
-        self.assertEqual(supersystem.ft_diis, 1)
+        self.assertEqual(supersystem.ft_grad, None)
+        self.assertIsInstance(supersystem.ft_diis[0], lib.diis.DIIS)
+        self.assertIsInstance(supersystem.ft_diis[1], lib.diis.DIIS)
         self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, None)
         self.assertEqual(supersystem.ft_updatefock, 0)
 
         self.assertEqual(supersystem.cycles, 100)
-        self.assertEqual(supersystem.conv, 1e-8)
-        self.assertEqual(supersystem.grad, 1e-8)
+        self.assertEqual(supersystem.conv, 1e-9)
+        self.assertEqual(supersystem.grad, None)
         self.assertEqual(supersystem.damp, 0)
         self.assertEqual(supersystem.shift, 0)
         self.assertEqual(supersystem.smearsigma, 0)
         self.assertEqual(supersystem.initguess, None)
         self.assertEqual(supersystem.includeghost, False)
         self.assertEqual(supersystem.grid_level, 4)
+        self.assertEqual(supersystem.rho_cutoff, 1e-20)
         self.assertEqual(supersystem.verbose, 3)
         self.assertEqual(supersystem.analysis, False)
         self.assertEqual(supersystem.debug, False)
@@ -315,7 +318,8 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 10)
         self.assertEqual(supersystem.ft_conv, 1e-4)
         self.assertEqual(supersystem.ft_grad, 1e-4)
-        self.assertEqual(supersystem.ft_diis, 2)
+        self.assertIsInstance(supersystem.ft_diis[0], lib.diis.DIIS)
+        self.assertIsInstance(supersystem.ft_diis[1], lib.diis.DIIS)
         self.assertEqual(supersystem.ft_setfermi, -4.)
         self.assertEqual(supersystem.ft_initguess, 'atom')
         self.assertEqual(supersystem.ft_updatefock, 2)
@@ -329,6 +333,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.initguess, '1e')
         self.assertEqual(supersystem.includeghost, True)
         self.assertEqual(supersystem.grid_level, 5)
+        self.assertEqual(supersystem.rho_cutoff, 1e-4)
         self.assertEqual(supersystem.verbose, 1)
         self.assertEqual(supersystem.analysis, True)
         self.assertEqual(supersystem.debug, True)
@@ -364,21 +369,23 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.filename, os.getcwd()+"/temp.inp")
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
-        self.assertEqual(supersystem.ft_grad, 1e-8)
-        self.assertEqual(supersystem.ft_diis, 1)
+        self.assertEqual(supersystem.ft_grad, None)
+        self.assertIsInstance(supersystem.ft_diis[0], lib.diis.DIIS)
+        self.assertIsInstance(supersystem.ft_diis[1], lib.diis.DIIS)
         self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, None)
         self.assertEqual(supersystem.ft_updatefock, 0)
 
         self.assertEqual(supersystem.cycles, 100)
-        self.assertEqual(supersystem.conv, 1e-8)
-        self.assertEqual(supersystem.grad, 1e-8)
+        self.assertEqual(supersystem.conv, 1e-9)
+        self.assertEqual(supersystem.grad, None)
         self.assertEqual(supersystem.damp, 0)
         self.assertEqual(supersystem.shift, 0)
         self.assertEqual(supersystem.smearsigma, 0)
         self.assertEqual(supersystem.initguess, None)
         self.assertEqual(supersystem.includeghost, False)
         self.assertEqual(supersystem.grid_level, 4)
+        self.assertEqual(supersystem.rho_cutoff, 1e-20)
         self.assertEqual(supersystem.verbose, 3)
         self.assertEqual(supersystem.analysis, False)
         self.assertEqual(supersystem.debug, False)
@@ -413,7 +420,8 @@ class TestSuperSystem(unittest.TestCase):
                           ft_setfermi=-0.1, ft_initguess='1e', ft_updatefock=1, 
                           cycles=3, conv=2, grad=4, damp=1, shift=2.1, 
                           smearsigma=0.1, initguess='atom', includeghost=True, 
-                          grid_level=2, verbose=1, analysis=True, debug=True)
+                          grid_level=2, rhocutoff=1e-2, verbose=1, 
+                          analysis=True, debug=True)
 
         self.assertEqual(supersystem.ct_method, 'rb3lyp')
         self.assertEqual(supersystem.proj_oper, 'huzfermi')
@@ -421,7 +429,8 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 2)
         self.assertEqual(supersystem.ft_conv, 1e-1)
         self.assertEqual(supersystem.ft_grad, 1e-4)
-        self.assertEqual(supersystem.ft_diis, 3)
+        self.assertIsInstance(supersystem.ft_diis[0], lib.diis.DIIS)
+        self.assertIsInstance(supersystem.ft_diis[1], lib.diis.DIIS)
         self.assertEqual(supersystem.ft_setfermi, -0.1)
         self.assertEqual(supersystem.ft_initguess, '1e')
         self.assertEqual(supersystem.ft_updatefock, 1)
@@ -435,6 +444,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.initguess, 'atom')
         self.assertEqual(supersystem.includeghost, True)
         self.assertEqual(supersystem.grid_level, 2)
+        self.assertEqual(supersystem.rho_cutoff, 1e-2)
         self.assertEqual(supersystem.verbose, 1)
         self.assertEqual(supersystem.analysis, True)
         self.assertEqual(supersystem.debug, True)
@@ -483,7 +493,8 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsystems[0].freeze, False)
         self.assertEqual(subsystems[0].initguess, None)
         self.assertEqual(subsystems[0].grid_level, 4)
-        self.assertEqual(subsystems[0].verbose, 4)
+        self.assertEqual(subsystems[0].rho_cutoff, 1e-20)
+        self.assertEqual(subsystems[0].verbose, 3)
         self.assertEqual(subsystems[0].analysis, False)
         self.assertEqual(subsystems[0].debug, False)
 
@@ -499,7 +510,8 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsystems[1].freeze, False)
         self.assertEqual(subsystems[1].initguess, None)
         self.assertEqual(subsystems[1].grid_level, 4)
-        self.assertEqual(subsystems[1].verbose, 4)
+        self.assertEqual(subsystems[1].rho_cutoff, 1e-20)
+        self.assertEqual(subsystems[1].verbose, 3)
         self.assertEqual(subsystems[1].analysis, False)
         self.assertEqual(subsystems[1].debug, False)
 
@@ -526,6 +538,7 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsystems[0].freeze, False)
         self.assertEqual(subsystems[0].initguess, 'minao')
         self.assertEqual(subsystems[0].grid_level, 5)
+        self.assertEqual(subsystems[0].rho_cutoff, 1e-4)
         self.assertEqual(subsystems[0].verbose, 1)
         self.assertEqual(subsystems[0].analysis, True)
         self.assertEqual(subsystems[0].debug, True)
@@ -541,6 +554,7 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsystems[1].freeze, True)
         self.assertEqual(subsystems[1].initguess, 'supmol')
         self.assertEqual(subsystems[1].grid_level, 5)
+        self.assertEqual(subsystems[1].rho_cutoff, 1e-4)
         self.assertEqual(subsystems[1].verbose, 1)
         self.assertEqual(subsystems[1].analysis, True)
         self.assertEqual(subsystems[1].debug, True)
@@ -569,7 +583,8 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, False)
         self.assertEqual(subsys.initguess, None)
         self.assertEqual(subsys.grid_level, 4)
-        self.assertEqual(subsys.verbose, 4)
+        self.assertEqual(subsys.rho_cutoff, 1e-20)
+        self.assertEqual(subsys.verbose, 3)
         self.assertEqual(subsys.analysis, False)
         self.assertEqual(subsys.debug, False)
         
@@ -586,7 +601,8 @@ class TestEnvSubSystem(unittest.TestCase):
 
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, 
             smearsigma=0.5, damp=1, shift=1, subcycles=10, freeze=True, 
-            initguess='supmol', grid_level=1, verbose=2, analysis=True, debug=True)
+            initguess='supmol', grid_level=1, rhocutoff=1e-1, verbose=2, 
+            analysis=True, debug=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
@@ -599,6 +615,7 @@ class TestEnvSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, True)
         self.assertEqual(subsys.initguess, 'supmol')
         self.assertEqual(subsys.grid_level, 1)
+        self.assertEqual(subsys.rho_cutoff, 1e-1)
         self.assertEqual(subsys.verbose, 2)
         self.assertEqual(subsys.analysis, True)
         self.assertEqual(subsys.debug, True)
@@ -643,7 +660,8 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, False)
         self.assertEqual(subsys.initguess, None)
         self.assertEqual(subsys.grid_level, 4)
-        self.assertEqual(subsys.verbose, 4)
+        self.assertEqual(subsys.rho_cutoff, 1e-20)
+        self.assertEqual(subsys.verbose, 3)
         self.assertEqual(subsys.analysis, False)
         self.assertEqual(subsys.debug, False)
 
@@ -651,7 +669,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.active_method, 'hf')
         self.assertEqual(subsys.localize_orbitals, False)
         self.assertEqual(subsys.active_orbs, None)
-        self.assertEqual(subsys.active_conv, 1e-8)
+        self.assertEqual(subsys.active_conv, 1e-9)
         self.assertEqual(subsys.active_grad, None)
         self.assertEqual(subsys.active_cycles, 100)
         self.assertEqual(subsys.active_damp, 0)
@@ -679,6 +697,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, False)
         self.assertEqual(subsys.initguess, 'minao')
         self.assertEqual(subsys.grid_level, 5)
+        self.assertEqual(subsys.rho_cutoff, 1e-4)
         self.assertEqual(subsys.verbose, 1)
         self.assertEqual(subsys.analysis, True)
         self.assertEqual(subsys.debug, True)
@@ -719,7 +738,8 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, False)
         self.assertEqual(subsys.initguess, None)
         self.assertEqual(subsys.grid_level, 4)
-        self.assertEqual(subsys.verbose, 4)
+        self.assertEqual(subsys.rho_cutoff, 1e-20)
+        self.assertEqual(subsys.verbose, 3)
         self.assertEqual(subsys.analysis, False)
         self.assertEqual(subsys.debug, False)
 
@@ -727,7 +747,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.active_method, 'ccsd')
         self.assertEqual(subsys.localize_orbitals, False)
         self.assertEqual(subsys.active_orbs, None)
-        self.assertEqual(subsys.active_conv, 1e-8)
+        self.assertEqual(subsys.active_conv, 1e-9)
         self.assertEqual(subsys.active_grad, None)
         self.assertEqual(subsys.active_cycles, 100)
         self.assertEqual(subsys.active_damp, 0)
@@ -750,7 +770,7 @@ class TestActiveSubSystem(unittest.TestCase):
             active_conv=1e-9, active_grad=1e-8, active_cycles=2, 
             active_damp=0.1, active_shift=0.001, smearsigma=0.5, damp=1, 
             shift=1, subcycles=10, freeze=True, initguess='supmol', grid_level=1, 
-            verbose=2, analysis=True, debug=True)
+            rhocutoff=1e-3, verbose=2, analysis=True, debug=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
@@ -763,6 +783,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.freeze, True)
         self.assertEqual(subsys.initguess, 'supmol')
         self.assertEqual(subsys.grid_level, 1)
+        self.assertEqual(subsys.rho_cutoff, 1e-3)
         self.assertEqual(subsys.verbose, 2)
         self.assertEqual(subsys.analysis, True)
 

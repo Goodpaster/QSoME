@@ -96,6 +96,7 @@ active_settings
  shift 0.2
 end
 
+rhocutoff 1e-4
 grid 5
 verbose 1
 gencube test1
@@ -286,6 +287,7 @@ class TestInputReader(unittest.TestCase):
 
         #Check system settings
         self.assertEqual(inp.grid, 5)
+        self.assertEqual(inp.rhocutoff, 1e-4)
         self.assertEqual(inp.verbose, 1)
         self.assertEqual(inp.gencube, 'test1')
         self.assertEqual(inp.compden, 'test2')
@@ -359,6 +361,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
         #System settings
         self.assertEqual(sup_kwargs['filename'], path + exp_set_filename)
         self.assertEqual(sup_kwargs['grid_level'], 5)
+        self.assertEqual(sup_kwargs['rhocutoff'], 1e-4)
         self.assertEqual(sup_kwargs['verbose'], 1)
         self.assertEqual(sup_kwargs['analysis'], True)
         self.assertEqual(sup_kwargs['debug'], True)
@@ -416,6 +419,7 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
 
         # other options
         self.assertEqual(sub_kwargs['grid_level'], 5)
+        self.assertEqual(sub_kwargs['rhocutoff'], 1e-4)
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)
@@ -433,6 +437,7 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['damp'], 0.1)
         self.assertEqual(sub_kwargs['shift'], 0.2)
         self.assertEqual(sub_kwargs['grid_level'], 5)
+        self.assertEqual(sub_kwargs['rhocutoff'], 1e-4)
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)

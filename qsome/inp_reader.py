@@ -99,6 +99,7 @@ class InpReader:
         cas_settings.add_line_key('active_orbs', type=str, default='')         # Which orbitals to include in the active space
 
         reader.add_line_key('grid', type=int)            # becke integration grid
+        reader.add_line_key('rhocutoff', type=float)     # small rho cutoff
         reader.add_line_key('verbose', type=int)         # pySCF verbose level
         reader.add_line_key('gencube', type=str)              # generate Cube file
         reader.add_line_key('compden', type=str)              # compare densities
@@ -199,6 +200,8 @@ class InpReader:
 
         if self.inp.grid:
             self.supersystem_kwargs['grid_level'] = self.inp.grid
+        if self.inp.rhocutoff:
+            self.supersystem_kwargs['rhocutoff'] = self.inp.rhocutoff
         if self.inp.verbose:
             self.supersystem_kwargs['verbose'] = self.inp.verbose
         if self.inp.analysis:
@@ -215,6 +218,8 @@ class InpReader:
         universal_subsys_settings = {}
         universal_subsys_settings['filename'] = self.inp.filename
         universal_subsys_settings['env_method'] = self.inp.embed.env_method
+        if self.inp.rhocutoff:
+            universal_subsys_settings['rhocutoff'] = self.inp.rhocutoff
         if self.inp.grid:
             universal_subsys_settings['grid_level'] = self.inp.grid
         if self.inp.verbose:

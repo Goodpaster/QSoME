@@ -96,7 +96,13 @@ class TestFockConstruction(unittest.TestCase):
 
         supersystem.update_fock()
 
-        # Need tests
+        # py_scf = dft.RKS(supersystem.mol)
+        # py_scf.xc = 'pbe'
+        # dm_0 = py_scf.get_init_guess()
+        # py_fock = py_scf.get_fock(dm=dm_0)
+        # self.assertTrue(np.array_equal(supersystem.fock[0], py_fock))
+        # self.assertTrue(np.array_equal(supersystem.fock[1], py_fock))
+        # # Need tests
 
     def test_ghost(self):
         subsystems = []
@@ -178,6 +184,8 @@ class TestProjectionConstruction(unittest.TestCase):
 
         supersystem.update_proj_pot()
 
+        # need tests.
+
     def test_ghost(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -193,7 +201,17 @@ class TestProjectionConstruction(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        supersystem.update_proj_pot()
+        supersystem.ft_cycles = 2
+        supersystem.freeze_and_thaw()
+
+        nS = supersystem.mol.nao_nr()
+        for i in range(len(subsystems)):
+            dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            subsystem = subsystems[i]
+            dm_subsys[0][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[0]
+            dm_subsys[1][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[1]
+            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][0], dm_subsys[0])), 0.0, delta=1e-15)
+            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][1], dm_subsys[1])), 0.0, delta=1e-15)
 
     def test_widesep(self):
         subsystems = []
@@ -310,7 +328,7 @@ class TestFreezeAndThaw(unittest.TestCase):
 
         supersystem.freeze_and_thaw()
         # compare dft-in-dft to full system energy
-        sup_mo_e = supersystem.supermolecular_energy()
+        sup_mo_e = supersystem.get_supermolecular_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
@@ -337,7 +355,7 @@ class TestFreezeAndThaw(unittest.TestCase):
         supersystem.freeze_and_thaw()
 
         # compare dft-in-dft to full system energy
-        sup_mo_e = supersystem.supermolecular_energy()
+        sup_mo_e = supersystem.get_supermolecular_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
@@ -352,6 +370,53 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub2_env_e = supersystem.subsystems[1].env_energy
         self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
 
+    def test_readchk(self):
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + def_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            mol = in_obj.subsys_mols[i]
+            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+            env_kwargs = in_obj.env_subsystem_kwargs[i]
+            env_kwargs['initguess'] = 'readchk'
+            subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+            subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem_kwargs['initguess'] = 'readchk'
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        supersystem.initguess = 'readchk'
+
+        supersystem.freeze_and_thaw()
+
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+        sub1_e = subsystems[0].env_energy
+        sub2_e = subsystems[1].env_energy
+
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + def_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            mol = in_obj.subsys_mols[i]
+            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+            env_kwargs = in_obj.env_subsystem_kwargs[i]
+            env_kwargs['initguess'] = 'readchk'
+            subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+            subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem_kwargs['initguess'] = 'readchk'
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        supersystem.ft_cycles = 1
+
+        supersystem.freeze_and_thaw()
+
+        self.assertAlmostEqual(sub1_e, subsystems[0].env_energy, delta=1e-10)
+        self.assertAlmostEqual(sub2_e, subsystems[1].env_energy, delta=1e-10)
+        self.assertAlmostEqual(sup_env_in_env_e, supersystem.env_in_env_energy(), delta=1e-10)
+        
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
