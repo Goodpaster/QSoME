@@ -1,12 +1,262 @@
 # A method to define all cluster supsystem objects
 # Daniel Graham
 
+import re
 from qsome import subsystem
-from pyscf import gto, scf, dft
+from pyscf import gto, scf, dft, cc
+from pyscf.cc import ccsd_t, ccsd_t_lambda_slow, ccsd_t_rdm_slow
 import os
+
+from functools import reduce
 
 import numpy as np
 import scipy as sp
+
+#Custom PYSCF method for the active subsystem.
+from copy import deepcopy as copy
+from pyscf import lib
+from pyscf.lib import logger
+from pyscf.scf import hf,rohf,uhf
+from pyscf.scf import jk
+from pyscf.dft import rks, roks, uks
+import numpy as np
+
+#RHF Methods
+def rhf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
+             diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
+    '''F = h^{core} + V^{HF}
+    Special treatment (damping, DIIS, or level shift) will be applied to the
+    Fock matrix if diis and cycle is specified (The two parameters are passed
+    to get_fock function during the SCF iteration)
+    Kwargs:
+        h1e : 2D ndarray
+            Core hamiltonian
+        s1e : 2D ndarray
+            Overlap matrix, for DIIS
+        vhf : 2D ndarray
+            HF potential matrix
+        dm : 2D ndarray
+            Density matrix, for DIIS
+        cycle : int
+            Then present SCF iteration step, for DIIS
+        diis : an object of :attr:`SCF.DIIS` class
+            DIIS object to hold intermediate Fock and error vectors
+        diis_start_cycle : int
+            The step to start DIIS.  Default is 0.
+        level_shift_factor : float or int
+            Level shift (in AU) for virtual space.  Default is 0.
+    '''
+    if emb_pot is None: emb_pot = 0.0
+    if proj_pot is None: proj_pot = 0.0
+    if h1e is None: h1e = mf.get_hcore()
+    if vhf is None: vhf = mf.get_veff(dm=dm)
+    f = h1e + vhf + emb_pot #Added embedding potential to fock
+
+    if cycle < 0 and diis is None:  # Not inside the SCF iteration
+        return f
+
+    if diis_start_cycle is None:
+        diis_start_cycle = mf.diis_start_cycle
+    if level_shift_factor is None:
+        level_shift_factor = mf.level_shift
+    if damp_factor is None:
+        damp_factor = mf.damp
+    if s1e is None: s1e = mf.get_ovlp()
+    if dm is None: dm = self.make_rdm1()
+
+    if 0 <= cycle < diis_start_cycle-1 and abs(damp_factor) > 1e-4:
+        f = damping(s1e, dm*.5, f, damp_factor)
+    if diis is not None and cycle >= diis_start_cycle:
+        f = diis.update(s1e, dm, f, mf, h1e, vhf)
+    if abs(level_shift_factor) > 1e-4:
+        f = level_shift(s1e, dm*.5, f, level_shift_factor)
+    return f
+
+def rhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None):
+
+    if emb_pot is None: emb_pot = 0.0
+    if dm is None: dm = mf.make_rdm1()
+    if h1e is None: h1e = mf.get_hcore()
+    if vhf is None: vhf = mf.get_veff(mf.mol, dm)
+    h1e = copy(h1e + emb_pot + proj_pot) #Add embedding potential to the core ham
+    e1 = np.einsum('ij,ji', h1e, dm).real
+    e_coul = np.einsum('ij,ji', vhf, dm).real * .5
+    logger.debug(mf, 'E_coul = %.15g', e_coul)
+    return e1+e_coul, e_coul
+
+#ROHF Methods
+def rohf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
+             diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
+    '''Build fock matrix based on Roothaan's effective fock.
+    See also :func:`get_roothaan_fock`
+    '''
+    if emb_pot is None: emb_pot = [0.0, 0.0]
+    if h1e is None: h1e = mf.get_hcore()
+    if s1e is None: s1e = mf.get_ovlp()
+    if vhf is None: vhf = mf.get_veff(dm=dm)
+    if dm is None: dm = mf.make_rdm1()
+    if isinstance(dm, np.ndarray) and dm.ndim == 2:
+        dm = np.array((dm*.5, dm*.5))
+# To Get orbital energy in get_occ, we saved alpha and beta fock, because
+# Roothaan effective Fock cannot provide correct orbital energy with `eig`
+# TODO, check other treatment  J. Chem. Phys. 133, 141102
+    focka = h1e + vhf[0] + emb_pot[0] #Add embedding potential
+    fockb = h1e + vhf[1] + emb_pot[1] #Add embedding potential
+    f = rohf.get_roothaan_fock((focka,fockb), dm, s1e)
+    if cycle < 0 and diis is None:  # Not inside the SCF iteration
+        return f
+
+    if diis_start_cycle is None:
+        diis_start_cycle = mf.diis_start_cycle
+    if level_shift_factor is None:
+        level_shift_factor = mf.level_shift
+    if damp_factor is None:
+        damp_factor = mf.damp
+
+    dm_tot = dm[0] + dm[1]
+    if 0 <= cycle < diis_start_cycle-1 and abs(damp_factor) > 1e-4:
+        raise NotImplementedError('ROHF Fock-damping')
+    if diis and cycle >= diis_start_cycle:
+        f = diis.update(s1e, dm_tot, f, mf, h1e, vhf)
+    if abs(level_shift_factor) > 1e-4:
+        f = hf.level_shift(s1e, dm_tot*.5, f, level_shift_factor)
+    f = lib.tag_array(f, focka=focka, fockb=fockb)
+    return f
+
+def rohf_energy_elec(mf, emb_pot=None, dm=None, h1e=None, vhf=None):
+
+    if emb_pot is None: emb_pot = [0.0, 0.0]
+    if dm is None: dm = mf.make_rdm1()
+    elif isinstance(dm, np.ndarray) and dm.ndim == 2:
+        dm = np.array((dm*.5, dm*.5))
+    ee, ecoul = uhf_energy_elec(mf, emb_pot, dm, h1e, vhf)
+    logger.debug(mf, 'Ecoul = %.15g', ecoul)
+    return ee, ecoul
+
+
+#UHF Methods
+def uhf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
+             diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
+
+
+    if emb_pot is None: emb_pot = [0.0, 0.0]
+    if h1e is None: h1e = mf.get_hcore()
+    #if vhf is None: vhf = mf.get_veff(dm=dm)
+    #For some reason the vhf being passed is wrong I believe.
+    vhf = mf.get_veff(dm=dm)
+    f = h1e + vhf 
+    if f.ndim == 2:
+        f = (f, f)
+    f[0] = f[0] + emb_pot[0] #Add embedding potential
+    f[1] = f[1] + emb_pot[1] #Add embedding potential
+
+    #print ("vhf")
+    #print (vhf[0])
+
+    if cycle < 0 and diis is None:  # Not inside the SCF iteration
+        return f
+
+    if diis_start_cycle is None:
+        diis_start_cycle = mf.diis_start_cycle
+    if level_shift_factor is None:
+        level_shift_factor = mf.level_shift
+    if damp_factor is None:
+        damp_factor = mf.damp
+    if s1e is None: s1e = mf.get_ovlp()
+    if dm is None: dm = self.make_rdm1()
+
+    if isinstance(level_shift_factor, (tuple, list, np.ndarray)):
+        shifta, shiftb = level_shift_factor
+    else:
+        shifta = shiftb = level_shift_factor
+    if isinstance(damp_factor, (tuple, list, np.ndarray)):
+        dampa, dampb = damp_factor
+    else:
+        dampa = dampb = damp_factor
+
+    if isinstance(dm, np.ndarray) and dm.ndim == 2:
+        dm = [dm*.5] * 2
+    if 0 <= cycle < diis_start_cycle-1 and abs(dampa)+abs(dampb) > 1e-4:
+        f = (hf.damping(s1e, dm[0], f[0], dampa),
+             hf.damping(s1e, dm[1], f[1], dampb))
+    if diis and cycle >= diis_start_cycle:
+        f = diis.update(s1e, dm, f, mf, h1e, vhf)
+    if abs(shifta)+abs(shiftb) > 1e-4:
+        f = (hf.level_shift(s1e, dm[0], f[0], shifta),
+             hf.level_shift(s1e, dm[1], f[1], shiftb))
+    return np.array(f)
+
+def uhf_energy_elec(mf, emb_pot=None, dm=None, h1e=None, vhf=None):
+    '''Electronic energy of Unrestricted Hartree-Fock
+    Returns:
+        Hartree-Fock electronic energy and the 2-electron part contribution
+    '''
+    if emb_pot is None: emb_pot = [0.0, 0.0]
+    if dm is None: dm = mf.make_rdm1()
+    if h1e is None:
+        h1e = mf.get_hcore()
+    if isinstance(dm, np.ndarray) and dm.ndim == 2:
+        dm = np.array((dm*.5, dm*.5))
+    if vhf is None:
+        vhf = mf.get_veff(mf.mol, dm)
+    e1 = np.einsum('ij,ij', h1e.conj(), dm[0]+dm[1])
+
+    vhf[0] = vhf[0] + 2.*emb_pot[0] #May need to multiply emb_pot by 2
+    vhf[1] = vhf[1] + 2.*emb_pot[1]
+
+    e_coul =(np.einsum('ij,ji', vhf[0], dm[0]) +
+             np.einsum('ij,ji', vhf[1], dm[1])).real * .5
+    return e1+e_coul, e_coul
+
+#RKS Methods
+def rks_energy_elec(ks, emb_pot=None, dm=None, h1e=None, vhf=None):
+    r'''Electronic part of RKS energy.
+    Args:
+        ks : an instance of DFT class
+        dm : 2D ndarray
+            one-partical density matrix
+        h1e : 2D ndarray
+            Core hamiltonian
+    Returns:
+        RKS electronic energy and the 2-electron part contribution
+    '''
+    if emb_pot is None: emb_pot = 0.0
+    if dm is None: dm = ks.make_rdm1()
+    if h1e is None: h1e = ks.get_hcore()
+    if vhf is None or getattr(vhf, 'ecoul', None) is None:
+        vhf = ks.get_veff(ks.mol, dm)
+
+    h1e = h1e + emb_pot
+    e1 = np.einsum('ij,ji', h1e, dm).real
+    tot_e = e1 + vhf.ecoul + vhf.exc
+    logger.debug(ks, 'Ecoul = %s  Exc = %s', vhf.ecoul, vhf.exc)
+    return tot_e, vhf.ecoul+vhf.exc
+
+rks_get_fock = rhf_get_fock
+
+
+#UKS Methods
+def uks_energy_elec(ks, emb_pot=None, dm=None, h1e=None, vhf=None):
+    if emb_pot is None: emb_pot = [0.0,0.0]
+    if dm is None: dm = ks.make_rdm1()
+    if h1e is None: h1e = ks.get_hcore()
+    if vhf is None or getattr(vhf, 'ecoul', None) is None:
+        vhf = ks.get_veff(ks.mol, dm)
+    if isinstance(dm, np.ndarray) and dm.ndim == 2:
+        dm = np.array((dm*.5, dm*.5))
+    emb_h1e = [None,None] 
+    emb_h1e[0] = h1e + emb_pot[0]
+    emb_h1e[1] = h1e + emb_pot[1]
+    e1 = np.einsum('ij,ji', emb_h1e[0], dm[0]) + np.einsum('ij,ji', emb_h1e[1], dm[1])
+    tot_e = e1.real + vhf.ecoul + vhf.exc
+    logger.debug(ks, 'Ecoul = %s  Exc = %s', vhf.ecoul, vhf.exc)
+    return tot_e, vhf.ecoul+vhf.exc
+
+uks_get_fock = uhf_get_fock
+
+#ROKS Methods
+roks_energy_elec = uks_energy_elec
+roks_get_fock = rohf_get_fock
 
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
@@ -74,6 +324,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_mo_occ = [np.zeros_like(self.env_hcore[0]), np.zeros_like(self.env_hcore[0])]
         self.env_mo_energy = self.env_mo_occ.copy()
         self.dmat = self.env_mo_coeff.copy() # alpha and beta dmat
+        self.env_energy = 0.0
 
     def init_density(self, dmat):
         self.dmat = dmat
@@ -88,13 +339,15 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             e_emb = (np.einsum('ij,ji', self.emb_pot[0], self.dmat[0]) + 
                      np.einsum('ij,ji', self.emb_pot[1], self.dmat[1])).real * 0.5
         else:
-            e_coul = (np.einsum('ij,ji', self.env_V[0], (self.dmat[0] + self.dmat[1])).real * 0.5)
-            e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real * 0.5)
-        #There is some kind of double counting happening where e_coul is too large. Can't just add electronic of each to get the total energy.
-        return hcore_e + e_coul + e_emb
+            e_coul = np.einsum('ij,ji', self.env_V[0] + self.emb_pot[0], (self.dmat[0] + self.dmat[1])).real * 0.5
+            #e_emb = (np.einsum('ij,ji', self.emb_pot[0], (self.dmat[0] + self.dmat[1])).real * 0.5)
+            #print (self.env_V[1] + self.emb_pot[1])
+            # Error is in the evaluation of the energy. All potentials and density matrices are the same. How the energy is evaluated is wrong.
+        return hcore_e + e_coul
 
     def get_env_energy(self):
-        return self.get_env_elec_energy() + self.env_scf.energy_nuc()
+        return self.env_energy
+        #return self.get_env_elec_energy() + self.env_scf.energy_nuc()
 
     def update_proj_pot(self, new_POp):
         self.proj_pot = new_POp
@@ -117,6 +370,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def save_chkfile(self):
         pass
     def save_orbitals(self):
+        pass
+
+    def get_env_proj_energy(self):
         pass
 
     def diagonalize(self):
@@ -196,7 +452,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, active_method, localize_orbitals=False, active_orbs=None,
-                 active_conv=1e-8, active_grad=1e-8, active_cycles=100, 
+                 active_conv=1e-8, active_grad=None, active_cycles=100, 
                  active_damp=0, active_shift=0, **kwargs):
 
         self.active_method = active_method
@@ -214,6 +470,74 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
  
         super().__init__(mol, env_method, **kwargs)
 
+    def get_active_proj_energy(self):
+         #trace of 1p den mat with proj operator
+         return np.trace(self.active_dmat, self.proj_pot)
+
+    def get_active_in_env_energy(self):
+        self.active_energy = 0.0
+        if self.active_method[0] == 'u': 
+            if self.active_method[1:] == 'hf':
+                self.active_scf = scf.UHF(self.mol)
+                self.active_scf.conv_tol = self.active_conv
+                self.active_scf.conv_tol_grad = self.active_grad
+                self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.get_hcore = self.env_hcore
+                self.active_scf.get_fock = lambda *args, **kwargs: uhf_get_fock(self.active_scf, self.emb_pot, *args, **kwargs)
+                self.active_scf.energy_elec = lambda *args, **kwargs: uhf_energy_elec(self.active_scf, self.emb_pot, *args, **kwargs)
+                self.active_scf.kernel()
+
+            elif self.active_method[1:] == 'ccsd' or self.active_method[1:] == 'ccsd(t)':
+                pass
+                if self.active_method[1:] == 'ccsd(t)':
+                    pass
+            elif re.match(re.compile('cas(pt2)?\[.*\].*'), inp.active_method[1:]):
+                pass
+            elif self.active_method[1:] == 'fci':
+                pass
+            else: 
+                pass
+        elif self.active_method[:2] == 'ro': 
+            pass
+        else: 
+            if self.active_method[0] == 'r':
+                self.active_method = self.active_method[1:]
+            if self.active_method == 'hf':
+                self.active_scf = scf.RHF(self.mol)
+                self.active_scf.conv_tol = self.active_conv
+                self.active_scf.conv_tol_grad = self.active_grad
+                self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
+                self.active_scf.get_fock = lambda *args, **kwargs: rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_scf.energy_elec = lambda *args, **kwargs: rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_energy = self.active_scf.kernel()
+                self.active_dmat = self.active_scf.make_rdm1()
+
+            elif self.active_method == 'ccsd' or self.active_method == 'ccsd(t)':
+                self.active_scf = scf.RHF(self.mol)
+                self.active_scf.conv_tol = self.active_conv
+                self.active_scf.conv_tol_grad = self.active_grad
+                self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
+                self.active_scf.get_fock = lambda *args, **kwargs: rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_scf.energy_elec = lambda *args, **kwargs: rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_energy = self.active_scf.kernel()
+                 
+                mCCSD = cc.CCSD(self.active_scf)
+                mCCSD.max_cycle = self.active_cycles
+                new_eris = mCCSD.ao2mo()
+                new_eris.fock = reduce(np.dot, (self.active_scf.mo_coeff.conj().T, self.active_scf.get_fock(), self.active_scf.mo_coeff))
+                ecc, t1, t2 = mCCSD.kernel(eris=new_eris)
+                self.active_energy += ecc
+                if self.active_method == 'ccsd(t)':
+                    ecc_t = ccsd_t.kernel(mCCSD, mCCSD.ao2mo())
+                    self.active_energy += ecc_t
+                    l1, l2 = ccsd_t_lambda.kernel(mCCSD, new_eris, t1, t2,)[1:]
+                    self.active_dmat = ccsd_t_rdm_slow.make_rdm1(mCCSD, t1, t2, l1, l2, eris=new_eris)
+                else:
+                    self.active_dmat = mCCSD.make_rdm1()
+
+ 
 class ClusterExcitedSubSystem(ClusterActiveSubSystem):
 
     def __init__(self):

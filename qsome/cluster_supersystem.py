@@ -57,7 +57,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # Actually, could just modify the pyscf object attributes...
         # Actually will not use pyscf attributes. Want to store consistently in the same way, so always store alpha and beta. Makes everything less complicated.
 
-        self.concat_mols()
+        self.mol = self.concat_mols()
         self.gen_sub2sup()
         self.init_ct_scf()
         self.init_density()
@@ -289,38 +289,43 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
     
 
-    def concat_mols(self):
+    def concat_mols(self, subsys1=None, subsys2=None):
 
         # this works but can be done MUCH better.
-        self.mol = gto.Mole()
-        self.mol.basis = {}
+        mol = gto.Mole()
+        mol.basis = {}
         atm = []
         nghost = 0
-        self.mol.charge = 0
-        self.mol.spin = 0
-        for i in range(len(self.subsystems)):
-            subsystem = self.subsystems[i]
-            self.mol.charge += subsystem.mol.charge
-            self.mol.spin += subsystem.mol.spin
+        mol.charge = 0
+        mol.spin = 0
+        if not (subsys1 is None and subsys2 is None):
+            subsys_list = [subsys1, subsys2]
+        else:
+            subsys_list = self.subsystems
+        for i in range(len(subsys_list)):
+            subsystem = subsys_list[i]
+            mol.charge += subsystem.mol.charge
+            mol.spin += subsystem.mol.spin
             for j in range(subsystem.mol.natm):
                 if 'ghost' in subsystem.mol.atom_symbol(j).lower():
                     if self.includeghost:
                         nghost += 1
                         ghost_name = subsystem.mol.atom_symbol(j).split(':')[0] + f':{nghost}'
                         atm.append([ghost_name, subsystem.mol.atom_coord(j)])
-                        self.mol.basis.update({ghost_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
+                        mol.basis.update({ghost_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
                 else:
                     if i > 0:
                         atom_name = subsystem.mol.atom_symbol(j) + ':' + str(i)
                     else:
                         atom_name = subsystem.mol.atom_symbol(j)
                     atm.append([atom_name, subsystem.mol.atom_coord(j)])
-                    self.mol.basis.update({atom_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
+                    mol.basis.update({atom_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
 
-        self.mol.atom = atm
-        self.mol.verbose = self.verbose
-        self.mol.unit = 'bohr' # atom_coord is always stored in bohr for some reason. Trust me this is right.
-        self.mol.build(dump_input=False)
+        mol.atom = atm
+        mol.verbose = self.verbose
+        mol.unit = 'bohr' # atom_coord is always stored in bohr for some reason. Trust me this is right.
+        mol.build(dump_input=False)
+        return mol
 
     def supermolecular_energy(self):
 
@@ -341,6 +346,103 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print("".center(80,'*'))
         return self.ct_scf.energy_tot()
 
+    def get_emb_subsys_energy(self):
+
+        #Ideally this would be done using the subsystem object, however given how dft energies are calculated this does not seem like a viable option right now.
+
+        #This works. but could be optimized
+
+        #self.env_in_env_energy()
+
+        nS = self.mol.nao_nr()
+        for i in range(len(self.subsystems)):
+            dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            subsystem = self.subsystems[i]
+            dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem.dmat[0]
+            dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem.dmat[1]
+            if subsystem.env_method[0] == 'u' or subsystem.env_method[:2] == 'ro':
+                if subsystem.env_method[1:] == 'hf' or subsystem.env_method[2:] == 'hf':
+                    sub_scf = scf.UHF(self.mol) 
+                else:
+                    sub_scf = scf.UKS(self.mol) 
+                    sub_scf.xc = subsystem.env_scf.xc
+                    sub_scf.grids = self.grids
+                    sub_scf.small_rho_cutoff = 1e-20
+                subsystem.env_energy = sub_scf.energy_tot(dm=dm_subsys)
+            else:
+                if subsystem.env_method[1:] == 'hf' or subsystem.env_method == 'hf':
+                    sub_scf = scf.RHF(self.mol) 
+                else:
+                    sub_scf = scf.RKS(self.mol) 
+                    sub_scf.xc = subsystem.env_scf.xc
+                    sub_scf.grids = self.grids
+                    sub_scf.small_rho_cutoff = 1e-20
+
+                subsystem.env_energy = sub_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0]
+
+
+        # get interaction energies.
+        for i in range(len(self.subsystems)):
+            for j in range(i + 1, len(self.subsystems)):
+                dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                subsystem_1 = self.subsystems[i]
+                nuc_energy_1 = subsystem_1.env_scf.energy_nuc()
+                dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
+                dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
+                subsystem_2 = self.subsystems[j]
+                nuc_energy_2 = subsystem_2.env_scf.energy_nuc()
+                dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
+                both_nuc = self.concat_mols(subsystem_1, subsystem_2).energy_nuc()
+
+                if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
+                    if subsystem_1.env_method[1:] == 'hf' or subsystem_1.env_method[2:] == 'hf':
+                        sub1_scf = scf.UHF(self.mol) 
+                    else:
+                        sub1_scf = scf.UKS(self.mol) 
+                        sub1_scf.xc = subsystem_1.env_scf.xc
+                        sub1_scf.grids = self.grids
+                        sub1_scf.small_rho_cutoff = 1e-20
+                    sub1_interaction = (sub1_scf.energy_elec(dm=dm_subsys)[0] -
+                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+                else:
+                    if subsystem_1.env_method[1:] == 'hf' or subsystem_1.env_method == 'hf':
+                        sub1_scf = scf.RHF(self.mol) 
+                    else:
+                        sub1_scf = scf.RKS(self.mol) 
+                        sub1_scf.xc = subsystem_1.env_scf.xc
+                        sub1_scf.grids = self.grids
+                        sub1_scf.small_rho_cutoff = 1e-20
+                    sub1_interaction = (sub1_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
+                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+
+                if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
+                    if subsystem_2.env_method[1:] == 'hf' or subsystem_2.env_method[2:] == 'hf':
+                        sub2_scf = scf.UHF(self.mol) 
+                    else:
+                        sub2_scf = scf.UKS(self.mol) 
+                        sub2_scf.xc = subsystem_2.env_scf.xc
+                        sub2_scf.grids = self.grids
+                        sub2_scf.small_rho_cutoff = 1e-20
+                    sub2_interaction = (sub2_scf.energy_elec(dm=dm_subsys)[0] -
+                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+                else:
+                    if subsystem_2.env_method[1:] == 'hf' or subsystem_2.env_method == 'hf':
+                        sub2_scf = scf.RHF(self.mol) 
+                    else:
+                        sub2_scf = scf.RKS(self.mol) 
+                        sub2_scf.xc = subsystem_2.env_scf.xc
+                        sub2_scf.grids = self.grids
+                        sub2_scf.small_rho_cutoff = 1e-20
+                    sub2_interaction = (sub2_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
+                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+
+                subsystem_1.env_energy += sub1_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_1
+                subsystem_2.env_energy += sub2_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_2
+
+    def get_emb_energy(self):
+        self.subsystems[0].get_active_in_env_energy()
+                 
     def env_in_env_energy(self):
         print ("".center(80,'*'))
         print("  Env-in-Env Calculation  ".center(80))
@@ -355,13 +457,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         else:
             self.env_energy = self.ct_scf.energy_tot(dm=(dm_env[0] + dm_env[1]))
 
+        #veff = self.ct_scf.get_veff(dm=(dm_env[0] + dm_env[1]))
         print(f"  Energy: {self.env_energy}  ".center(80))
         print("".center(80,'*'))
-        #sub_e1 = self.subsystems[0].get_env_elec_energy()
-        #sub_e2 = self.subsystems[1].get_env_elec_energy()
-        #nuc = self.ct_scf.energy_nuc()
-        #print(f"  Energy2: {sub_e1 + sub_e2 + nuc}  ".center(80))
         # This doesn't work. Hcore is right, but the coulombic is wrong. Too large. Maybe double counting.
+        
  
         return self.env_energy
 
@@ -421,8 +521,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FDS = [None, None]
                     FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
                     FDS[1] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
-                    POp[0] += - 0.5 * ( FDS[0] + FDS[0].transpose() ) #May not need 0.5 cause divide into alpha and beta
-                    POp[1] += - 0.5 * ( FDS[0] + FDS[0].transpose() )
+                    POp[0] += - 1. * ( FDS[0] + FDS[0].transpose() ) #May not need 0.5 cause divide into alpha and beta
+                    POp[1] += - 1. * ( FDS[0] + FDS[0].transpose() )
 
                 elif self.proj_oper in ('huzinagafermi', 'huzfermi'):
                     FAB = [None, None]
@@ -443,8 +543,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FDS = [None, None]
                     FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
                     FDS[0] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
-                    POp[0] += - 0.5 * ( FDS[0] + FDS[0].transpose() ) #may not need 0.5
-                    POp[1] += - 0.5 * ( FDS[1] + FDS[1].transpose() )
+                    POp[0] += - 1. * ( FDS[0] + FDS[0].transpose() ) #may not need 0.5
+                    POp[1] += - 1. * ( FDS[1] + FDS[1].transpose() )
 
             self.proj_pot[i] = POp.copy()
 
@@ -530,6 +630,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                     subsystem.update_fock()
                     #this will slow down calculation. 
+                    self.get_emb_subsys_energy()
                     sub_old_e = subsystem.get_env_energy()
                     sub_old_dm = subsystem.dmat.copy()
 
@@ -558,6 +659,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                     self.ft_fermi[i] = subsystem.fermi
                     #This will slow down execution.
+                    self.get_emb_subsys_energy()
                     sub_new_e = subsystem.get_env_energy()
                     dE = abs(sub_old_e - sub_new_e)
 
@@ -569,6 +671,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print("".center(80))
             print("Freeze-and-Thaw NOT converged".center(80))
 
+        self.get_emb_subsys_energy()
         # print subsystem energies 
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]

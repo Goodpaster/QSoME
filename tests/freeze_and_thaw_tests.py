@@ -7,7 +7,7 @@ import shutil
 import re
 
 from qsome import inp_reader, cluster_subsystem, cluster_supersystem
-from pyscf import gto
+from pyscf import gto, dft
 
 import numpy as np
 
@@ -24,7 +24,7 @@ end
 embed
  env_method pbe
  huzinaga
- cycles 20
+ cycles 50
 end
 
 basis 3-21g
@@ -53,7 +53,8 @@ widesep_filename = 'wide_sep.inp'
 widesep_str = default_str.replace("""
 He    2.0000    0.0000    0.0000
 """, """
-He    200.0000    0.0000    0.0000
+H    200.0000    0.0000    0.0000
+H    200.8000    0.0000    0.0000
 """, 1)
 
 # Need to also test huzfermi and mu operator
@@ -81,7 +82,7 @@ class TestFockConstruction(unittest.TestCase):
     def test_default(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
-        in_obj = inp_reader.InpReader(path + widesep_filename)
+        in_obj = inp_reader.InpReader(path + def_filename)
         for i in range(len(in_obj.subsys_mols)):
             mol = in_obj.subsys_mols[i]
             env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
@@ -100,7 +101,7 @@ class TestFockConstruction(unittest.TestCase):
     def test_ghost(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
-        in_obj = inp_reader.InpReader(path + widesep_filename)
+        in_obj = inp_reader.InpReader(path + ghost_filename)
         for i in range(len(in_obj.subsys_mols)):
             mol = in_obj.subsys_mols[i]
             env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
@@ -284,6 +285,11 @@ class TestFreezeAndThaw(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
         supersystem.freeze_and_thaw()
+        supersystem.env_in_env_energy()
+        sup_env_e = supersystem.env_energy
+        sub1_env_e = supersystem.subsystems[0].env_energy
+        sub2_env_e = supersystem.subsystems[1].env_energy
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
 
 
         #unsure how to test...
@@ -308,6 +314,11 @@ class TestFreezeAndThaw(unittest.TestCase):
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
+        sup_env_e = supersystem.env_energy
+        sub1_env_e = supersystem.subsystems[0].env_energy
+        sub2_env_e = supersystem.subsystems[1].env_energy
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
+
     def test_widesep(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -329,6 +340,17 @@ class TestFreezeAndThaw(unittest.TestCase):
         sup_mo_e = supersystem.supermolecular_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
+
+        # subsystem energies should be equal to individual He atoms
+        he_pyscf = dft.RKS(subsystems[0].mol)
+        he_pyscf.xc = env_method
+        he_e = he_pyscf.kernel()
+        #self.assertAlmostEqual(supersystem.subsystems[0].get_env_energy(), he_e, delta=1e-10)
+
+        sup_env_e = supersystem.env_energy
+        sub1_env_e = supersystem.subsystems[0].env_energy
+        sub2_env_e = supersystem.subsystems[1].env_energy
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
 
 
     def tearDown(self):
