@@ -366,12 +366,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         mol.build(dump_input=False)
         return mol
 
-    @time_method("SuperSystem Energy")
+    @time_method("Supersystem Energy")
     def get_supersystem_energy(self):
 
         if self.ct_energy is None:
             print ("".center(80,'*'))
-            print("  SuperSystem Calculation  ".center(80))
+            print("  Supersystem Calculation  ".center(80))
             print ("".center(80,'*'))
             self.ct_scf.scf()
             self.dmat = self.ct_scf.make_rdm1()
@@ -387,7 +387,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print("".center(80,'*'))
         return self.ct_energy
 
-    @time_method("SubSystem Energies")
+    @time_method("Subsystem Energies")
     def get_emb_subsys_energy(self):
 
         #Ideally this would be done using the subsystem object, however given how dft energies are calculated this does not seem like a viable option right now.
@@ -483,7 +483,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
     @time_method("Active Energy")
     def get_active_energy(self):
         #This is crude. 
-        self.subsystems[0].get_active_in_env_energy()
+        print ("".center(80,'*'))
+        print("  Active Subsystem Calculation  ".center(80))
+        print ("".center(80,'*'))
+        act_e = self.subsystems[0].get_active_in_env_energy()
+        print(f"  Energy: {act_e}  ".center(80))
+        print("".center(80,'*'))
 
     def get_active_in_env_energy(self):
         pass

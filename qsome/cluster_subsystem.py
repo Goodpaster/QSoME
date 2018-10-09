@@ -556,7 +556,23 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     # this slows down execution.
                     # self.active_dmat = mCCSD.make_rdm1()
                     pass
-
+            else: #DFT
+                self.active_scf = scf.RKS(self.mol)
+                self.active_scf.xc = self.active_method
+                self.active_scf.grids = self.env_scf.grids
+                self.active_scf.small_rho_cutoff = self.rho_cutoff
+                self.active_scf.conv_tol = self.active_conv
+                self.active_scf.conv_tol_grad = self.active_grad
+                self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.level_shift = self.active_shift
+                self.active_scf.damp = self.active_damp
+                self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
+                self.active_scf.get_fock = lambda *args, **kwargs: rks_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_scf.energy_elec = lambda *args, **kwargs: rks_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_energy = self.active_scf.kernel()
+                #Slows down execution
+                #self.active_dmat = self.active_scf.make_rdm1()
+            
         return self.active_energy
  
 class ClusterExcitedSubSystem(ClusterActiveSubSystem):
