@@ -17,7 +17,7 @@ He    0.0000    0.0000    0.0000
 end
 
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 end
 
 embed
@@ -45,7 +45,7 @@ subcycles 4
 end
 
 subsystem
-Be    2.0000    0.0000    0.0000
+Mg    2.0000    0.0000    0.0000
 charge +1
 spin -1
 smearsigma 0.01
@@ -109,15 +109,15 @@ partial_ghost_str = default_str.replace("""
 He    0.0000    0.0000    0.0000
 ""","""
 He    0.0000    0.0000    0.0000
-gh.He    2.0000    0.0000    0.0000
+gh.C    2.0000    0.0000    0.0000
 """, 1)
 ghost_filename = 'ghost.inp'
 ghost_str = partial_ghost_str.replace("""
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 ""","""
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 gh.He    0.0000    0.0000    0.0000
 """, 1)
 
@@ -206,7 +206,7 @@ class TestSuperSystem(unittest.TestCase):
         # Full Ghost atoms
         concat_mol = supersystem.mol
         self.assertEqual(concat_mol.basis['He'], subsystems[0].mol.basis['He'])
-        self.assertEqual(concat_mol.basis['He:1'], subsystems[1].mol.basis['He'])
+        self.assertEqual(concat_mol.basis['C:1'], subsystems[1].mol.basis['C'])
         self.assertEqual(len(concat_mol.basis.keys()), 2)
 
     def test_concat_mols_partial_ghost(self):
@@ -228,7 +228,7 @@ class TestSuperSystem(unittest.TestCase):
         # Partial Ghost atoms
         concat_mol = supersystem.mol
         self.assertEqual(concat_mol.basis['He'], subsystems[0].mol.basis['He'])
-        self.assertEqual(concat_mol.basis['He:1'], subsystems[1].mol.basis['He'])
+        self.assertEqual(concat_mol.basis['C:1'], subsystems[1].mol.basis['C'])
         self.assertEqual(len(concat_mol.basis.keys()), 2)
 
     def test_concat_mols_mix_basis(self):
@@ -250,7 +250,7 @@ class TestSuperSystem(unittest.TestCase):
         # Mixed basis
         concat_mol = supersystem.mol
         self.assertEqual(concat_mol.basis['He'], subsystems[0].mol.basis['He'])
-        self.assertEqual(concat_mol.basis['He:1'], subsystems[1].mol.basis['He'])
+        self.assertEqual(concat_mol.basis['C:1'], subsystems[1].mol.basis['C'])
         self.assertEqual(len(concat_mol.basis.keys()), 2)
 
     def test_from_inp_def(self):
@@ -295,7 +295,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.analysis, False)
         self.assertEqual(supersystem.debug, False)
 
-    @unittest.skip('skipping supermol calc')
+    #@unittest.skip('skipping supermol calc')
     def test_from_inp_exp_set(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way

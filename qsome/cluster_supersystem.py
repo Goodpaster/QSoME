@@ -2,7 +2,7 @@
 # Daniel Graham
 
 import os
-from qsome import supersystem
+from qsome import supersystem, custom_pyscf_methods
 from pyscf import gto, scf, dft, lib
 
 import functools
@@ -388,97 +388,110 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         return self.ct_energy
 
     @time_method("Subsystem Energies")
-    def get_emb_subsys_energy(self):
+    def get_emb_subsys_elec_energy(self):
 
         #Ideally this would be done using the subsystem object, however given how dft energies are calculated this does not seem like a viable option right now.
 
         #This works. but could be optimized
 
+        #This gets more complex due how DFT exchange correlation energy is calculated.
+
         nS = self.mol.nao_nr()
         for i in range(len(self.subsystems)):
-            dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
             subsystem = self.subsystems[i]
-            dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem.dmat[0]
-            dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem.dmat[1]
-            if subsystem.env_method[0] == 'u' or subsystem.env_method[:2] == 'ro':
-                if subsystem.env_method[1:] == 'hf' or subsystem.env_method[2:] == 'hf':
-                    sub_scf = scf.UHF(self.mol) 
-                else:
-                    sub_scf = scf.UKS(self.mol) 
-                    sub_scf.xc = subsystem.env_scf.xc
-                    sub_scf.grids = self.grids
-                    sub_scf.small_rho_cutoff = self.rho_cutoff
-                subsystem.env_energy = sub_scf.energy_tot(dm=dm_subsys)
-            else:
-                if subsystem.env_method[1:] == 'hf' or subsystem.env_method == 'hf':
-                    sub_scf = scf.RHF(self.mol) 
-                else:
-                    sub_scf = scf.RKS(self.mol) 
-                    sub_scf.xc = subsystem.env_scf.xc
-                    sub_scf.grids = self.grids
-                    sub_scf.small_rho_cutoff = self.rho_cutoff
-
-                subsystem.env_energy = sub_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0]
-
+            subsystem.get_env_energy()
 
         # get interaction energies.
         for i in range(len(self.subsystems)):
             for j in range(i + 1, len(self.subsystems)):
-                dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-                subsystem_1 = self.subsystems[i]
-                nuc_energy_1 = subsystem_1.env_scf.energy_nuc()
-                dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
-                dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
-                subsystem_2 = self.subsystems[j]
-                nuc_energy_2 = subsystem_2.env_scf.energy_nuc()
-                dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-                dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
-                both_nuc = self.concat_mols(subsystem_1, subsystem_2).energy_nuc()
+                # if embedding method is dft, must add the correct embedding energy
+                if not 'hf' in self.ct_method[:5]:
+                    subsystem_1 = self.subsystems[i]
+                    subsystem_2 = self.subsystems[j]
+                    dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
+                    dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
+                    dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                    dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
 
-                if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
-                    if subsystem_1.env_method[1:] == 'hf' or subsystem_1.env_method[2:] == 'hf':
-                        sub1_scf = scf.UHF(self.mol) 
-                    else:
-                        sub1_scf = scf.UKS(self.mol) 
-                        sub1_scf.xc = subsystem_1.env_scf.xc
-                        sub1_scf.grids = self.grids
-                        sub1_scf.small_rho_cutoff = self.rho_cutoff
-                    sub1_interaction = (sub1_scf.energy_elec(dm=dm_subsys)[0] -
-                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
-                else:
-                    if subsystem_1.env_method[1:] == 'hf' or subsystem_1.env_method == 'hf':
-                        sub1_scf = scf.RHF(self.mol) 
-                    else:
-                        sub1_scf = scf.RKS(self.mol) 
-                        sub1_scf.xc = subsystem_1.env_scf.xc
-                        sub1_scf.grids = self.grids
-                        sub1_scf.small_rho_cutoff = self.rho_cutoff
-                    sub1_interaction = (sub1_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
-                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+                    dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys_1[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
+                    dm_subsys_1[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
 
-                if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
-                    if subsystem_2.env_method[1:] == 'hf' or subsystem_2.env_method[2:] == 'hf':
-                        sub2_scf = scf.UHF(self.mol) 
-                    else:
-                        sub2_scf = scf.UKS(self.mol) 
-                        sub2_scf.xc = subsystem_2.env_scf.xc
-                        sub2_scf.grids = self.grids
-                        sub2_scf.small_rho_cutoff = self.rho_cutoff
-                    sub2_interaction = (sub2_scf.energy_elec(dm=dm_subsys)[0] -
-                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
-                else:
-                    if subsystem_2.env_method[1:] == 'hf' or subsystem_2.env_method == 'hf':
-                        sub2_scf = scf.RHF(self.mol) 
-                    else:
-                        sub2_scf = scf.RKS(self.mol) 
-                        sub2_scf.xc = subsystem_2.env_scf.xc
-                        sub2_scf.grids = self.grids
-                        sub2_scf.small_rho_cutoff = self.rho_cutoff
-                    sub2_interaction = (sub2_scf.energy_elec(dm=(dm_subsys[0] + dm_subsys[1]))[0] - 
-                                       subsystem_1.env_energy - subsystem_2.env_energy) / 2.
+                    dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                    dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
 
-                subsystem_1.env_energy += sub1_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_1
-                subsystem_2.env_energy += sub2_interaction + (both_nuc - nuc_energy_2 - nuc_energy_1) / 2. + nuc_energy_2
+                    #Get J and K components first.
+                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
+                        sub1_scf = dft.UKS(self.mol)
+                    else:
+                        sub1_scf = dft.RKS(self.mol)
+                    sub1_scf.xc = subsystem_1.env_scf.xc
+                    sub1_scf.grids = self.grids
+                    sub1_scf.small_rho_cutoff = self.rho_cutoff
+                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
+                        # Add j and k
+                        sub1_veff = sub1_scf.get_veff(dm=dm_subsys)
+                        sub1_vj = sub1_veff.vj
+                        sub1_ej = np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vj).real * .5
+                        sub1_ek = 0.0
+                        if not sub1_veff.vk is None:
+                            sub1_vk = sub1_veff.vk
+                            sub1_ek = (np.einsum('ij, ji', dm_subsys_1[0], sub1_vk[0]) + 
+                                       np.einsum('ij, ji', dm_subsys_1[1], sub1_vk[1])).real * .5
+                    else:
+                        # Add j and k
+                        sub1_veff = sub1_scf.get_veff(dm=dm_subsys[0] + dm_subsys[1])
+                        sub1_vj = sub1_veff.vj
+                        sub1_ej = np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vj).real * .5
+                        sub1_ek = 0.0
+                        if not sub1_veff.vk is None:
+                            sub1_vk = sub1_veff.vk
+                            sub1_ek = (np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vk[0])).real * .5 * .5
+
+
+                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
+                        sub2_scf = dft.UKS(self.mol)
+                    else:
+                        sub2_scf = dft.RKS(self.mol)
+                    sub2_scf.xc = subsystem_2.env_scf.xc
+                    sub2_scf.grids = self.grids
+                    sub2_scf.small_rho_cutoff = self.rho_cutoff
+
+                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
+                        # Add j and k
+                        sub2_veff = sub2_scf.get_veff(dm=dm_subsys)
+                        sub2_vj = sub2_veff.vj
+                        sub2_ej = np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vj).real * .5
+                        sub2_ek = 0.0
+                        if not sub2_veff.vk is None:
+                            sub2_vk = sub2_veff.vk
+                            sub2_ek = (np.einsum('ij, ji', dm_subsys_2[0], sub2_vk[0]) + 
+                                       np.einsum('ij, ji', dm_subsys_2[1], sub2_vk[1])).real * .5
+                    else:
+                        # Add j and k
+                        sub2_veff = sub2_scf.get_veff(dm=dm_subsys[0] + dm_subsys[1])
+                        sub2_vj = sub2_veff.vj
+                        sub2_ej = np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vj).real * .5
+                        sub2_ek = 0.0
+                        if not sub2_veff.vk is None:
+                            sub2_vk = sub2_veff.vk
+                            sub2_ek = (np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vk[0])).real * .5 * .5
+
+                    #Get Exc Last
+                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
+                        sub1_exc = custom_pyscf_methods.exc_uks(self.ct_scf, dm_subsys, dm_subsys_1)[1]
+                    else:
+                        sub1_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
+                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
+                        sub2_exc = custom_pyscf_methods.exc_uks(self.ct_scf, dm_subsys, dm_subsys_2)[1]
+                    else:
+                        sub2_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1]
+
+
+                    subsystem_1.env_energy += sub1_ej - sub1_ek + sub1_exc
+                    subsystem_2.env_energy += sub2_ej - sub2_ek + sub2_exc
 
     @time_method("Active Energy")
     def get_active_energy(self):
@@ -486,9 +499,88 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         print("  Active Subsystem Calculation  ".center(80))
         print ("".center(80,'*'))
-        act_e = self.subsystems[0].get_active_in_env_energy()
+        self.subsystems[0].get_active_in_env_energy()
+        act_elec_e = self.correct_active_energy()
+        self.subsystems[0].active_energy += act_elec_e
+
+        act_e = self.subsystems[0].active_energy
         print(f"  Energy: {act_e}  ".center(80))
         print("".center(80,'*'))
+
+    @time_method("Correct Exc Energy")
+    def correct_active_energy(self):
+        #Assumes all are closed shell systems
+        # Do for all subsystems
+        nS = self.mol.nao_nr()
+        s2s = self.sub2sup
+        energy_corr = 0.0
+        for j in range(1, len(self.subsystems)):
+            # if embedding method is dft, must add the correct embedding energy
+            if not 'hf' in self.ct_method[:5]:
+                subsystem_1 = self.subsystems[0]
+                subsystem_2 = self.subsystems[j]
+                dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                dm_subsys[0][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[0]
+                dm_subsys[1][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[1]
+                dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
+
+                dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                dm_subsys_1[0][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[0]
+                dm_subsys_1[1][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[1]
+
+                dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
+
+                #Assume active system is closed shell
+                veff_combined = self.ct_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
+                vxc_comb = veff_combined - veff_combined.vj
+                if not veff_combined.vk is None:
+                    vxc_comb += veff_combined.vk * 0.5
+
+                veff_active_sub = self.ct_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
+                vxc_sub = veff_active_sub - veff_active_sub.vj
+                if not veff_active_sub.vk is None:
+                    vxc_sub += veff_active_sub.vk * 0.5
+
+                vxc_emb = vxc_comb - vxc_sub
+                vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
+
+                emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                energy_corr -= np.trace(np.dot(vxc_emb_sub, (subsystem_1.active_dmat)))
+                energy_corr += emb_exc - emb_exc_a
+        
+                #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
+                ##THis is incorrect for more than 2 subsys 
+                #emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                #emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                #
+                ##Subtract the Vxc from the fock and recalculate the energies.
+                #if 'hf' in subsystem_1.active_method:
+                #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
+                #    proj_pot = (subsystem_1.proj_pot[0] + subsystem_1.proj_pot[1])/2.
+                #    energy_elec = custom_pyscf_methods.rhf_energy_elec(subsystem_1.active_scf, emb_pot, proj_pot)
+                #    energy_corr = energy_elec[0] + (emb_exc - emb_exc_a)
+                #elif subsystem_1.active_method == 'ccsd' or subsystem_1.active_method == 'rccsd':
+                #    new_eris = subsystem_1.active_cc.ao2mo()
+                #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
+                #    proj_pot = (subsystem_1.proj_pot[0] + subsystem_1.proj_pot[1])/2.
+                #    fock = custom_pyscf_methods.rhf_get_fock(subsystem_1.active_scf, emb_pot, proj_pot)
+                #    new_eris.fock = functools.reduce(np.dot, (subsystem_1.active_scf.mo_coeff.conj().T, fock, subsystem_1.active_scf.mo_coeff))
+                #    energy_elec = custom_pyscf_methods.rhf_energy_elec(subsystem_1.active_scf, emb_pot, proj_pot)[0]
+                #    energy_elec += subsystem_1.active_cc.energy(eris=new_eris)  
+                #    energy_corr = energy_elec + (emb_exc - emb_exc_a)
+
+                #else:
+                #    energy_elec = 0.0
+                #    energy_corr = energy_elec + (emb_exc - emb_exc_a)
+        
+                #Calculate the Exc using the active density and add it to the energies.
+
+        return energy_corr
+                
 
     def get_active_in_env_energy(self):
         pass
@@ -574,8 +666,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FDS = [None, None]
                     FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
                     FDS[1] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
-                    POp[0] += - 1. * ( FDS[0] + FDS[0].transpose() ) #May not need 0.5 cause divide into alpha and beta
-                    POp[1] += - 1. * ( FDS[0] + FDS[0].transpose() )
+                    POp[0] += -1. * ( FDS[0] + FDS[0].transpose() ) 
+                    POp[1] += -1. * ( FDS[0] + FDS[0].transpose() )
 
                 elif self.proj_oper in ('huzinagafermi', 'huzfermi'):
                     FAB = [None, None]
@@ -596,8 +688,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FDS = [None, None]
                     FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
                     FDS[0] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
-                    POp[0] += - 1. * ( FDS[0] + FDS[0].transpose() ) #may not need 0.5
-                    POp[1] += - 1. * ( FDS[1] + FDS[1].transpose() )
+                    POp[0] += -1. * ( FDS[0] + FDS[0].transpose() ) 
+                    POp[1] += -1. * ( FDS[1] + FDS[1].transpose() )
 
             self.proj_pot[i] = POp.copy()
 
@@ -686,7 +778,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                     #this will slow down calculation. 
                     if self.analysis:
-                        self.get_emb_subsys_energy()
+                        self.get_emb_subsys_elec_energy()
                         sub_old_e = subsystem.get_env_energy()
 
                     sub_old_dm = subsystem.dmat.copy()
@@ -718,7 +810,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                     #This will slow down execution.
                     if self.analysis:
-                        self.get_emb_subsys_energy()
+                        self.get_emb_subsys_elec_energy()
                         sub_new_e = subsystem.get_env_energy()
                         dE = abs(sub_old_e - sub_new_e)
 
@@ -733,11 +825,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print("".center(80))
             print("Freeze-and-Thaw NOT converged".center(80))
 
-        self.get_emb_subsys_energy()
+        self.get_emb_subsys_elec_energy()
         # print subsystem energies 
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
-            print(f"Subsystem {i} Energy: {subsystem.get_env_energy():12.8f}")
+            print(f"Subsystem {i} Energy: {subsystem.env_energy:12.8f}")
         print("".center(80))
         print("".center(80, '*'))
 

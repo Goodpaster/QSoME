@@ -15,17 +15,21 @@ import numpy as np
 def_filename = "default.inp"
 default_str = """
 subsystem
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 end
 
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 end
 
 embed
  env_method pbe
  huzinaga
- cycles 50
+ cycles 150
 end
 
 basis 3-21g
@@ -34,28 +38,41 @@ active_method hf
 
 partial_ghost_filename = 'partial_ghost.inp'
 partial_ghost_str = default_str.replace("""
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 ""","""
-He    0.0000    0.0000    0.0000
-gh.He    2.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
+gh.H    0.0000    2.0000    0.0000
+gh.H    0.8000    2.0000    0.0000
 """, 1)
 
 ghost_filename = 'ghost.inp'
 ghost_str = partial_ghost_str.replace("""
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 ""","""
 subsystem
-He    2.0000    0.0000    0.0000
-gh.He    0.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
+gh.H    -0.8000    0.0000    0.0000
+gh.H    0.0000    0.0000    0.0000
+gh.H    0.8000    0.0000    0.0000
+gh.H    1.6000    0.0000    0.0000
 """, 1)
 
 widesep_filename = 'wide_sep.inp'
 widesep_str = default_str.replace("""
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 """, """
-He    200.0000    0.0000    0.0000
-He    202.0000    0.0000    0.0000
+H    0.0000    200.0000    0.0000
+H    0.8000    200.0000    0.0000
 """, 1)
 
 
@@ -78,7 +95,7 @@ class TestHFEnergy(unittest.TestCase):
         with open(path+widesep_filename, 'w') as f:
             f.write(widesep_str)
 
-    #@unittest.skip
+    @unittest.skip
     def test_default(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -107,9 +124,26 @@ class TestHFEnergy(unittest.TestCase):
         supersystem.env_in_env_energy()
         supersystem.get_active_energy()
 
-        he_pyscf = scf.RHF(subsystems[0].mol)
-        he_e = he_pyscf.kernel()
-        self.assertNotAlmostEqual(subsystems[0].active_energy,he_e, delta=1e-8)
+        h_pyscf = scf.RHF(subsystems[0].mol)
+        h_e = h_pyscf.kernel()
+
+        #This is missing nuclear repulsion in the h_e term.
+        embedding_nuc_e = 0.0
+        #nuc_charges_a = supersystem.subsystems[0].mol.atom_charges()
+        #nuc_coords_a = supersystem.subsystems[0].mol.atom_coords()
+        #nuc_charges_b = supersystem.subsystems[1].mol.atom_charges()
+        #nuc_coords_b = supersystem.subsystems[1].mol.atom_coords()
+        #for i in range(len(supersystem.subsystems[0].mol._atm)):
+        #    q1 = nuc_charges_a[i]
+        #    r1 = nuc_coords_a[i]
+        #    for j in range(len(supersystem.subsystems[1].mol._atm)):
+        #        q2 = nuc_charges_b[j]
+        #        r2 = nuc_coords_b[j]
+        #        r = np.linalg.norm(r1-r2)
+        #        embedding_nuc_e += q1 * q2 / r
+
+        #print (embedding_nuc_e)
+        self.assertNotAlmostEqual(subsystems[0].active_energy+embedding_nuc_e, h_e, delta=1e-7)
       
         #not sure how to tests.
 
@@ -171,9 +205,24 @@ class TestHFEnergy(unittest.TestCase):
         supersystem.get_active_energy()
 
         # subsystem energies should be equal to individual He atoms
-        he_pyscf = scf.RHF(subsystems[0].mol)
-        he_e = he_pyscf.kernel()
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy, he_e, delta=1e-8)
+        h_pyscf = scf.RHF(subsystems[0].mol)
+        h_e = h_pyscf.kernel()
+
+        embedding_nuc_e = 0.0
+        nuc_charges_a = supersystem.subsystems[0].mol.atom_charges()
+        nuc_coords_a = supersystem.subsystems[0].mol.atom_coords()
+        nuc_charges_b = supersystem.subsystems[1].mol.atom_charges()
+        nuc_coords_b = supersystem.subsystems[1].mol.atom_coords()
+        for i in range(len(supersystem.subsystems[0].mol._atm)):
+            q1 = nuc_charges_a[i]
+            r1 = nuc_coords_a[i]
+            for j in range(len(supersystem.subsystems[1].mol._atm)):
+                q2 = nuc_charges_b[j]
+                r2 = nuc_coords_b[j]
+                r = np.linalg.norm(r1-r2)
+                embedding_nuc_e += q1 * q2 / r
+
+        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., h_e, delta=1e-7)
         
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -233,7 +282,22 @@ class TestCCSDEnergy(unittest.TestCase):
         mCCSD = cc.CCSD(he_pyscf)
         ecc, t1, t2 = mCCSD.kernel()
         ecc += ccsd_t.kernel(mCCSD, mCCSD.ao2mo())
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy, he_e + ecc, delta=1e-8)
+
+        embedding_nuc_e = 0.0
+        nuc_charges_a = supersystem.subsystems[0].mol.atom_charges()
+        nuc_coords_a = supersystem.subsystems[0].mol.atom_coords()
+        nuc_charges_b = supersystem.subsystems[1].mol.atom_charges()
+        nuc_coords_b = supersystem.subsystems[1].mol.atom_coords()
+        for i in range(len(supersystem.subsystems[0].mol._atm)):
+            q1 = nuc_charges_a[i]
+            r1 = nuc_coords_a[i]
+            for j in range(len(supersystem.subsystems[1].mol._atm)):
+                q2 = nuc_charges_b[j]
+                r2 = nuc_coords_b[j]
+                r = np.linalg.norm(r1-r2)
+                embedding_nuc_e += q1 * q2 / r
+
+        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., he_e + ecc, delta=1e-7)
         
 
     def tearDown(self):

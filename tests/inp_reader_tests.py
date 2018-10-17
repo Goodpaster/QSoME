@@ -18,7 +18,7 @@ He    0.0000    0.0000    0.0000
 end
 
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 end
 
 embed
@@ -46,7 +46,7 @@ subcycles 4
 end
 
 subsystem
-C    2.0000    0.0000    0.0000
+Si    2.0000    0.0000    0.0000
 charge +2
 spin -2
 smearsigma 0.01
@@ -160,15 +160,15 @@ partial_ghost_str = default_str.replace("""
 He    0.0000    0.0000    0.0000
 ""","""
 He    0.0000    0.0000    0.0000
-gh.He    2.0000    0.0000    0.0000
+gh.C    2.0000    0.0000    0.0000
 """, 1)
 ghost_filename = 'ghost.inp'
 ghost_str = partial_ghost_str.replace("""
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 ""","""
 subsystem
-He    2.0000    0.0000    0.0000
+C    2.0000    0.0000    0.0000
 gh.He    0.0000    0.0000    0.0000
 """, 1)
 
@@ -218,7 +218,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(float(inp.subsystem[0].atoms[0].group(3)), 0.0)
         self.assertEqual(float(inp.subsystem[0].atoms[0].group(4)), 0.0)
 
-        self.assertEqual(inp.subsystem[1].atoms[0].group(1), 'He')
+        self.assertEqual(inp.subsystem[1].atoms[0].group(1), 'C')
         self.assertEqual(float(inp.subsystem[1].atoms[0].group(2)), 2.0)
         self.assertEqual(float(inp.subsystem[1].atoms[0].group(3)), 0.0)
         self.assertEqual(float(inp.subsystem[1].atoms[0].group(4)), 0.0)
@@ -536,8 +536,8 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
-        he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
-        self.assertEqual(mols[1].basis, he_pyscf_basis)
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
+        self.assertEqual(mols[1].basis, c_pyscf_basis)
         self.assertEqual(mols[1].charge, 0)
         self.assertEqual(mols[1].spin, 0)
         self.assertEqual(mols[1].unit, 'angstrom')
@@ -565,8 +565,8 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][1], float(curr_atom.group(3)))
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
-        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
-        self.assertEqual(mols[1].basis, c_pyscf_basis)
+        si_pyscf_basis = {'Si': gto.basis.load(in_obj.inp.basis, 'Si')} 
+        self.assertEqual(mols[1].basis, si_pyscf_basis)
         self.assertEqual(mols[1].charge, 2)
         self.assertEqual(mols[1].spin, -2)
         self.assertEqual(mols[1].unit, 'bohr')
@@ -589,8 +589,9 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
         self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
-        self.assertEqual(mols[0].basis['ghost:1'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0].basis['ghost:1'], c_pyscf_basis['C'])
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)
         self.assertEqual(mols[0].unit, 'angstrom')
@@ -613,8 +614,9 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
         self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
-        self.assertEqual(mols[0].basis['ghost:1'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0].basis['ghost:1'], c_pyscf_basis['C'])
 
         curr_atom = in_obj.inp.subsystem[1].atoms[0]
         self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
@@ -629,7 +631,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
-        self.assertEqual(mols[1].basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[1].basis['C'], c_pyscf_basis['C'])
         self.assertEqual(mols[1].basis['ghost:1'], he_pyscf_basis['He'])
 
         self.assertEqual(mols[0].charge, 0)
@@ -660,7 +662,8 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
-        self.assertEqual(mols[1].basis, he_pyscf_basis)
+        c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
+        self.assertEqual(mols[1].basis, c_pyscf_basis)
         self.assertEqual(mols[1].charge, 0)
         self.assertEqual(mols[1].spin, 0)
         self.assertEqual(mols[1].unit, 'angstrom')

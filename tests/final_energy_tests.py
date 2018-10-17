@@ -15,11 +15,15 @@ import numpy as np
 def_filename = "default.inp"
 default_str = """
 subsystem
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 end
 
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 end
 
 embed
@@ -34,28 +38,41 @@ active_method hf
 
 partial_ghost_filename = 'partial_ghost.inp'
 partial_ghost_str = default_str.replace("""
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 ""","""
-He    0.0000    0.0000    0.0000
-gh.He    2.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
+gh.H    0.0000    2.0000    0.0000
+gh.H    0.8000    2.0000    0.0000
 """, 1)
 
 ghost_filename = 'ghost.inp'
 ghost_str = partial_ghost_str.replace("""
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 ""","""
 subsystem
-He    2.0000    0.0000    0.0000
-gh.He    0.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
+gh.H    -0.8000    0.0000    0.0000
+gh.H    0.0000    0.0000    0.0000
+gh.H    0.8000    0.0000    0.0000
+gh.H    1.6000    0.0000    0.0000
 """, 1)
 
 widesep_filename = 'wide_sep.inp'
 widesep_str = default_str.replace("""
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 """, """
-He    200.0000    0.0000    0.0000
-He    202.0000    0.0000    0.0000
+H    0.0000    200.0000    0.0000
+H    0.8000    200.0000    0.0000
 """, 1)
 
 
@@ -178,7 +195,8 @@ class TestHFEnergy(unittest.TestCase):
         he2_e = he2_pyscf.kernel()
 
         total_energy = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
-        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-9)
+
+        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-8)
         
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -248,7 +266,7 @@ class TestCCSDEnergy(unittest.TestCase):
         he2_e = he2_pyscf.kernel()
 
         total_energy = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
-        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-9)
+        self.assertAlmostEqual(total_energy, he_e + he2_e, delta=1e-8)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

@@ -14,17 +14,21 @@ import numpy as np
 def_filename = "default.inp"
 default_str = """
 subsystem
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 end
 
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 end
 
 embed
  env_method pbe
  huzinaga
- cycles 50
+ cycles 150
 end
 
 basis 3-21g
@@ -33,28 +37,41 @@ active_method hf
 
 partial_ghost_filename = 'partial_ghost.inp'
 partial_ghost_str = default_str.replace("""
-He    0.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
 ""","""
-He    0.0000    0.0000    0.0000
-gh.He    2.0000    0.0000    0.0000
+H    -0.8000    0.0000    0.0000
+H    0.0000    0.0000    0.0000
+H    0.8000    0.0000    0.0000
+H    1.6000    0.0000    0.0000
+gh.H    0.0000    2.0000    0.0000
+gh.H    0.8000    2.0000    0.0000
 """, 1)
 
 ghost_filename = 'ghost.inp'
 ghost_str = partial_ghost_str.replace("""
 subsystem
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 ""","""
 subsystem
-He    2.0000    0.0000    0.0000
-gh.He    0.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
+gh.H    -0.8000    0.0000    0.0000
+gh.H    0.0000    0.0000    0.0000
+gh.H    0.8000    0.0000    0.0000
+gh.H    1.6000    0.0000    0.0000
 """, 1)
 
 widesep_filename = 'wide_sep.inp'
 widesep_str = default_str.replace("""
-He    2.0000    0.0000    0.0000
+H    0.0000    2.0000    0.0000
+H    0.8000    2.0000    0.0000
 """, """
-H    200.0000    0.0000    0.0000
-H    200.8000    0.0000    0.0000
+H    0.0000    200.0000    0.0000
+H    0.8000    200.0000    0.0000
 """, 1)
 
 # Need to also test huzfermi and mu operator
@@ -206,12 +223,12 @@ class TestProjectionConstruction(unittest.TestCase):
 
         nS = supersystem.mol.nao_nr()
         for i in range(len(subsystems)):
-            dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            #dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
             subsystem = subsystems[i]
-            dm_subsys[0][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[0]
-            dm_subsys[1][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[1]
-            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][0], dm_subsys[0])), 0.0, delta=1e-15)
-            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][1], dm_subsys[1])), 0.0, delta=1e-15)
+            #dm_subsys[0][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[0]
+            #dm_subsys[1][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += subsystem.dmat[1]
+            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][0], subsystem.dmat[0])), 0.0, delta=1e-15)
+            self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][1], subsystem.dmat[1])), 0.0, delta=1e-15)
 
     def test_widesep(self):
         subsystems = []
@@ -307,7 +324,9 @@ class TestFreezeAndThaw(unittest.TestCase):
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
+        sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
+        sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
 
 
         #unsure how to test...
@@ -328,14 +347,14 @@ class TestFreezeAndThaw(unittest.TestCase):
 
         supersystem.freeze_and_thaw()
         # compare dft-in-dft to full system energy
-        sup_mo_e = supersystem.get_supermolecular_energy()
+        sup_mo_e = supersystem.get_supersystem_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
 
     def test_widesep(self):
         subsystems = []
@@ -355,21 +374,30 @@ class TestFreezeAndThaw(unittest.TestCase):
         supersystem.freeze_and_thaw()
 
         # compare dft-in-dft to full system energy
-        sup_mo_e = supersystem.get_supermolecular_energy()
+        sup_mo_e = supersystem.get_supersystem_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
         self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
 
-        # subsystem energies should be equal to individual He atoms
+        # supersystem energy should be equal to individual He atoms
         he_pyscf = dft.RKS(subsystems[0].mol)
         he_pyscf.xc = env_method
+        he_pyscf.grids = supersystem.grids
+        he_pyscf.small_rho_cutoff = 1e-20
         he_e = he_pyscf.kernel()
+
+        he2_pyscf = dft.RKS(subsystems[1].mol)
+        he2_pyscf.xc = env_method
+        he_pyscf.grids = supersystem.grids
+        he_pyscf.small_rho_cutoff = 1e-20
+        he2_e = he2_pyscf.kernel()
         #self.assertAlmostEqual(supersystem.subsystems[0].get_env_energy(), he_e, delta=1e-10)
+
+        self.assertAlmostEqual(sup_mo_e, he_e + he2_e, delta=1e-7)
 
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e , delta=1e-10)
-
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
     def test_readchk(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -413,9 +441,9 @@ class TestFreezeAndThaw(unittest.TestCase):
 
         supersystem.freeze_and_thaw()
 
-        self.assertAlmostEqual(sub1_e, subsystems[0].env_energy, delta=1e-10)
-        self.assertAlmostEqual(sub2_e, subsystems[1].env_energy, delta=1e-10)
-        self.assertAlmostEqual(sup_env_in_env_e, supersystem.env_in_env_energy(), delta=1e-10)
+        self.assertAlmostEqual(sub1_e, subsystems[0].env_energy, delta=1e-9)
+        self.assertAlmostEqual(sub2_e, subsystems[1].env_energy, delta=1e-9)
+        self.assertAlmostEqual(sup_env_in_env_e, supersystem.env_in_env_energy(), delta=1e-9)
         
 
     def tearDown(self):
