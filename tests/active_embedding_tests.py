@@ -143,7 +143,7 @@ class TestHFEnergy(unittest.TestCase):
         #        embedding_nuc_e += q1 * q2 / r
 
         #print (embedding_nuc_e)
-        self.assertNotAlmostEqual(subsystems[0].active_energy+embedding_nuc_e, h_e, delta=1e-7)
+        self.assertNotAlmostEqual(subsystems[0].active_energy+embedding_nuc_e, h_e, delta=1e-8)
       
         #not sure how to tests.
 
@@ -222,7 +222,7 @@ class TestHFEnergy(unittest.TestCase):
                 r = np.linalg.norm(r1-r2)
                 embedding_nuc_e += q1 * q2 / r
 
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., h_e, delta=1e-7)
+        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., h_e, delta=1e-8)
         
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -297,7 +297,7 @@ class TestCCSDEnergy(unittest.TestCase):
                 r = np.linalg.norm(r1-r2)
                 embedding_nuc_e += q1 * q2 / r
 
-        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., he_e + ecc, delta=1e-7)
+        self.assertAlmostEqual(supersystem.subsystems[0].active_energy + embedding_nuc_e/2., he_e + ecc, delta=1e-8)
         
 
     def tearDown(self):

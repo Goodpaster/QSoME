@@ -26,10 +26,10 @@ end
 embed
  env_method m06
  huzinaga
- cycles 50
+ cycles 250
 end
 
-basis aug-cc-pVTZ
+basis aug-cc-pVDZ
 active_method ccsd
 '''
 
@@ -56,10 +56,10 @@ end
 embed
  env_method m06
  huzinaga
- cycles 50
+ cycles 250
 end
 
-basis aug-cc-pVTZ
+basis aug-cc-pVDZ
 active_method ccsd
 '''
 
@@ -338,14 +338,14 @@ supersystem.get_active_energy()
 sys_1_react_embed = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
 
 try:
-    with open(canon_path + sys_1_react_fn, 'r') as f:
+    with open(canon_path + os.path.splitext(sys_1_react_fn)[0] + '.out', 'r') as f:
         sys_1_react_canon = float(f.read())
 except:
     mf = scf.RHF(supersystem.mol)
     hf_e = mf.kernel()
     ccsd_scf = cc.CCSD(mf)
     sys_1_react_canon = hf_e + ccsd_scf.kernel()[0]
-    with open(canon_path + sys_1_react_fn, 'w') as f:
+    with open(canon_path + os.path.splitext(sys_1_react_fn)[0] + '.out', 'w') as f:
         f.write(str(sys_1_react_canon))
         
 subsystems = []
@@ -377,14 +377,14 @@ supersystem.get_active_energy()
 sys_1_trans_embed = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
 
 try:
-    with open(canon_path + sys_1_trans_fn, 'r') as f:
+    with open(canon_path + os.path.splitext(sys_1_trans_fn)[0] + '.out', 'r') as f:
         sys_1_trans_canon = float(f.read())
 except:
     mf = scf.RHF(supersystem.mol)
     hf_e = mf.kernel()
     ccsd_scf = cc.CCSD(mf)
     sys_1_trans_canon = hf_e + ccsd_scf.kernel()[0]
-    with open(canon_path + sys_1_trans_fn, 'w') as f:
+    with open(canon_path + os.path.splitext(sys_1_trans_fn)[0] + '.out', 'w') as f:
         f.write(str(sys_1_trans_canon))
 
 emb_diff = (sys_1_trans_embed - sys_1_react_embed) * 627.5

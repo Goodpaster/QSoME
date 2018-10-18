@@ -74,6 +74,20 @@ H    0.0000    200.0000    0.0000
 H    0.8000    200.0000    0.0000
 """, 1)
 
+hyb_func_filename = 'hyb_fun.inp'
+hyb_func_str = default_str.replace("""
+ env_method pbe
+""","""
+ env_method m06
+""",1)
+
+lda_func_filename = 'lda_fun.inp'
+lda_func_str = default_str.replace("""
+ env_method pbe
+""","""
+ env_method lda,vwn
+""",1)
+
 # Need to also test huzfermi and mu operator
 
 temp_inp_dir = "/temp_input/"
@@ -184,6 +198,7 @@ class TestProjectionConstruction(unittest.TestCase):
         with open(path+widesep_filename, 'w') as f:
             f.write(widesep_str)
 
+    #@unittest.skip("skip")
     def test_default(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -203,6 +218,7 @@ class TestProjectionConstruction(unittest.TestCase):
 
         # need tests.
 
+    #@unittest.skip("skip")
     def test_ghost(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -230,6 +246,7 @@ class TestProjectionConstruction(unittest.TestCase):
             self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][0], subsystem.dmat[0])), 0.0, delta=1e-15)
             self.assertAlmostEqual(np.trace(np.dot(supersystem.proj_pot[i][1], subsystem.dmat[1])), 0.0, delta=1e-15)
 
+    #@unittest.skip("skip")
     def test_widesep(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -305,6 +322,12 @@ class TestFreezeAndThaw(unittest.TestCase):
         with open(path+widesep_filename, 'w') as f:
             f.write(widesep_str)
 
+        with open(path+hyb_func_filename, 'w') as f:
+            f.write(hyb_func_str)
+
+        with open(path+lda_func_filename, 'w') as f:
+            f.write(lda_func_str)
+
     def test_default(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -326,7 +349,7 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub2_env_e = supersystem.subsystems[1].env_energy
         sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
         sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
 
         #unsure how to test...
@@ -349,12 +372,12 @@ class TestFreezeAndThaw(unittest.TestCase):
         # compare dft-in-dft to full system energy
         sup_mo_e = supersystem.get_supersystem_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
-        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
+        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-8)
 
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
     def test_widesep(self):
         subsystems = []
@@ -376,7 +399,7 @@ class TestFreezeAndThaw(unittest.TestCase):
         # compare dft-in-dft to full system energy
         sup_mo_e = supersystem.get_supersystem_energy()
         sup_env_in_env_e = supersystem.env_in_env_energy() 
-        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-10)
+        self.assertAlmostEqual(sup_mo_e, sup_env_in_env_e, delta=1e-8)
 
         # supersystem energy should be equal to individual He atoms
         he_pyscf = dft.RKS(subsystems[0].mol)
@@ -392,12 +415,70 @@ class TestFreezeAndThaw(unittest.TestCase):
         he2_e = he2_pyscf.kernel()
         #self.assertAlmostEqual(supersystem.subsystems[0].get_env_energy(), he_e, delta=1e-10)
 
-        self.assertAlmostEqual(sup_mo_e, he_e + he2_e, delta=1e-7)
+        self.assertAlmostEqual(sup_mo_e, he_e + he2_e, delta=1e-8)
 
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-10)
+
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+    #@unittest.skip("test")
+    def test_hyb_func(self):
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + hyb_func_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            mol = in_obj.subsys_mols[i]
+            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+            env_kwargs = in_obj.env_subsystem_kwargs[i]
+            subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+            subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+        supersystem.freeze_and_thaw()
+
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+
+        sup_env_e = supersystem.env_energy
+        sub1_env_e = supersystem.subsystems[0].env_energy
+        sub2_env_e = supersystem.subsystems[1].env_energy
+        sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
+        sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+
+    #@unittest.skip("test")
+    def test_lda_func(self):
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + lda_func_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            mol = in_obj.subsys_mols[i]
+            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+            env_kwargs = in_obj.env_subsystem_kwargs[i]
+            subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+            subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+        supersystem.freeze_and_thaw()
+
+        # compare dft-in-dft to full system energy
+        sup_mo_e = supersystem.get_supersystem_energy()
+        sup_env_in_env_e = supersystem.env_in_env_energy() 
+
+        sup_env_e = supersystem.env_energy
+        sub1_env_e = supersystem.subsystems[0].env_energy
+        sub2_env_e = supersystem.subsystems[1].env_energy
+        sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
+        sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+
+    #@unittest.skip("skip")
     def test_readchk(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way

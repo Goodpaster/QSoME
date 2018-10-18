@@ -1,17 +1,6 @@
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
-<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
-<class 'pyscf.scf.hf.RHF'> does not have attributes  energy_elec get_hcore get_fock
-Traceback (most recent call last):
-  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/accuracy_benchmarks.py", line 340, in <module>
-    with open(canon_path + sys_1_react_fn, 'r') as f:
-FileNotFoundError: [Errno 2] No such file or directory: '/panfs/roc/groups/13/goodpast/graha682/canonical_energies/sys_1_react.inp'
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/accuracy_benchmarks.py", line 346, in <module>
-    sys_1_react_canon = hf_e + ccsd_scf.kernel()
-ValueError: setting an array element with a sequence.
-mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8648402.mesabim3.msi.umn.edu.SC: line 15: create: command not found
 <class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
 <class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock get_hcore energy_elec
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8659630.mesabim3.msi.umn.edu.SC: line 15: create: command not found

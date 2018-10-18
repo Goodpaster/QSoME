@@ -20,8 +20,8 @@ end
 embed
  env_method m06
  huzinaga
- cycles 50
+ cycles 250
 end
 
-basis 3-21g
+basis aug-cc-pVDZ
 active_method ccsd

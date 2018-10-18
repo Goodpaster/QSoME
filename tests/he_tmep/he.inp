@@ -1,0 +1,17 @@
+
+subsystem
+He          0.00000       0.00000       0.00000
+end
+
+subsystem
+He          1.5000       0.00000       0.00000
+end
+
+embed
+ env_method pbe
+ huzinaga
+ cycles 20
+end
+
+basis 6-31g
+active_method hf

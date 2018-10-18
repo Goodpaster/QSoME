@@ -106,16 +106,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
             e_proj = (np.einsum('ij,ji', self.proj_pot[0], self.dmat[0]) + 
                       np.einsum('ij,ji', self.proj_pot[1], self.dmat[1])).real
-            if self.env_method[1:] == 'hf' or self.env_method[2:] == 'hf':
-                subsys_e = self.env_scf.elec_energy(dm=self.dmat)
-                e_emb = (np.einsum('ij,ji', self.emb_pot[0], self.dmat[0]) + 
-                         np.einsum('ij,ji', self.emb_pot[1], self.dmat[1])).real * 0.5
+            subsys_e = self.env_scf.energy_elec(dm=self.dmat)
+            e_emb = (np.einsum('ij,ji', self.emb_pot[0], self.dmat[0]) + 
+                     np.einsum('ij,ji', self.emb_pot[1], self.dmat[1])).real * 0.5
 
         else:
             e_proj = (np.einsum('ij,ji', (self.proj_pot[0] + self.proj_pot[1])/2., (self.dmat[0] + self.dmat[1])).real)
-            if self.env_method[1:] == 'hf' or self.env_method == 'hf':
-                e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real)
-                subsys_e = self.env_scf.elec_energy(dm=(self.dmat[0] + self.dmat[1]))
+            e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real) * .5
+            subsys_e += self.env_scf.energy_elec(dm=(self.dmat[0] + self.dmat[1]))[1]
 
         return subsys_e + e_proj + e_emb
 
@@ -182,6 +180,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 self.env_mo_coeff = [C_a, C_b]
             else:
                 #This is the costly part. I think.
+
                 emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
                 E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
                 self.env_mo_energy = [E, E]
@@ -339,7 +338,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
 
-                self.active_energy = self.active_scf.kernel() #Includes the nuclear
+                self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1])) #Includes the nuclear
                 # this slows down execution.
                 self.active_dmat = self.active_scf.make_rdm1()
 
@@ -353,7 +352,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
-                self.active_energy = self.active_scf.kernel()
+                self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1]))
                  
                 self.active_cc = cc.CCSD(self.active_scf)
                 self.active_cc.max_cycle = self.active_cycles
@@ -383,7 +382,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rks_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rks_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
-                self.active_energy = self.active_scf.kernel()
+                self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1]))
                 #Slows down execution
                 self.active_dmat = self.active_scf.make_rdm1()
            

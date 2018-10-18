@@ -3,7 +3,7 @@
 
 import os
 from qsome import supersystem, custom_pyscf_methods
-from pyscf import gto, scf, dft, lib
+from pyscf import gto, scf, dft
 
 import functools
 import time
@@ -53,11 +53,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_cycles = ft_cycles
         self.ft_conv = ft_conv
         self.ft_grad = ft_grad
-        if ft_diis == 0:
-            self.ft_diis = None
-        elif ft_diis >= 1:
-            # I think there are other diis methods.
-            self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
+
+
         self.ft_setfermi = ft_setfermi
         self.ft_initguess = ft_initguess
         self.ft_updatefock = ft_updatefock
@@ -83,10 +80,23 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # Actually, could just modify the pyscf object attributes...
         # Actually will not use pyscf attributes. Want to store consistently in the same way, so always store alpha and beta. Makes everything less complicated.
 
+        self.freeze_and_thaw_conv = False
         self.mol = self.concat_mols()
         self.gen_sub2sup()
         self.init_ct_scf()
         self.init_density()
+
+        if ft_diis == 0:
+            self.ft_diis = None
+        elif ft_diis == 1:
+            self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(mf=self.ct_scf)]
+        #elif ft_diis == 2:
+        #    self.ft_diis = [scf.diis.EDIIS(mf=self.ct_scf), scf.diis.EDIIS(mf=self.ct_scf)]
+        #elif ft_diis == 3:
+        #    self.ft_diis = [scf.diis.EDIIS(mf=self.ct_scf), scf.diis.EDIIS(mf=self.ct_scf)]
+        else:
+            self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(mf=self.ct_scf)]
+
 
         self.update_fock()
         self.ft_fermi = [[0., 0.] for i in range(len(subsystems))]
@@ -185,7 +195,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.mo_energy = self.mo_occ.copy()
         self.fock = self.mo_coeff.copy()
         self.hcore = self.ct_scf.get_hcore()
-        self.proj_pot = [[None, None] for i in range(len(self.subsystems))]
+        self.proj_pot = [[0.0, 0.0] for i in range(len(self.subsystems))]
         self.ct_energy = None
 
     @time_method("Initialize Densities")
@@ -373,7 +383,18 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print ("".center(80,'*'))
             print("  Supersystem Calculation  ".center(80))
             print ("".center(80,'*'))
-            self.ct_scf.scf()
+            if self.freeze_and_thaw_conv:  
+                nS = self.mol.nao_nr()
+                ft_dmat = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                s2s = self.sub2sup
+                for i in range(len(self.subsystems)):
+                    subsystem = self.subsystems[i]
+                    ft_dmat[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
+                    ft_dmat[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
+    
+                self.ct_scf.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
+            else:
+                self.ct_scf.scf()
             self.dmat = self.ct_scf.make_rdm1()
             if self.dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
                 t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
@@ -397,15 +418,19 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         #This gets more complex due how DFT exchange correlation energy is calculated.
 
         nS = self.mol.nao_nr()
+        s2s = self.sub2sup
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
             subsystem.get_env_energy()
 
+        #Correct exc energy
         # get interaction energies.
         for i in range(len(self.subsystems)):
             for j in range(i + 1, len(self.subsystems)):
                 # if embedding method is dft, must add the correct embedding energy
                 if not 'hf' in self.ct_method[:5]:
+                    e_corr_1 = 0.0
+                    e_corr_2 = 0.0
                     subsystem_1 = self.subsystems[i]
                     subsystem_2 = self.subsystems[j]
                     dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
@@ -422,76 +447,40 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
                     dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
 
-                    #Get J and K components first.
-                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
-                        sub1_scf = dft.UKS(self.mol)
-                    else:
-                        sub1_scf = dft.RKS(self.mol)
-                    sub1_scf.xc = subsystem_1.env_scf.xc
-                    sub1_scf.grids = self.grids
-                    sub1_scf.small_rho_cutoff = self.rho_cutoff
-                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
-                        # Add j and k
-                        sub1_veff = sub1_scf.get_veff(dm=dm_subsys)
-                        sub1_vj = sub1_veff.vj
-                        sub1_ej = np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vj).real * .5
-                        sub1_ek = 0.0
-                        if not sub1_veff.vk is None:
-                            sub1_vk = sub1_veff.vk
-                            sub1_ek = (np.einsum('ij, ji', dm_subsys_1[0], sub1_vk[0]) + 
-                                       np.einsum('ij, ji', dm_subsys_1[1], sub1_vk[1])).real * .5
-                    else:
-                        # Add j and k
-                        sub1_veff = sub1_scf.get_veff(dm=dm_subsys[0] + dm_subsys[1])
-                        sub1_vj = sub1_veff.vj
-                        sub1_ej = np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vj).real * .5
-                        sub1_ek = 0.0
-                        if not sub1_veff.vk is None:
-                            sub1_vk = sub1_veff.vk
-                            sub1_ek = (np.einsum('ij, ji', (dm_subsys_1[0] + dm_subsys_1[1]), sub1_vk[0])).real * .5 * .5
+                    #Subtract the incorrect energy
+                    #Assume active system is closed shell
+                    veff_combined = self.ct_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
+                    vxc_comb = veff_combined
+                    vxc_comb = veff_combined - veff_combined.vj
+                    if not veff_combined.vk is None:
+                        vxc_comb += veff_combined.vk * 0.5
 
+                    veff_active_sub_1 = self.ct_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
+                    veff_active_sub_2 = self.ct_scf.get_veff(dm=(dm_subsys_2[0] + dm_subsys_2[1]))
+                    vxc_sub_1 = veff_active_sub_1 - veff_active_sub_1.vj
+                    vxc_sub_2 = veff_active_sub_2 - veff_active_sub_2.vj
+                    if not veff_active_sub_1.vk is None:
+                        vxc_sub_1 += veff_active_sub_1.vk * 0.5
+                    if not veff_active_sub_2.vk is None:
+                        vxc_sub_2 += veff_active_sub_2.vk * 0.5
 
-                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
-                        sub2_scf = dft.UKS(self.mol)
-                    else:
-                        sub2_scf = dft.RKS(self.mol)
-                    sub2_scf.xc = subsystem_2.env_scf.xc
-                    sub2_scf.grids = self.grids
-                    sub2_scf.small_rho_cutoff = self.rho_cutoff
-
-                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
-                        # Add j and k
-                        sub2_veff = sub2_scf.get_veff(dm=dm_subsys)
-                        sub2_vj = sub2_veff.vj
-                        sub2_ej = np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vj).real * .5
-                        sub2_ek = 0.0
-                        if not sub2_veff.vk is None:
-                            sub2_vk = sub2_veff.vk
-                            sub2_ek = (np.einsum('ij, ji', dm_subsys_2[0], sub2_vk[0]) + 
-                                       np.einsum('ij, ji', dm_subsys_2[1], sub2_vk[1])).real * .5
-                    else:
-                        # Add j and k
-                        sub2_veff = sub2_scf.get_veff(dm=dm_subsys[0] + dm_subsys[1])
-                        sub2_vj = sub2_veff.vj
-                        sub2_ej = np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vj).real * .5
-                        sub2_ek = 0.0
-                        if not sub2_veff.vk is None:
-                            sub2_vk = sub2_veff.vk
-                            sub2_ek = (np.einsum('ij, ji', (dm_subsys_2[0] + dm_subsys_2[1]), sub2_vk[0])).real * .5 * .5
+                    vxc_emb_1 = vxc_comb
+                    vxc_emb_2 = vxc_comb
+                    vxc_emb_1 = vxc_comb - vxc_sub_1
+                    vxc_emb_2 = vxc_comb - vxc_sub_2
+                    vxc_emb_sub_1 = vxc_emb_1[np.ix_(s2s[i], s2s[i])]
+                    vxc_emb_sub_2 = vxc_emb_2[np.ix_(s2s[j], s2s[j])]
 
                     #Get Exc Last
-                    if subsystem_1.env_method[0] == 'u' or subsystem_1.env_method[:2] == 'ro':
-                        sub1_exc = custom_pyscf_methods.exc_uks(self.ct_scf, dm_subsys, dm_subsys_1)[1]
-                    else:
-                        sub1_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-                    if subsystem_2.env_method[0] == 'u' or subsystem_2.env_method[:2] == 'ro':
-                        sub2_exc = custom_pyscf_methods.exc_uks(self.ct_scf, dm_subsys, dm_subsys_2)[1]
-                    else:
-                        sub2_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1]
+                    emb_exc_comb_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                    emb_exc_comb_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
+                    emb_exc_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                    emb_exc_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_2[0] + dm_subsys_2[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
 
-
-                    subsystem_1.env_energy += sub1_ej - sub1_ek + sub1_exc
-                    subsystem_2.env_energy += sub2_ej - sub2_ek + sub2_exc
+                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) * .5
+                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) * .5
+                    subsystem_1.env_energy += emb_exc_comb_1 - emb_exc_1
+                    subsystem_2.env_energy += emb_exc_comb_2 - emb_exc_2
 
     @time_method("Active Energy")
     def get_active_energy(self):
@@ -501,6 +490,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         self.subsystems[0].get_active_in_env_energy()
         act_elec_e = self.correct_active_energy()
+        act_elec_e = 0.0
         self.subsystems[0].active_energy += act_elec_e
 
         act_e = self.subsystems[0].active_energy
@@ -549,7 +539,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                 emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
                 emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
-                energy_corr -= np.trace(np.dot(vxc_emb_sub, (subsystem_1.active_dmat)))
+                energy_corr -= np.trace(np.dot(vxc_emb_sub, (subsystem_1.active_dmat))) * 0.5
                 energy_corr += emb_exc - emb_exc_a
         
                 #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
@@ -559,7 +549,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 #
                 ##Subtract the Vxc from the fock and recalculate the energies.
                 #if 'hf' in subsystem_1.active_method:
-                #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
+               #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
                 #    proj_pot = (subsystem_1.proj_pot[0] + subsystem_1.proj_pot[1])/2.
                 #    energy_elec = custom_pyscf_methods.rhf_energy_elec(subsystem_1.active_scf, emb_pot, proj_pot)
                 #    energy_corr = energy_elec[0] + (emb_exc - emb_exc_a)
@@ -634,9 +624,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fock[1] += V_b
 
         # Using DIIS results in incorrect energies. Maybe specify space and min_space to get better results
+        #This uses the scf diis. Typically they take the fock, however I am not using exactly that. If I include the projop in the fock I can use it fully. Trying without the projop in the fock for diis.
+        #The way to do this would be to include the projection potential in the fock here and then just pass an embedding potential to the subsystem, without a projection operator present.
         #if not self.ft_diis is None:
-        #    self.fock[0] = self.ft_diis[0].update(self.fock[0])
-        #    self.fock[1] = self.ft_diis[1].update(self.fock[1])
+        #    self.fock[0] = self.ft_diis[0].update(self.smat, dm[0], self.fock[0] + POp[0], self.ct_scf)
+        #    self.fock[1] = self.ft_diis[1].update(self.smat, dm[1], self.fock[1] + POp[1], self.ct_scf)
 
     def update_proj_pot(self):
         # currently updates both at once. Can easily modify to only update one subsystem, however I don't think it will improve the speed.
@@ -821,6 +813,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         print(f"iter: {ft_iter:>3d}:{i:<2d}  |ddm|: {ddm:12.6e}   |Tr[DP]|: {proj_e:12.6e}")
 
         print("".center(80))
+        self.freeze_and_thaw_conv = True
         if(ft_err > self.ft_conv):
             print("".center(80))
             print("Freeze-and-Thaw NOT converged".center(80))
