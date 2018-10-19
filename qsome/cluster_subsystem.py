@@ -167,7 +167,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         for i in range(self.subcycles):
             if i > 0:
                 self.update_fock()
-                print ('update')
+                #print ('update')
             if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
                 emb_fock = [None, None]
                 emb_fock[0] = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
@@ -229,6 +229,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             self.fermi = fermi
             self.dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]), self.env_mo_coeff[0].transpose().conjugate())
             self.dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]), self.env_mo_coeff[1].transpose().conjugate())
+            #print ("DMAT")
+            #print (self.dmat[0] + self.dmat[1])
+            #print (np.trace(self.dmat[0] + self.dmat[1]))
 
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
@@ -255,46 +258,6 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         #trace of 1p den mat with proj operator
         return np.trace(self.active_dmat, self.proj_pot)
 
-    #def correct_exc_energy(self):
-    #    if self.active_method[0] == 'u': 
-    #        pass
-    #    elif self.active_method[:2] == 'ro': 
-    #        pass
-    #    else: 
-    #        if self.active_method[0] == 'r':
-    #            self.active_method = self.active_method[1:]
-    #        if self.active_method == 'hf':
-    #            self.active_scf = scf.RHF(self.mol)
-
-    #            self.active_energy = self.active_scf.kernel()
-    #            # this slows down execution.
-    #            self.active_dmat = self.active_scf.make_rdm1()
-
-    #        elif self.active_method == 'ccsd' or self.active_method == 'ccsd(t)':
-    #            self.active_scf = scf.RHF(self.mol)
-    #            self.active_energy = self.active_scf.kernel()
-    #             
-    #            mCCSD = cc.CCSD(self.active_scf)
-    #            mCCSD.max_cycle = self.active_cycles
-    #            new_eris = mCCSD.ao2mo()
-    #            new_eris.fock = reduce(np.dot, (self.active_scf.mo_coeff.conj().T, self.active_scf.get_fock(), self.active_scf.mo_coeff))
-    #            ecc, t1, t2 = mCCSD.kernel(eris=new_eris)
-    #            self.active_energy += ecc
-    #            if self.active_method == 'ccsd(t)':
-    #                ecc_t = ccsd_t.kernel(mCCSD, mCCSD.ao2mo())
-    #                self.active_energy += ecc_t
-    #                l1, l2 = ccsd_t_lambda_slow.kernel(mCCSD, new_eris, t1, t2,)[1:]
-    #                # this slows down execution.
-    #                self.active_dmat = ccsd_t_rdm_slow.make_rdm1(mCCSD, t1, t2, l1, l2, eris=new_eris)
-    #            else:
-    #                # this slows down execution.
-    #                self.active_dmat = mCCSD.make_rdm1()
-    #        else: #DFT
-    #            self.active_scf = scf.RKS(self.mol)
-    #            self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rks_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
-    #            self.active_energy = self.active_scf.kernel()
-    #            #Slows down execution
-    #            self.active_dmat = self.active_scf.make_rdm1()
            
     def get_active_in_env_energy(self):
         self.active_energy = 0.0
@@ -334,6 +297,8 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.level_shift = self.active_shift
                 self.active_scf.damp = self.active_damp
                 oldhcore = self.active_scf.get_hcore() 
+                #print ("DMAT")
+                #print (self.dmat[0] + self.dmat[1])
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)

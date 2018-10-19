@@ -43,9 +43,18 @@ def rhf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, 
     if proj_pot is None: proj_pot = 0.0
     if h1e is None: h1e = mf.get_hcore()
     if vhf is None: vhf = mf.get_veff(dm=dm)
-    f = h1e + vhf + emb_pot #Added embedding potential to fock
+    #vhf += emb_pot
+    #h1e += proj_pot + emb_pot
+    #print (proj_pot)
+    #print (emb_pot)
+    #print (h1e)
+    #print (h1e + proj_pot + emb_pot)
+    #return
+    f = h1e + vhf + emb_pot + proj_pot #Added embedding potential to fock
+    #return f
 
     if cycle < 0 and diis is None:  # Not inside the SCF iteration
+        print ("CYCLE")
         return f
 
     if diis_start_cycle is None:
@@ -58,10 +67,13 @@ def rhf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, 
     if dm is None: dm = self.make_rdm1()
 
     if 0 <= cycle < diis_start_cycle-1 and abs(damp_factor) > 1e-4:
+        print ("DAMP")
         f = damping(s1e, dm*.5, f, damp_factor)
     if diis is not None and cycle >= diis_start_cycle:
+        print ("DIIS")
         f = diis.update(s1e, dm, f, mf, h1e, vhf)
     if abs(level_shift_factor) > 1e-4:
+        print ("LEVELSHIFT")
         f = level_shift(s1e, dm*.5, f, level_shift_factor)
     return f
 
@@ -72,8 +84,9 @@ def rhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None
     if h1e is None: h1e = mf.get_hcore()
     if vhf is None: vhf = mf.get_veff(mf.mol, dm)
     h1e = copy(h1e + proj_pot) #Add embedding potential to the core ham
+    vhf = copy(vhf + emb_pot) #Add embedding potential to the core ham
     e1 = np.einsum('ij,ji', h1e, dm).real
-    e_coul = np.einsum('ij,ji', vhf + emb_pot, dm).real * .5
+    e_coul = np.einsum('ij,ji', vhf, dm).real * .5
     logger.debug(mf, 'E_coul = %.15g', e_coul)
     return e1+e_coul, e_coul
 

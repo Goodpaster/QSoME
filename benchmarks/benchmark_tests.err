@@ -4,3 +4,36 @@ mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 <class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock get_hcore energy_elec
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 /var/spool/torque/mom_priv/jobs/8659630.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+=>> PBS: job killed: walltime 14434 exceeded limit 14400
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8662046.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  energy_elec get_hcore get_fock
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/accuracy_benchmarks.py", line 336, in <module>
+    supersystem.get_active_energy()
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_supersystem.py", line 20, in wrapper_time_method
+    result = func(*args, **kwargs)
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_supersystem.py", line 491, in get_active_energy
+    self.subsystems[0].get_active_in_env_energy()
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_subsystem.py", line 361, in get_active_in_env_energy
+    ecc, t1, t2 = self.active_cc.kernel(eris=new_eris)
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/cc/ccsd.py", line 966, in kernel
+    return self.ccsd(t1, t2, eris)
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/cc/ccsd.py", line 977, in ccsd
+    verbose=self.verbose)
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/cc/ccsd.py", line 79, in kernel
+    t1, t2 = mycc.run_diis(t1, t2, istep, normt, eccsd-eold, adiis)
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/cc/ccsd.py", line 1123, in run_diis
+    t1, t2 = self.vector_to_amplitudes(adiis.update(vec))
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/lib/diis.py", line 240, in update
+    self._xprev = xnew = self.extrapolate(nd)
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/lib/diis.py", line 267, in extrapolate
+    raise e
+  File "/home/goodpast/graha682/code/python/pyscf/pyscf/lib/diis.py", line 264, in extrapolate
+    c = numpy.linalg.solve(h, g)
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/site-packages/numpy/linalg/linalg.py", line 375, in solve
+    r = gufunc(a, b, signature=signature, extobj=extobj)
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/site-packages/numpy/linalg/linalg.py", line 90, in _raise_linalgerror_singular
+    raise LinAlgError("Singular matrix")
+numpy.linalg.linalg.LinAlgError: Singular matrix

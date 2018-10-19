@@ -234,7 +234,7 @@ class TestProjectionConstruction(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        supersystem.ft_cycles = 2
+        supersystem.ft_cycles = 10
         supersystem.freeze_and_thaw()
 
         nS = supersystem.mol.nao_nr()

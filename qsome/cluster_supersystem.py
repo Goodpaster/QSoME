@@ -3,7 +3,7 @@
 
 import os
 from qsome import supersystem, custom_pyscf_methods
-from pyscf import gto, scf, dft
+from pyscf import gto, scf, dft, lib
 
 import functools
 import time
@@ -86,19 +86,21 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.init_ct_scf()
         self.init_density()
 
+        #There are other diis methods but these don't work with out method due to subsystem projection.
         if ft_diis == 0:
             self.ft_diis = None
-        elif ft_diis == 1:
-            self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(mf=self.ct_scf)]
+        #The scf diis methods do not work for a system where there is a projection potential separating subsystems. DIIS could be altered to allow for this to optimize.
+        #elif ft_diis == 1:
+        #    self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(self.ct_scf)]
         #elif ft_diis == 2:
-        #    self.ft_diis = [scf.diis.EDIIS(mf=self.ct_scf), scf.diis.EDIIS(mf=self.ct_scf)]
+        #    self.ft_diis = [scf.diis.EDIIS(), scf.diis.EDIIS()]
         #elif ft_diis == 3:
-        #    self.ft_diis = [scf.diis.EDIIS(mf=self.ct_scf), scf.diis.EDIIS(mf=self.ct_scf)]
+        #    self.ft_diis = [scf.diis.ADIIS(), scf.diis.ADIIS()]
         else:
-            self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(mf=self.ct_scf)]
+            self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
 
 
-        self.update_fock()
+        self.update_fock(diis=False)
         self.ft_fermi = [[0., 0.] for i in range(len(subsystems))]
 
     def gen_sub2sup(self):
@@ -489,6 +491,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print("  Active Subsystem Calculation  ".center(80))
         print ("".center(80,'*'))
         self.subsystems[0].get_active_in_env_energy()
+        #print (self.subsystems[0].active_dmat)
+        #CORRECT ACTIVE SETTINGS.
         act_elec_e = self.correct_active_energy()
         act_elec_e = 0.0
         self.subsystems[0].active_energy += act_elec_e
@@ -600,7 +604,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
     def get_embedding_pot(self):
         pass
 
-    def update_fock(self):
+    def update_fock(self, diis=True):
 
         self.fock = [np.copy(self.hcore), np.copy(self.hcore)]
 
@@ -623,12 +627,21 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fock[0] += V_a
         self.fock[1] += V_b
 
-        # Using DIIS results in incorrect energies. Maybe specify space and min_space to get better results
-        #This uses the scf diis. Typically they take the fock, however I am not using exactly that. If I include the projop in the fock I can use it fully. Trying without the projop in the fock for diis.
-        #The way to do this would be to include the projection potential in the fock here and then just pass an embedding potential to the subsystem, without a projection operator present.
-        #if not self.ft_diis is None:
-        #    self.fock[0] = self.ft_diis[0].update(self.smat, dm[0], self.fock[0] + POp[0], self.ct_scf)
-        #    self.fock[1] = self.ft_diis[1].update(self.smat, dm[1], self.fock[1] + POp[1], self.ct_scf)
+        # to use the scf diis methods, must generate individual fock parts and recombine to make full fock matrix, because the projection operator is necessary to use diis correctly.
+        if not self.ft_diis is None and diis:
+            if self.ct_method[0] == 'u' or self.ct_method[:2] == 'ro':
+                self.fock[0] = self.ft_diis[0].update(self.fock[0])
+                self.fock[1] = self.ft_diis[0].update(self.fock[1])
+            else:
+                #f = self.ft_diis[0].update(self.smat, (dm[0] + dm[1]), self.fock[0], self.ct_scf, self.hcore, V_a)
+                f = self.ft_diis[0].update(self.fock[0])
+                self.fock[0] = f
+                self.fock[1] = f
+        #if not self.ft_diis is None and diis:
+        #    #f = self.ft_diis[0].update(self.smat, (dm[0] + dm[1]), self.fock[0], self.ct_scf, self.hcore, V_a)
+        #    f = self.ft_diis[0].update(self.fock[0])
+        #    self.fock[0] = f
+        #    self.fock[1] = f
 
     def update_proj_pot(self):
         # currently updates both at once. Can easily modify to only update one subsystem, however I don't think it will improve the speed.
@@ -756,15 +769,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         s2s = self.sub2sup
         ft_err = 1.
         ft_iter = 0 
-        while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
+        last_cycle = False
+        while((ft_err > self.ft_conv or not last_cycle) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
-            ft_err = 0 
+            if (ft_err <= self.ft_conv):
+                last_cycle = True
+                print ("DIIS TURNED OFF")
+            ft_err = 0
             ft_iter += 1
             for i in range(len(self.subsystems)):
                 subsystem = self.subsystems[i]
                 if not subsystem.freeze:
                     if self.ft_updatefock >= i:
-                        self.update_fock()
+                        if ft_iter <= 1 or last_cycle:
+                            self.update_fock(diis=False)
+                        else:
+                            self.update_fock(diis=True)
 
                     subsystem.update_fock()
 
