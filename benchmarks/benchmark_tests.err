@@ -37,3 +37,11 @@ Traceback (most recent call last):
   File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/site-packages/numpy/linalg/linalg.py", line 90, in _raise_linalgerror_singular
     raise LinAlgError("Singular matrix")
 numpy.linalg.linalg.LinAlgError: Singular matrix
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8732859.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8735573.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock energy_elec get_hcore
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8737266.mesabim3.msi.umn.edu.SC: line 15: create: command not found

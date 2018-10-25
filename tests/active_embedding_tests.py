@@ -75,6 +75,20 @@ H    0.0000    200.0000    0.0000
 H    0.8000    200.0000    0.0000
 """, 1)
 
+hf_emb_ghost_filename = 'hf_embed.inp'
+hf_emb_ghost_str = ghost_str.replace("""
+ env_method pbe
+""","""
+ env_method hf
+""", 1)
+
+hf_emb_filename = 'hf_embed.inp'
+hf_emb_str = default_str.replace("""
+ env_method pbe
+""","""
+ env_method hf
+""", 1)
+
 
 temp_inp_dir = "/temp_input/"
 class TestHFEnergy(unittest.TestCase):
@@ -94,6 +108,12 @@ class TestHFEnergy(unittest.TestCase):
 
         with open(path+widesep_filename, 'w') as f:
             f.write(widesep_str)
+
+        with open(path+hf_emb_filename, 'w') as f:
+            f.write(hf_emb_str)
+
+        with open(path+hf_emb_ghost_filename, 'w') as f:
+            f.write(hf_emb_ghost_str)
 
     @unittest.skip
     def test_default(self):
@@ -147,6 +167,70 @@ class TestHFEnergy(unittest.TestCase):
       
         #not sure how to tests.
 
+    def test_hf_ghost_embed(self):
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + hf_emb_ghost_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            if i == 0:
+                mol = in_obj.subsys_mols[i]
+                env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+                env_kwargs = in_obj.env_subsystem_kwargs[i]
+                active_method = in_obj.active_subsystem_kwargs.pop('active_method')
+                active_kwargs = in_obj.active_subsystem_kwargs
+                active_kwargs.update(env_kwargs)
+                subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method,  **active_kwargs)
+                subsystems.append(subsys)
+            else:
+                mol = in_obj.subsys_mols[i]
+                env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+                env_kwargs = in_obj.env_subsystem_kwargs[i]
+                subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+                subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        supersystem.freeze_and_thaw()
+        supersystem.env_in_env_energy()
+        supersystem.get_active_energy()
+
+        h_pyscf = scf.RHF(supersystem.mol)
+        h_e = h_pyscf.kernel()
+        self.assertAlmostEqual(supersystem.env_energy, h_e, delta=1e-8)
+        self.assertAlmostEqual(subsystems[0].active_energy, subsystems[0].env_energy, delta=1e-8)
+
+    def test_hf_embed(self):
+        subsystems = []
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + hf_emb_filename)
+        for i in range(len(in_obj.subsys_mols)):
+            if i == 0:
+                mol = in_obj.subsys_mols[i]
+                env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+                env_kwargs = in_obj.env_subsystem_kwargs[i]
+                active_method = in_obj.active_subsystem_kwargs.pop('active_method')
+                active_kwargs = in_obj.active_subsystem_kwargs
+                active_kwargs.update(env_kwargs)
+                subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method,  **active_kwargs)
+                subsystems.append(subsys)
+            else:
+                mol = in_obj.subsys_mols[i]
+                env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+                env_kwargs = in_obj.env_subsystem_kwargs[i]
+                subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
+                subsystems.append(subsys)
+        ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+        supersystem_kwargs = in_obj.supersystem_kwargs
+        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
+            ct_method, **supersystem_kwargs)
+        supersystem.freeze_and_thaw()
+        supersystem.env_in_env_energy()
+        supersystem.get_active_energy()
+
+        self.assertAlmostEqual(subsystems[0].active_energy, subsystems[0].env_energy, delta=1e-10)
+
+
     @unittest.skip
     def test_ghost(self):
         subsystems = []
@@ -176,6 +260,7 @@ class TestHFEnergy(unittest.TestCase):
         supersystem.env_in_env_energy()
         supersystem.get_active_energy()
 
+    @unittest.skip("skip")
     def test_widesep(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -247,6 +332,7 @@ class TestCCSDEnergy(unittest.TestCase):
         with open(path+widesep_filename, 'w') as f:
             f.write(widesep_str)
 
+    @unittest.skip("Skip")
     def test_widesep(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way

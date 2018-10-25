@@ -13,7 +13,7 @@ end
 
 subsystem
 He          1.5000       0.00000       0.00000
-gh.He          0.0000       0.00000       0.00000
+gh.He          0.00000       0.00000       0.00000
 end
 
 embed
@@ -69,6 +69,7 @@ ct_method = in_obj.supersystem_kwargs.pop('ct_method')
 supersystem_kwargs = in_obj.supersystem_kwargs
 supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
     ct_method, **supersystem_kwargs)
+
 supersystem.freeze_and_thaw()
 supersystem.env_in_env_energy()
 supersystem.get_active_energy()

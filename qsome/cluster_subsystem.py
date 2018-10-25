@@ -112,7 +112,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         else:
             e_proj = (np.einsum('ij,ji', (self.proj_pot[0] + self.proj_pot[1])/2., (self.dmat[0] + self.dmat[1])).real)
-            e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real) * .5
+            e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real) #* .5
             subsys_e += self.env_scf.energy_elec(dm=(self.dmat[0] + self.dmat[1]))[1]
 
         return subsys_e + e_proj + e_emb
@@ -168,6 +168,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if i > 0:
                 self.update_fock()
                 #print ('update')
+
             if self.env_method[0] == 'u' or self.env_method[:2] == 'ro':
                 emb_fock = [None, None]
                 emb_fock[0] = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
@@ -182,6 +183,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 #This is the costly part. I think.
 
                 emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
+                emb_fock += self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
                 E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
                 self.env_mo_energy = [E, E]
                 self.env_mo_coeff = [C, C]
@@ -229,9 +231,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             self.fermi = fermi
             self.dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]), self.env_mo_coeff[0].transpose().conjugate())
             self.dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]), self.env_mo_coeff[1].transpose().conjugate())
-            #print ("DMAT")
-            #print (self.dmat[0] + self.dmat[1])
-            #print (np.trace(self.dmat[0] + self.dmat[1]))
 
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
@@ -296,9 +295,6 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.max_cycle = self.active_cycles
                 self.active_scf.level_shift = self.active_shift
                 self.active_scf.damp = self.active_damp
-                oldhcore = self.active_scf.get_hcore() 
-                #print ("DMAT")
-                #print (self.dmat[0] + self.dmat[1])
                 self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
                 self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
