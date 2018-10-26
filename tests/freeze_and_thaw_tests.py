@@ -527,9 +527,9 @@ class TestFreezeAndThaw(unittest.TestCase):
 
         supersystem.freeze_and_thaw()
 
-        self.assertAlmostEqual(sub1_e, subsystems[0].env_energy, delta=1e-9)
-        self.assertAlmostEqual(sub2_e, subsystems[1].env_energy, delta=1e-9)
-        self.assertAlmostEqual(sup_env_in_env_e, supersystem.env_in_env_energy(), delta=1e-9)
+        self.assertAlmostEqual(sub1_e, subsystems[0].env_energy, delta=1e-8)
+        self.assertAlmostEqual(sub2_e, subsystems[1].env_energy, delta=1e-8)
+        self.assertAlmostEqual(sup_env_in_env_e, supersystem.env_in_env_energy(), delta=1e-8)
         
 
     def tearDown(self):

@@ -346,6 +346,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1]))
                 #Slows down execution
                 self.active_dmat = self.active_scf.make_rdm1()
+
+            temp_dmat = copy(self.active_dmat)
+            self.active_dmat = [temp_dmat/2., temp_dmat/2.]
            
         return self.active_energy
  

@@ -427,65 +427,74 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
             subsystem.get_env_energy()
+        self.correct_env_energy()
 
+
+    @time_method("Environment XC Correction")
+    def correct_env_energy(self):
+        nS = self.mol.nao_nr()
+        s2s = self.sub2sup
         #Correct exc energy
         # get interaction energies.
-        #for i in range(len(self.subsystems)):
-        #    for j in range(i + 1, len(self.subsystems)):
-        #        # if embedding method is dft, must add the correct embedding energy
-        #        if not 'hf' in self.ct_method[:5]:
-        #            e_corr_1 = 0.0
-        #            e_corr_2 = 0.0
-        #            subsystem_1 = self.subsystems[i]
-        #            subsystem_2 = self.subsystems[j]
-        #            dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-        #            dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
-        #            dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
-        #            dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-        #            dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
+        for i in range(len(self.subsystems)):
+            for j in range(i + 1, len(self.subsystems)):
+                # if embedding method is dft, must add the correct embedding energy
+                if not 'hf' in self.ct_method[:5]:
+                    e_corr_1 = 0.0
+                    e_corr_2 = 0.0
+                    subsystem_1 = self.subsystems[i]
+                    subsystem_2 = self.subsystems[j]
+                    dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
+                    dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
+                    dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                    dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
 
-        #            dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-        #            dm_subsys_1[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
-        #            dm_subsys_1[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
+                    dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys_1[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
+                    dm_subsys_1[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
 
-        #            dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-        #            dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-        #            dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
+                    dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                    dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
+                    dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
 
-        #            #Subtract the incorrect energy
-        #            #Assume active system is closed shell
-        #            veff_combined = self.ct_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
-        #            vxc_comb = veff_combined
-        #            vxc_comb = veff_combined - veff_combined.vj
-        #            if not veff_combined.vk is None:
-        #                vxc_comb += veff_combined.vk * 0.5
+                    #Subtract the incorrect energy
+                    #Assume active system is closed shell
+                    veff_combined = self.ct_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
+                    vxc_comb = veff_combined
+                    vxc_comb = veff_combined - veff_combined.vj
+                    if not veff_combined.vk is None:
+                        vxc_comb += veff_combined.vk * 0.5
 
-        #            veff_active_sub_1 = self.ct_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
-        #            veff_active_sub_2 = self.ct_scf.get_veff(dm=(dm_subsys_2[0] + dm_subsys_2[1]))
-        #            vxc_sub_1 = veff_active_sub_1 - veff_active_sub_1.vj
-        #            vxc_sub_2 = veff_active_sub_2 - veff_active_sub_2.vj
-        #            if not veff_active_sub_1.vk is None:
-        #                vxc_sub_1 += veff_active_sub_1.vk * 0.5
-        #            if not veff_active_sub_2.vk is None:
-        #                vxc_sub_2 += veff_active_sub_2.vk * 0.5
+                    veff_active_sub_1 = self.ct_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
+                    veff_active_sub_2 = self.ct_scf.get_veff(dm=(dm_subsys_2[0] + dm_subsys_2[1]))
+                    vxc_sub_1 = veff_active_sub_1 - veff_active_sub_1.vj
+                    vxc_sub_2 = veff_active_sub_2 - veff_active_sub_2.vj
+                    if not veff_active_sub_1.vk is None:
+                        vxc_sub_1 += veff_active_sub_1.vk * 0.5
+                    if not veff_active_sub_2.vk is None:
+                        vxc_sub_2 += veff_active_sub_2.vk * 0.5
 
-        #            vxc_emb_1 = vxc_comb
-        #            vxc_emb_2 = vxc_comb
-        #            vxc_emb_1 = vxc_comb - vxc_sub_1
-        #            vxc_emb_2 = vxc_comb - vxc_sub_2
-        #            vxc_emb_sub_1 = vxc_emb_1[np.ix_(s2s[i], s2s[i])]
-        #            vxc_emb_sub_2 = vxc_emb_2[np.ix_(s2s[j], s2s[j])]
+                    vxc_emb_1 = vxc_comb
+                    vxc_emb_2 = vxc_comb
+                    vxc_emb_1 = vxc_comb - vxc_sub_1
+                    vxc_emb_2 = vxc_comb - vxc_sub_2
+                    vxc_emb_sub_1 = vxc_emb_1[np.ix_(s2s[i], s2s[i])]
+                    vxc_emb_sub_2 = vxc_emb_2[np.ix_(s2s[j], s2s[j])]
 
-        #            #Get Exc Last
-        #            emb_exc_comb_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
-        #            emb_exc_comb_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
-        #            emb_exc_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
-        #            emb_exc_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_2[0] + dm_subsys_2[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
+                    #Get Exc Last
+                    emb_exc_comb_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                    emb_exc_comb_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
+                    emb_exc_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
+                    emb_exc_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_2[0] + dm_subsys_2[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
 
-        #            subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
-        #            subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
-        #            subsystem_1.env_energy += emb_exc_comb_1 - emb_exc_1
-        #            subsystem_2.env_energy += emb_exc_comb_2 - emb_exc_2
+                    vxc_sub_1 = np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
+                    vxc_sub_2 = np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
+
+                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
+                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
+                    subsystem_1.env_energy += emb_exc_comb_1 - emb_exc_1
+                    subsystem_2.env_energy += emb_exc_comb_2 - emb_exc_2
 
     @time_method("Active Energy")
     def get_active_energy(self):
@@ -495,8 +504,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         self.subsystems[0].get_active_in_env_energy()
         #CORRECT ACTIVE SETTINGS.
-        #act_elec_e = self.correct_active_energy()
-        act_elec_e = 0.0
+        act_elec_e = self.correct_active_energy()
+        #act_elec_e = 0.0
         self.subsystems[0].active_energy += act_elec_e
 
         act_e = self.subsystems[0].active_energy
@@ -525,10 +534,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 dm_subsys_1[0][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[0]
                 dm_subsys_1[1][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[1]
 
-                dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-                dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-                dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
-
                 #Assume active system is closed shell
                 veff_combined = self.ct_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
                 vxc_comb = veff_combined - veff_combined.vj
@@ -545,7 +550,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                 emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
                 emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
-                energy_corr -= np.trace(np.dot(vxc_emb_sub, (subsystem_1.active_dmat))) #* 0.5
+
+                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1])) #* 0.5
                 energy_corr += emb_exc - emb_exc_a
         
                 #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]

@@ -15,25 +15,18 @@ O    1.7911 2.5322 0.4194
 O    2.8188 1.6681 -0.2141
 H    3.3407 2.3516 -0.6428
 charge -1
-initguess readchk
 end
 
 subsystem
 O    1.9616 1.5620 2.7386
 H    2.8538 1.2136 2.6868
 H    1.8680 2.0002 1.7938
-initguess readchk
-end
-
-ct_settings
- initguess readchk
 end
 
 embed
  env_method m06
  huzinaga
  cycles 250
- initguess readchk
 end
 
 basis aug-cc-pVDZ
@@ -52,25 +45,18 @@ O    0.5636 1.8657 -1.2969
 O    1.8225 1.4130 -1.8994
 H    1.5547 1.3877 -2.8233
 charge -1
-initguess readchk
 end
 
 subsystem
 O    1.5260 4.2554 -0.7329
 H    2.4429 3.9976 -0.8456
 H    1.0718 3.3814 -0.9107
-initguess readchk
 end
 
 embed
  env_method m06
  huzinaga
  cycles 250
- initguess readchk
-end
-
-ct_settings
- initguess readchk
 end
 
 basis aug-cc-pVDZ
