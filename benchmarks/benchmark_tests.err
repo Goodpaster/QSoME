@@ -81,3 +81,7 @@ mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 <class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock get_hcore energy_elec
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 /var/spool/torque/mom_priv/jobs/8744493.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  energy_elec get_fock get_hcore
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8760454.mesabim3.msi.umn.edu.SC: line 15: create: command not found

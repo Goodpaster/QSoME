@@ -18,11 +18,11 @@ class SuperSystem(ABC):
         pass
 
     @abstractmethod
-    def get_proj_op(self):
+    def get_active_energy(self):
         pass
 
     @abstractmethod
-    def get_embedding_pot(self):
+    def update_proj_pot(self):
         pass
 
     @abstractmethod
@@ -31,6 +31,10 @@ class SuperSystem(ABC):
 
     @abstractmethod
     def save_chkfile(self):
+        pass
+
+    @abstractmethod
+    def read_chkfile(self):
         pass
 
     @abstractmethod

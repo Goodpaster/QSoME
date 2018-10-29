@@ -329,7 +329,7 @@ class TestFreezeAndThaw(unittest.TestCase):
         with open(path+lda_func_filename, 'w') as f:
             f.write(lda_func_str)
 
-    @unittest.skip("Skip")
+    #@unittest.skip("Skip")
     def test_default(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -351,12 +351,27 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub2_env_e = supersystem.subsystems[1].env_energy
         sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
         sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+
+        #Remove double counted 2 electron terms
+        nS = supersystem.mol.nao_nr()
+        s2s = supersystem.sub2sup
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_e_coul = 0
+        for i in range(len(supersystem.subsystems)):
+            temp_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            temp_dm[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            temp_dm[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+            sub_e_coul += supersystem.ct_scf.energy_elec(dm=(temp_dm[0] + temp_dm[1]))[1]
+            dm_env[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+        e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
+
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e  - sub1_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
 
 
         #unsure how to test...
 
-    @unittest.skip("skip")
+    #@unittest.skip("skip")
     def test_ghost(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -381,9 +396,23 @@ class TestFreezeAndThaw(unittest.TestCase):
         sup_env_e = supersystem.env_energy
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+        #Remove double counted 2 electron terms
+        nS = supersystem.mol.nao_nr()
+        s2s = supersystem.sub2sup
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_e_coul = 0
+        for i in range(len(supersystem.subsystems)):
+            temp_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            temp_dm[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            temp_dm[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+            sub_e_coul += supersystem.ct_scf.energy_elec(dm=(temp_dm[0] + temp_dm[1]))[1]
+            dm_env[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+        e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-    @unittest.skip("skip")
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+
+    #@unittest.skip("skip")
     def test_widesep(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -426,8 +455,23 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub1_env_e = supersystem.subsystems[0].env_energy
         sub2_env_e = supersystem.subsystems[1].env_energy
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
-    @unittest.skip("test")
+        #Remove double counted 2 electron terms
+        nS = supersystem.mol.nao_nr()
+        s2s = supersystem.sub2sup
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_e_coul = 0
+        for i in range(len(supersystem.subsystems)):
+            temp_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            temp_dm[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            temp_dm[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+            sub_e_coul += supersystem.ct_scf.energy_elec(dm=(temp_dm[0] + temp_dm[1]))[1]
+            dm_env[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+        e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
+
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+
+    #@unittest.skip("test")
     def test_hyb_func(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -452,9 +496,24 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub2_env_e = supersystem.subsystems[1].env_energy
         sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
         sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
-    @unittest.skip("test")
+        #Remove double counted 2 electron terms
+        nS = supersystem.mol.nao_nr()
+        s2s = supersystem.sub2sup
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_e_coul = 0
+        for i in range(len(supersystem.subsystems)):
+            temp_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            temp_dm[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            temp_dm[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+            sub_e_coul += supersystem.ct_scf.energy_elec(dm=(temp_dm[0] + temp_dm[1]))[1]
+            dm_env[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+        e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
+
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-7)
+
+    #@unittest.skip("test")
     def test_lda_func(self):
         subsystems = []
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -481,7 +540,22 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub2_env_e = supersystem.subsystems[1].env_energy
         sub1_env_proj_e = supersystem.subsystems[0].get_env_proj_e()
         sub2_env_proj_e = supersystem.subsystems[1].get_env_proj_e()
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
+
+        #Remove double counted 2 electron terms
+        nS = supersystem.mol.nao_nr()
+        s2s = supersystem.sub2sup
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_e_coul = 0
+        for i in range(len(supersystem.subsystems)):
+            temp_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            temp_dm[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            temp_dm[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+            sub_e_coul += supersystem.ct_scf.energy_elec(dm=(temp_dm[0] + temp_dm[1]))[1]
+            dm_env[0][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
+        e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
+
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
 
     #@unittest.skip("skip")
     def test_readchk(self):

@@ -30,9 +30,5 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def save_chkfile(self):
-        pass
-
-    @abstractmethod
     def save_orbitals(self):
         pass

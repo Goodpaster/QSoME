@@ -1,0 +1,9 @@
+1. Clean up test
+2. Clean up ABCs
+3. Write new tests
+    - Vxc Correction
+    - DIIS methods
+4. Print timing at end
+5. Write Run script
+6. Document
+7. Add Logging

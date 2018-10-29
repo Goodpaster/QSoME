@@ -8,12 +8,10 @@ he_fn = 'he.inp'
 system_1_react = '''
 subsystem
 He          0.00000       0.00000       0.00000
-gh.He          1.5000       0.00000       0.00000
 end
 
 subsystem
 He          1.5000       0.00000       0.00000
-gh.He          0.00000       0.00000       0.00000
 end
 
 embed

@@ -488,13 +488,13 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     emb_exc_1 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
                     emb_exc_2 = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_2[0] + dm_subsys_2[1], dm_subsys_2[0] + dm_subsys_2[1])[1] 
 
-                    vxc_sub_1 = np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
-                    vxc_sub_2 = np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
+                    #vxc_sub_1 = np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
+                    #vxc_sub_2 = np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
 
-                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
-                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
-                    subsystem_1.env_energy += emb_exc_comb_1 - emb_exc_1
-                    subsystem_2.env_energy += emb_exc_comb_2 - emb_exc_2
+                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1]))
+                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1]))
+                    subsystem_1.env_energy += (emb_exc_comb_1 - emb_exc_1) * 2.
+                    subsystem_2.env_energy += (emb_exc_comb_2 - emb_exc_2) * 2.
 
     @time_method("Active Energy")
     def get_active_energy(self):
@@ -502,7 +502,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         print("  Active Subsystem Calculation  ".center(80))
         print ("".center(80,'*'))
-        self.subsystems[0].get_active_in_env_energy()
+        self.subsystems[0].active_in_env_energy()
         #CORRECT ACTIVE SETTINGS.
         act_elec_e = self.correct_active_energy()
         #act_elec_e = 0.0
@@ -551,8 +551,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
                 emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
 
-                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1])) #* 0.5
-                energy_corr += emb_exc - emb_exc_a
+                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1]))
+                energy_corr += (emb_exc - emb_exc_a) * 2.
         
                 #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
                 ##THis is incorrect for more than 2 subsys 
@@ -584,9 +584,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         return energy_corr
                 
 
-    def get_active_in_env_energy(self):
-        pass
-                 
     @time_method("Env. in Env. Energy")
     def env_in_env_energy(self):
         print ("".center(80,'*'))
@@ -606,11 +603,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print("".center(80,'*'))
         return self.env_energy
 
-    def get_proj_op(self):
-        pass
-
-    def get_embedding_pot(self):
-        pass
 
     def update_fock(self, diis=True):
 

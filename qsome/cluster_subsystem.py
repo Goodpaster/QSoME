@@ -113,6 +113,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         else:
             e_proj = (np.einsum('ij,ji', (self.proj_pot[0] + self.proj_pot[1])/2., (self.dmat[0] + self.dmat[1])).real)
             e_emb = (np.einsum('ij,ji', (self.emb_pot[0] + self.emb_pot[1])/2., (self.dmat[0] + self.dmat[1])).real) #* .5
+            #e_emb = 0.0
             subsys_e += self.env_scf.energy_elec(dm=(self.dmat[0] + self.dmat[1]))[1]
 
         return subsys_e + e_proj + e_emb
@@ -132,6 +133,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             e_proj = (np.einsum('ij,ji', (self.proj_pot[0] + self.proj_pot[1])/2., (self.dmat[0] + self.dmat[1])).real)
 
         return e_proj 
+
     def update_emb_pot(self, new_emb_pot):
         self.emb_pot = new_emb_pot 
 
@@ -147,11 +149,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def update_density(self, new_den):
         self.dmat = new_den
 
-    def save_chkfile(self):
-        pass
     def save_orbitals(self):
-        pass
-    def get_env_proj_energy(self):
         pass
 
     def diagonalize(self):
@@ -253,12 +251,12 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
  
         super().__init__(mol, env_method, **kwargs)
 
-    def get_active_proj_energy(self):
+    def active_proj_energy(self):
         #trace of 1p den mat with proj operator
         return np.trace(self.active_dmat, self.proj_pot)
 
            
-    def get_active_in_env_energy(self):
+    def active_in_env_energy(self):
         self.active_energy = 0.0
         if self.active_method[0] == 'u': 
             if self.active_method[1:] == 'hf':
