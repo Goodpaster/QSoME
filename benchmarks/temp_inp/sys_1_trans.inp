@@ -23,5 +23,5 @@ embed
  cycles 250
 end
 
-basis aug-cc-pVDZ
+basis 6-311g
 active_method ccsd

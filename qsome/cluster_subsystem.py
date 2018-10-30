@@ -328,6 +328,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 else:
                     # this slows down execution.
                     self.active_dmat = self.active_cc.make_rdm1()
+
+                # Convert to AO form
+                temp_dmat = copy(self.active_dmat)
+                ao_dmat = (reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T))))
+                self.active_dmat = ao_dmat
             else: #DFT
                 self.active_scf = scf.RKS(self.mol)
                 self.active_scf.xc = self.active_method

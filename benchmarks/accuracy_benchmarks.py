@@ -29,7 +29,7 @@ embed
  cycles 250
 end
 
-basis aug-cc-pVDZ
+basis 6-311g
 active_method ccsd
 '''
 
@@ -59,7 +59,7 @@ embed
  cycles 250
 end
 
-basis aug-cc-pVDZ
+basis 6-311g
 active_method ccsd
 '''
 
@@ -275,10 +275,10 @@ temp_dir = "/temp_inp/"
 inp_path = base_path + temp_dir
 canon_path = base_path + canonical_dir
 
-#if os.path.isdir(inp_path):
-#    shutil.rmtree(inp_path)    
+if os.path.isdir(inp_path):
+    shutil.rmtree(inp_path)    
 
-#os.mkdir(inp_path)
+os.mkdir(inp_path)
 
 with open(inp_path+sys_1_react_fn, 'w') as f:
     f.write(system_1_react)

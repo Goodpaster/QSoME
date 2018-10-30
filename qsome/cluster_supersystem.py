@@ -427,6 +427,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
             subsystem.get_env_energy()
+            print (f"Uncorrected Energy: {subsystem.env_energy}")
         self.correct_env_energy()
 
 
@@ -503,13 +504,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print("  Active Subsystem Calculation  ".center(80))
         print ("".center(80,'*'))
         self.subsystems[0].active_in_env_energy()
+        print (f"Uncorrected Energy: {self.subsystems[0].active_energy}")
         #CORRECT ACTIVE SETTINGS.
         act_elec_e = self.correct_active_energy()
         #act_elec_e = 0.0
         self.subsystems[0].active_energy += act_elec_e
 
         act_e = self.subsystems[0].active_energy
-        print(f"  Energy: {act_e}  ".center(80))
+        print(f"Energy: {act_e}")
         print("".center(80,'*'))
 
     @time_method("Correct Exc Energy")
