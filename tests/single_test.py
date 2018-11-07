@@ -8,7 +8,6 @@ he_fn = 'he.inp'
 system_1_react = '''
 subsystem
 He          1.00000       0.00000       1.00000
-addlinkbasis
 end
 
 subsystem

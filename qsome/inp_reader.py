@@ -319,6 +319,7 @@ class InpReader:
                 mol.unit = subsystem.unit
             if self.inp.verbose:
                 mol.verbose = self.inp.verbose
+            mol.build(dump_input=False)
             self.subsys_mols.append(mol) 
             subsys_ghost.append(nghost)
 

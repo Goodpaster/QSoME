@@ -24,7 +24,7 @@ H    1.8680 2.0002 1.7938
 end
 
 embed
- env_method m06
+ env_method pbe
  huzinaga
  cycles 250
 end
@@ -55,7 +55,7 @@ H    1.0718 3.3814 -0.9107
 end
 
 embed
- env_method m06
+ env_method pbe
  huzinaga
  cycles 250
 end

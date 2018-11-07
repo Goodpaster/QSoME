@@ -34,7 +34,7 @@ def time_method(function_name=None):
 class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, ct_method, proj_oper='huz', filename=None,
-                 ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=1, 
+                 ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=0, 
                  ft_setfermi=None, ft_initguess=None, ft_updatefock=0,
                  ft_writeorbs=False, cycles=100, conv=1e-9, grad=None, 
                  damp=0, shift=0, smearsigma=0, initguess=None, 

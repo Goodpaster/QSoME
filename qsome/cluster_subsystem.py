@@ -21,7 +21,7 @@ from copy import deepcopy as copy
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def __init__(self, mol, env_method, filename=None, smearsigma=0, damp=0, 
-                 shift=0, subcycles=1, diis=0, freeze=False, initguess=None,
+                 shift=0, subcycles=1, diis=2, freeze=False, initguess=None,
                  grid_level=4, verbose=3, analysis=False, debug=False, rhocutoff=1e-7):
 
         self.mol = mol
@@ -195,6 +195,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
                 emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
                 emb_fock += self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
+                emb_fock = emb_fock / 2.
 
                 #Errors abound here. Doesn't converge to correct value.
                 if not self.diis is None and run_diis:
