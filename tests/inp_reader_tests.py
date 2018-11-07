@@ -79,7 +79,6 @@ ct_settings
  shift 0.3
  smearsigma 0.2
  initguess 1e
- includeghost
 end
 
 active_method caspt2[2,2]
@@ -356,7 +355,6 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['damp'], 0.1)
         self.assertEqual(sup_kwargs['shift'], 0.3)
         self.assertEqual(sup_kwargs['initguess'], '1e')
-        self.assertEqual(sup_kwargs['includeghost'], True)
 
         #System settings
         self.assertEqual(sup_kwargs['filename'], path + exp_set_filename)

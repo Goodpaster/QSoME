@@ -5,14 +5,17 @@ from argparse import ArgumentParser, RawDescriptionHelpFormatter
 from textwrap import dedent
 import sys
 import os
+from os.path import expanduser, expandvars, abspath, splitext
 
 import inp_reader, cluster_subsystem, cluster_supersystem
 
-from cluster_supersystem import time_method
 
-@time_method("Total Embedding Time")
-def main(filename):
-    in_obj = inp_reader.InpReader(filename)
+def main():
+
+    run_args = arguments()
+    file_path = abspath(expandvars(expanduser(run_args.inp_file)))
+
+    in_obj = inp_reader.InpReader(file_path)
     subsystems = []
     for i in range(len(in_obj.subsys_mols)):
         if i == 0:
@@ -38,8 +41,9 @@ def main(filename):
     supersystem.freeze_and_thaw()
     #supersystem.env_in_env_energy()
     supersystem.get_active_energy()
+    super_energy = supersystem.get_supersystem_energy()
 
-    total_energy = supersystem.get_supersystem_energy() - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
+    total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
 
     print("".center(80, '*'))
     print(f"Total Embedding Energy:     {total_energy}")
@@ -47,9 +51,38 @@ def main(filename):
 
     return total_energy
 
+    
+class arguments():
+
+    def __init__(self):
+        self.ppn       = None
+        self.pmem      = None
+        self.inp_file  = None
+        self.scr_dir   = None
+        self.get_args()
+
+    def get_args(self):
+ 
+        parser = ArgumentParser(description='Read Input File')
+
+        parser.add_argument('input_file', nargs=1, default=sys.stdin,
+                            help='The input file to submit.')
+        parser.add_argument('-x', '--scr', help='Scratch folder to use.',
+                            type=str)
+        parser.add_argument('-p', '--ppn', help='The processors per node to use.',
+                            type=int)
+        parser.add_argument('-m', '--pmem', help='Request a particular amount of '
+                            'memory per processor. Given in MB.', type=int)
+
+        args = parser.parse_args()
+
+        self.ppn = args.ppn
+        self.pmem = args.pmem
+        self.inp_file = args.input_file[0]
+        self.scf_dir = args.scr
+
+
 
 if __name__=='__main__':
-
-    fullpath = os.path.abspath(sys.argv[1])
-    main(fullpath)
+    main()
 

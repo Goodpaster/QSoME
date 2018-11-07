@@ -49,6 +49,8 @@ class InpReader:
         subsys.add_line_key('damp', type=float)         # SCF damping parameter
         subsys.add_line_key('shift', type=float)        # SCF level-shift parameter
         subsys.add_line_key('subcycles', type=int)      # number of subsys diagonalizations
+        subsys.add_line_key('diis', type=int)      # DIIS for subsystem (0 for off)
+        subsys.add_boolean_key('addlinkbasis')           #Add link H basis functions
 
         # add embedding block
         embed = reader.add_block_key('embed', required=True)
@@ -59,6 +61,7 @@ class InpReader:
         embed.add_line_key('diis', type=int)           # start DIIS (0 to turn off)
         embed.add_line_key('updatefock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
         embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        embed.add_boolean_key('writeorbs')
 
         # This section needs work.
         operator = embed.add_mutually_exclusive_group(dest='operator', required=True)
@@ -84,7 +87,6 @@ class InpReader:
         ct_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
         ct_settings.add_line_key('smearsigma', type=float)   # supermolecular dft smearing
         ct_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
-        ct_settings.add_boolean_key('includeghost') 
 
         reader.add_line_key('active_method', type=str, required=True)                  # Active method
         active_settings = reader.add_block_key('active_settings')
@@ -180,6 +182,8 @@ class InpReader:
             if self.inp.embed.updatefock:
                 self.supersystem_kwargs['ft_updatefock'] = self.inp.embed.updatefock
 
+            self.supersystem_kwargs['ft_writeorbs'] = self.inp.embed.writeorbs
+
         if self.inp.ct_settings:
             if self.inp.ct_settings.cycles:
                 self.supersystem_kwargs['cycles'] = self.inp.ct_settings.cycles
@@ -195,8 +199,6 @@ class InpReader:
                 self.supersystem_kwargs['smearsigma'] = self.inp.ct_settings.smearsigma
             if self.inp.ct_settings.initguess:
                 self.supersystem_kwargs['initguess'] = self.inp.ct_settings.initguess
-            if self.inp.ct_settings.includeghost:
-                self.supersystem_kwargs['includeghost'] = self.inp.ct_settings.includeghost
 
         if self.inp.grid:
             self.supersystem_kwargs['grid_level'] = self.inp.grid
@@ -240,6 +242,8 @@ class InpReader:
                 subsys_settings['shift'] = subsystem.shift
             if subsystem.subcycles:
                 subsys_settings['subcycles'] = subsystem.subcycles
+            if subsystem.diis:
+                subsys_settings['diis'] = subsystem.diis
             if subsystem.freeze:
                 subsys_settings['freeze'] = subsystem.freeze
             if subsystem.initguess:
@@ -271,12 +275,14 @@ class InpReader:
                 self.active_subsystem_kwargs['active_damp'] = self.inp.active_settings.damp
             if self.inp.active_settings.shift:
                 self.active_subsystem_kwargs['active_shift'] = self.inp.active_settings.shift
-             
-    
+
+
         
+    #Add link basis functions when mol objects are generated.
     def gen_mols(self):
 
         self.subsys_mols = []
+        subsys_ghost = []
         for subsystem in self.inp.subsystem:
             atom_list = subsystem.atoms
             mol = gto.Mole()
@@ -313,5 +319,53 @@ class InpReader:
                 mol.unit = subsystem.unit
             if self.inp.verbose:
                 mol.verbose = self.inp.verbose
-            mol.build(dump_input=False)
             self.subsys_mols.append(mol) 
+            subsys_ghost.append(nghost)
+
+        #Add ghost link atoms Assumes angstroms.
+        max_bond_dist = 1.76
+        for i in range(len(self.inp.subsystem)):
+            subsystem = self.inp.subsystem[i]
+            if subsystem.addlinkbasis:
+                mol1 = self.subsys_mols[i]
+                for j in range(i + 1, len(self.inp.subsystem)):
+                    mol2 = self.subsys_mols[j]
+                    link_atoms = []
+                    link_basis = {}
+                    for k in range(len(mol1.atom)):
+                        atom1_coord = mol1.atom[k][1]
+                        for m in range(len(mol2.atom)):
+                            atom2_coord = mol2.atom[m][1]
+                            atom_dist = bond_dist(atom1_coord, atom2_coord) 
+                            if atom_dist <= max_bond_dist:
+                                ghost_num = subsys_ghost[i] + 1
+                                if subsystem.basis:
+                                    new_atom, new_basis = gen_link_basis(mol1.atom[k], mol2.atom[m], subsystem.basis, ghost_num)
+                                else:
+                                    new_atom, new_basis = gen_link_basis(mol1.atom[k], mol2.atom[m], self.inp.basis, ghost_num)
+                                subsys_ghost[i] = ghost_num
+                                link_atoms.append(new_atom)
+                                link_basis.update(new_basis)
+                    #WIll not work if link atoms are explicitly defined.
+                    self.subsys_mols[i].atom = self.subsys_mols[i].atom + link_atoms
+                    self.subsys_mols[i].basis.update(link_basis)
+            self.subsys_mols[i].build(dump_input=False)
+
+
+def bond_dist(atom1_coord, atom2_coord):
+    total = 0.0
+    for i in range(len(atom1_coord)):
+        total += (atom2_coord[i] - atom1_coord[i]) ** 2.
+
+    return (total ** 0.5)
+
+def gen_link_basis(atom1, atom2, basis, ghost_num):
+    basis_atom = 'H'
+    ghost_name = f'ghost:{ghost_num}'
+    basis_x = (atom2[1][0] + atom1[1][0]) / 2.
+    basis_y = (atom2[1][1] + atom1[1][1]) / 2.
+    basis_z = (atom2[1][2] + atom1[1][2]) / 2.
+
+    atm = [ghost_name, (basis_x, basis_y, basis_z)]
+    basis = {ghost_name: gto.basis.load(basis, basis_atom)}
+    return (atm, basis)

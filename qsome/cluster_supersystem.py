@@ -5,6 +5,8 @@ import os
 from qsome import supersystem, custom_pyscf_methods
 from pyscf import gto, scf, dft, lib
 
+from pyscf.tools import cubegen
+
 import functools
 import time
 
@@ -33,11 +35,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, ct_method, proj_oper='huz', filename=None,
                  ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=1, 
-                 ft_setfermi=None, ft_initguess=None, ft_updatefock=0, 
-                 cycles=100, conv=1e-9, grad=None, damp=0, shift=0, 
-                 smearsigma=0, initguess=None, includeghost=False, 
+                 ft_setfermi=None, ft_initguess=None, ft_updatefock=0,
+                 ft_writeorbs=False, cycles=100, conv=1e-9, grad=None, 
+                 damp=0, shift=0, smearsigma=0, initguess=None, 
                  grid_level=4, verbose=3, analysis=False, debug=False, 
-                 rhocutoff=1e-20):
+                 rhocutoff=1e-7):
 
         self.subsystems = subsystems
         self.ct_method = ct_method
@@ -53,6 +55,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_cycles = ft_cycles
         self.ft_conv = ft_conv
         self.ft_grad = ft_grad
+        self.ft_writeorbs = ft_writeorbs
 
 
         self.ft_setfermi = ft_setfermi
@@ -68,7 +71,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.shift = shift
         self.smearsigma = smearsigma
         self.initguess = initguess
-        self.includeghost = includeghost
 
         # general system settings
         self.grid_level = grid_level
@@ -352,6 +354,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         nghost = 0
         mol.charge = 0
         mol.spin = 0
+        ghost_atom_list = []
+        ghost_basis_dict = {}
         if not (subsys1 is None and subsys2 is None):
             subsys_list = [subsys1, subsys2]
         else:
@@ -362,11 +366,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             mol.spin += subsystem.mol.spin
             for j in range(subsystem.mol.natm):
                 if 'ghost' in subsystem.mol.atom_symbol(j).lower():
-                    if self.includeghost:
-                        nghost += 1
-                        ghost_name = subsystem.mol.atom_symbol(j).split(':')[0] + f':{nghost}'
-                        atm.append([ghost_name, subsystem.mol.atom_coord(j)])
-                        mol.basis.update({ghost_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
+                    nghost += 1
+                    ghost_name = subsystem.mol.atom_symbol(j).split(':')[0] + f':{nghost}'
+                    ghost_atom_list.append([ghost_name, subsystem.mol.atom_coord(j)])
+                    ghost_basis_dict.update({ghost_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
                 else:
                     if i > 0:
                         atom_name = subsystem.mol.atom_symbol(j) + ':' + str(i)
@@ -374,6 +377,16 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         atom_name = subsystem.mol.atom_symbol(j)
                     atm.append([atom_name, subsystem.mol.atom_coord(j)])
                     mol.basis.update({atom_name: subsystem.mol.basis[subsystem.mol.atom_symbol(j)]})
+
+        for ghost_atom in ghost_atom_list:
+            already_there = False
+            for atom in atm:
+                if ghost_atom[1][0] == atom[1][0] and ghost_atom[1][1] == atom[1][1] and ghost_atom[1][2] == atom[1][2]:
+                    already_there = True
+
+            if not already_there:
+                atm.append(ghost_atom)
+                mol.basis.update({ghost_atom[0]: ghost_basis_dict[ghost_atom[0]]})
 
         mol.atom = atm
         mol.verbose = self.verbose
@@ -428,7 +441,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             subsystem = self.subsystems[i]
             subsystem.get_env_energy()
             print (f"Uncorrected Energy: {subsystem.env_energy}")
-        self.correct_env_energy()
+        #self.correct_env_energy()
 
 
     @time_method("Environment XC Correction")
@@ -492,8 +505,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     #vxc_sub_1 = np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
                     #vxc_sub_2 = np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
 
-                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1]))
-                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1]))
+                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* 0.5
+                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* 0.5
                     subsystem_1.env_energy += (emb_exc_comb_1 - emb_exc_1) * 2.
                     subsystem_2.env_energy += (emb_exc_comb_2 - emb_exc_2) * 2.
 
@@ -506,8 +519,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.subsystems[0].active_in_env_energy()
         print (f"Uncorrected Energy: {self.subsystems[0].active_energy}")
         #CORRECT ACTIVE SETTINGS.
-        act_elec_e = self.correct_active_energy()
-        #act_elec_e = 0.0
+        #act_elec_e = self.correct_active_energy()
+        act_elec_e = 0.0
         self.subsystems[0].active_energy += act_elec_e
 
         act_e = self.subsystems[0].active_energy
@@ -553,7 +566,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 emb_exc = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
                 emb_exc_a = custom_pyscf_methods.exc_rks(self.ct_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1] 
 
-                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1]))
+                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1])) #* 0.5
                 energy_corr += (emb_exc - emb_exc_a) * 2.
         
                 #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
@@ -630,6 +643,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fock[1] += V_b
 
         # to use the scf diis methods, must generate individual fock parts and recombine to make full fock matrix, because the projection operator is necessary to use diis correctly.
+        #CHANGED TO TEST DIIS METHODS
         if not self.ft_diis is None and diis:
             if self.ct_method[0] == 'u' or self.ct_method[:2] == 'ro':
                 self.fock[0] = self.ft_diis[0].update(self.fock[0])
@@ -772,21 +786,15 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         ft_err = 1.
         ft_iter = 0 
         last_cycle = False
-        while((ft_err > self.ft_conv and not last_cycle) and (ft_iter < self.ft_cycles)):
+        while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
-            if (ft_err <= self.ft_conv):
-                last_cycle = True
-                print ("DIIS TURNED OFF")
             ft_err = 0
             ft_iter += 1
             for i in range(len(self.subsystems)):
                 subsystem = self.subsystems[i]
                 if not subsystem.freeze:
                     if self.ft_updatefock >= i:
-                        if ft_iter <= 1 or last_cycle:
-                            self.update_fock(diis=False)
-                        else:
-                            self.update_fock(diis=True)
+                        self.update_fock(diis=True)
 
                     subsystem.update_fock()
 
@@ -810,7 +818,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     froz_veff[1] = (FAA[1] - subsystem.env_hcore - subsystem.env_V[1])
                     subsystem.update_emb_pot(froz_veff)
                     subsystem.update_proj_pot(self.proj_pot[i])
-                    # diagonalize here.
                     subsystem.diagonalize()
                     # save to file. could be done in larger cycles.
                     self.save_chkfile()
@@ -839,6 +846,31 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         if(ft_err > self.ft_conv):
             print("".center(80))
             print("Freeze-and-Thaw NOT converged".center(80))
+        #Correct for DIIS 
+        # cycle over subsystems
+        self.update_fock(diis=False)
+        for i in range(len(self.subsystems)):
+            subsystem = self.subsystems[i]
+            if not subsystem.freeze:
+                subsystem.update_fock()
+
+                self.update_proj_pot() #could use i as input and only get for that sub.
+                FAA = [None, None]
+                FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
+                FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
+         
+                SAA = self.smat[np.ix_(s2s[i], s2s[i])]
+                #I don't think this changes. Could probably set in the initialize.
+
+                froz_veff = [None, None]
+                froz_veff[0] = (FAA[0] - subsystem.env_hcore - subsystem.env_V[0])
+                froz_veff[1] = (FAA[1] - subsystem.env_hcore - subsystem.env_V[1])
+                subsystem.update_emb_pot(froz_veff)
+                subsystem.update_proj_pot(self.proj_pot[i])
+                subsystem.diagonalize(run_diis=False)
+                # save to file. could be done in larger cycles.
+                self.save_chkfile()
+                self.ft_fermi[i] = subsystem.fermi
 
         self.get_emb_subsys_elec_energy()
         # print subsystem energies 
@@ -848,3 +880,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print("".center(80))
         print("".center(80, '*'))
 
+        #Assumes closed shell.
+        if self.ft_writeorbs:
+            print('Writing Subsystem Env Densities'.center(80))
+            for i in range(len(self.subsystems)):
+                 cubename = os.path.splitext(self.filename)[0] + '_' + str(i+1) + '.cube'
+                 subsystem = self.subsystems[i]
+                 dmat = subsystem.dmat[0] + subsystem.dmat[1]
+                 cubegen.density(subsystem.mol, cubename, dmat) 

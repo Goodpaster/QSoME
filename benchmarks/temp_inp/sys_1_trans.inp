@@ -25,3 +25,4 @@ end
 
 basis 6-311g
 active_method ccsd
+grid 3

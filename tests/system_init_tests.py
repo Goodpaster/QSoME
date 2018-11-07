@@ -78,7 +78,6 @@ ct_settings
  shift 0.3
  smearsigma 0.2
  initguess 1e
- includeghost
 end
 
 active_method caspt2[2,2]
@@ -288,7 +287,6 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.shift, 0)
         self.assertEqual(supersystem.smearsigma, 0)
         self.assertEqual(supersystem.initguess, None)
-        self.assertEqual(supersystem.includeghost, False)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-20)
         self.assertEqual(supersystem.verbose, 3)
@@ -331,7 +329,6 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.shift, 0.3)
         self.assertEqual(supersystem.smearsigma, 0.2)
         self.assertEqual(supersystem.initguess, '1e')
-        self.assertEqual(supersystem.includeghost, True)
         self.assertEqual(supersystem.grid_level, 5)
         self.assertEqual(supersystem.rho_cutoff, 1e-4)
         self.assertEqual(supersystem.verbose, 1)
@@ -383,7 +380,6 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.shift, 0)
         self.assertEqual(supersystem.smearsigma, 0)
         self.assertEqual(supersystem.initguess, None)
-        self.assertEqual(supersystem.includeghost, False)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-20)
         self.assertEqual(supersystem.verbose, 3)
@@ -419,7 +415,7 @@ class TestSuperSystem(unittest.TestCase):
                           ft_conv=1e-1, ft_grad=1e-4, ft_diis=3, 
                           ft_setfermi=-0.1, ft_initguess='1e', ft_updatefock=1, 
                           cycles=3, conv=2, grad=4, damp=1, shift=2.1, 
-                          smearsigma=0.1, initguess='atom', includeghost=True, 
+                          smearsigma=0.1, initguess='atom', 
                           grid_level=2, rhocutoff=1e-2, verbose=1, 
                           analysis=True, debug=True)
 
@@ -442,7 +438,6 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.shift, 2.1)
         self.assertEqual(supersystem.smearsigma, 0.1)
         self.assertEqual(supersystem.initguess, 'atom')
-        self.assertEqual(supersystem.includeghost, True)
         self.assertEqual(supersystem.grid_level, 2)
         self.assertEqual(supersystem.rho_cutoff, 1e-2)
         self.assertEqual(supersystem.verbose, 1)

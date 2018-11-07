@@ -366,7 +366,7 @@ class TestFreezeAndThaw(unittest.TestCase):
             dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
         e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e  - sub1_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e  - sub1_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
 
         #unsure how to test...
@@ -410,7 +410,7 @@ class TestFreezeAndThaw(unittest.TestCase):
             dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
         e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
     #@unittest.skip("skip")
     def test_widesep(self):
@@ -469,7 +469,7 @@ class TestFreezeAndThaw(unittest.TestCase):
             dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
         e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e + sub2_env_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
     #@unittest.skip("test")
     def test_hyb_func(self):
@@ -511,7 +511,7 @@ class TestFreezeAndThaw(unittest.TestCase):
             dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
         e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-7)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-7)
 
     #@unittest.skip("test")
     def test_lda_func(self):
@@ -555,7 +555,7 @@ class TestFreezeAndThaw(unittest.TestCase):
             dm_env[1][np.ix_(s2s[i], s2s[i])] += supersystem.subsystems[i].dmat[1]
         e_coul = supersystem.ct_scf.energy_elec(dm=(dm_env[0] + dm_env[1]))[1] - sub_e_coul
 
-        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc() - e_coul, delta=1e-8)
+        self.assertAlmostEqual(sup_env_e, sub1_env_e - sub1_env_proj_e + sub2_env_e -sub2_env_proj_e + supersystem.mol.energy_nuc() - supersystem.subsystems[0].mol.energy_nuc() - supersystem.subsystems[1].mol.energy_nuc(), delta=1e-8)
 
     #@unittest.skip("skip")
     def test_readchk(self):

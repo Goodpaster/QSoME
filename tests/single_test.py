@@ -7,7 +7,8 @@
 he_fn = 'he.inp'
 system_1_react = '''
 subsystem
-He          0.00000       0.00000       0.00000
+He          1.00000       0.00000       1.00000
+addlinkbasis
 end
 
 subsystem
@@ -18,10 +19,11 @@ embed
  env_method pbe
  huzinaga
  cycles 20
+ writeorbs
 end
 
 basis 6-31g
-active_method hf
+active_method ccsd
 '''
 
 from qsome import inp_reader, cluster_supersystem, cluster_subsystem

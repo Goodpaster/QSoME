@@ -5,6 +5,8 @@ import re
 from qsome import subsystem, custom_pyscf_methods
 from pyscf import gto, scf, dft, cc
 from pyscf.cc import ccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
+from pyscf.scf import diis as scf_diis
+from pyscf.lib import diis as lib_diis
 import os
 
 from functools import reduce
@@ -19,8 +21,8 @@ from copy import deepcopy as copy
 class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def __init__(self, mol, env_method, filename=None, smearsigma=0, damp=0, 
-                 shift=0, subcycles=1, freeze=False, initguess=None,
-                 grid_level=4, verbose=3, analysis=False, debug=False, rhocutoff=1e-20):
+                 shift=0, subcycles=1, diis=0, freeze=False, initguess=None,
+                 grid_level=4, verbose=3, analysis=False, debug=False, rhocutoff=1e-7):
 
         self.mol = mol
         self.mol.basis = self.mol._basis # Always save basis as internal pyscf format
@@ -49,7 +51,18 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.analysis = analysis
         self.debug = debug
         self.init_env_scf()
-
+        self.diis_num = diis
+        if diis == 1:
+            #Use subtractive diis. Most simple
+            self.diis = lib_diis.DIIS()
+        elif diis == 2:
+            self.diis = scf_diis.CDIIS(self.env_scf)
+        elif diis == 3:
+            self.diis = scf_diis.EDIIS()
+        elif diis == 4:
+            self.diis = scf.diis.ADIIS()
+        else:
+            self.diis = None 
 
 
     def init_env_scf(self):
@@ -152,7 +165,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def save_orbitals(self):
         pass
 
-    def diagonalize(self):
+    def diagonalize(self, run_diis=True):
 
         # finish this method
         nA_a = self.fock[0].shape[0]
@@ -182,6 +195,22 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
                 emb_fock = self.fock[0] + self.emb_pot[0] + self.proj_pot[0]
                 emb_fock += self.fock[1] + self.emb_pot[1] + self.proj_pot[1]
+
+                #Errors abound here. Doesn't converge to correct value.
+                if not self.diis is None and run_diis:
+                    if self.diis_num == 1:
+                        emb_fock = self.diis.update(emb_fock)
+                    else:
+                        s1e = self.env_scf.get_ovlp()
+                        dm = self.dmat[0] + self.dmat[1]
+                        f = emb_fock
+                        mf = self.env_scf
+                        h1e = self.env_hcore + \
+                              (self.emb_pot[0] + self.emb_pot[1])/2. + \
+                              (self.proj_pot[0] + self.proj_pot[1])/2.
+                        vhf = self.env_V[0]
+                        emb_fock = self.diis.update(s1e, dm, f, mf, h1e, vhf)
+
                 E, C = sp.linalg.eigh(emb_fock, self.env_scf.get_ovlp())
                 self.env_mo_energy = [E, E]
                 self.env_mo_coeff = [C, C]
@@ -299,7 +328,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
                 self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1])) #Includes the nuclear
                 # this slows down execution.
-                self.active_dmat = self.active_scf.make_rdm1()
+                #self.active_dmat = self.active_scf.make_rdm1()
 
             elif self.active_method == 'ccsd' or self.active_method == 'ccsd(t)':
                 self.active_scf = scf.RHF(self.mol)
@@ -320,19 +349,24 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 ecc, t1, t2 = self.active_cc.kernel(eris=new_eris)
                 self.active_energy += ecc
                 if self.active_method == 'ccsd(t)':
-                    ecc_t = ccsd_t.kernel(self.active_cc, self.active_cc.ao2mo())
+                    ecc_t = ccsd_t.kernel(self.active_cc, new_eris)
                     self.active_energy += ecc_t
-                    l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
+                    #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
                     # this slows down execution.
-                    self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
+                    #self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
                 else:
+                    pass
                     # this slows down execution.
-                    self.active_dmat = self.active_cc.make_rdm1()
+                    #self.active_dmat = self.active_cc.make_rdm1()
 
                 # Convert to AO form
-                temp_dmat = copy(self.active_dmat)
-                ao_dmat = (reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T))))
-                self.active_dmat = ao_dmat
+                #temp_dmat = copy(self.active_dmat)
+                #ao_dmat = reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T)))
+                #print ("DMATS")
+                #print (self.active_dmat)
+                #print (ao_dmat)
+                #print (self.dmat[0] + self.dmat[1])
+                #self.active_dmat = ao_dmat
             else: #DFT
                 self.active_scf = scf.RKS(self.mol)
                 self.active_scf.xc = self.active_method
@@ -348,10 +382,10 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rks_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
                 self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1]))
                 #Slows down execution
-                self.active_dmat = self.active_scf.make_rdm1()
+                #self.active_dmat = self.active_scf.make_rdm1()
 
-            temp_dmat = copy(self.active_dmat)
-            self.active_dmat = [temp_dmat/2., temp_dmat/2.]
+            #temp_dmat = copy(self.active_dmat)
+            #self.active_dmat = [temp_dmat/2., temp_dmat/2.]
            
         return self.active_energy
  

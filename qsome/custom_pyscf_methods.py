@@ -73,7 +73,7 @@ def rhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None
     if h1e is None: h1e = mf.get_hcore()
     if vhf is None: vhf = mf.get_veff(mf.mol, dm)
     h1e = copy(h1e + proj_pot + emb_pot) #Add embedding potential to the core ham
-    vhf = copy(vhf)# + emb_pot) #Add embedding potential to the core ham
+    vhf = copy(vhf) #+ emb_pot) #Add embedding potential to the core ham
     e1 = np.einsum('ij,ji', h1e, dm).real
     e_coul = np.einsum('ij,ji', vhf, dm).real * .5
     logger.debug(mf, 'E_coul = %.15g', e_coul)

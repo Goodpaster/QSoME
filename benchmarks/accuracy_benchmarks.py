@@ -31,6 +31,7 @@ end
 
 basis 6-311g
 active_method ccsd
+grid 3
 '''
 
 sys_1_trans_fn = 'sys_1_trans.inp'
@@ -61,6 +62,7 @@ end
 
 basis 6-311g
 active_method ccsd
+grid 3
 '''
 
 sys_2_react_fn = 'sys_2_react.inp'
