@@ -7,25 +7,35 @@
 he_fn = 'he.inp'
 system_1_react = '''
 subsystem
-He          1.00000       0.00000       1.00000
+C 0.0000   -0.5689    0.0000
+H 0.0000   -1.2183    0.8824
+H 0.0000   -1.2183   -0.8824
 end
 
 subsystem
-He          1.5000       0.00000       0.00000
+C -1.2571    0.2844    0.000
+C 1.2571    0.2845    0.0000
+H -1.2969    0.9244    0.8873
+H -1.2967    0.9245   -0.8872
+H -2.1475   -0.3520   -0.0001
+H 2.1475   -0.3520    0.0000
+H 1.2968    0.9245    0.8872
+H 1.2968    0.9245   -0.8872
 end
 
 embed
+ initguess localsup
  env_method pbe
  huzinaga
- cycles 20
- writeorbs
+ cycles 50
 end
 
-basis 6-31g
-active_method ccsd
+basis cc-pVDZ
+active_method hf
+
 '''
 
-from qsome import inp_reader, cluster_supersystem, cluster_subsystem
+from qsome import inp_reader, cluster_subsystem, cluster_supersystem
 from pyscf import gto, scf, dft, cc
 
 import os

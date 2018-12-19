@@ -1,18 +1,22 @@
 
 subsystem
-He          1.00000       0.00000       1.00000
+He 0.0000   0.00   0.00
+addlinkbasis
 end
 
 subsystem
-He          1.5000       0.00000       0.00000
+He 0.0000   0.00   3.00
 end
 
 embed
  env_method pbe
  huzinaga
  cycles 20
- writeorbs
 end
 
 basis 6-31g
-active_method ccsd
+active_method hf
+
+active_settings
+ molpro
+end

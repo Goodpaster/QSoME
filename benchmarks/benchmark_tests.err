@@ -185,3 +185,26 @@ mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 /var/spool/torque/mom_priv/jobs/8843635.mesabim3.msi.umn.edu.SC: line 15: create: command not found
 <class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
 <class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock get_hcore energy_elec
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/8883758.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock get_hcore energy_elec
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9161440.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_hcore get_fock energy_elec
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9168379.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9169924.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9170978.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_hcore energy_elec get_fock
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9182887.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+=>> PBS: job killed: walltime 7228 exceeded limit 7200
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9320716.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_fock energy_elec get_hcore

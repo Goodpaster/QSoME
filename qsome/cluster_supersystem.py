@@ -3,9 +3,9 @@
 
 import os
 from qsome import supersystem, custom_pyscf_methods
-from pyscf import gto, scf, dft, lib
+from pyscf import gto, scf, dft, lib, lo
 
-from pyscf.tools import cubegen
+from pyscf.tools import cubegen, molden
 
 import functools
 import time
@@ -34,16 +34,20 @@ def time_method(function_name=None):
 class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, ct_method, proj_oper='huz', filename=None,
-                 ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=0, 
-                 ft_setfermi=None, ft_initguess=None, ft_updatefock=0,
+                 ft_cycles=100, ft_conv=1e-8, ft_grad=None, ft_diis=1, 
+                 ft_setfermi=None, ft_initguess='supmol', ft_updatefock=0,
                  ft_writeorbs=False, cycles=100, conv=1e-9, grad=None, 
                  damp=0, shift=0, smearsigma=0, initguess=None, 
                  grid_level=4, verbose=3, analysis=False, debug=False, 
-                 rhocutoff=1e-7):
+                 rhocutoff=1e-7, nproc=None, pmem=None, scr_dir=None):
 
         self.subsystems = subsystems
         self.ct_method = ct_method
         self.proj_oper = proj_oper
+
+        self.nproc = nproc
+        self.pmem= pmem
+        self.scr_dir = scr_dir
 
         if filename is None:
             filename = os.getcwd() + '/temp.inp'
@@ -91,13 +95,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         #There are other diis methods but these don't work with out method due to subsystem projection.
         if ft_diis == 0:
             self.ft_diis = None
-        #The scf diis methods do not work for a system where there is a projection potential separating subsystems. DIIS could be altered to allow for this to optimize.
-        #elif ft_diis == 1:
-        #    self.ft_diis = [scf.diis.DIIS(mf=self.ct_scf), scf.diis.DIIS(self.ct_scf)]
-        #elif ft_diis == 2:
-        #    self.ft_diis = [scf.diis.EDIIS(), scf.diis.EDIIS()]
-        #elif ft_diis == 3:
-        #    self.ft_diis = [scf.diis.ADIIS(), scf.diis.ADIIS()]
         else:
             self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
 
@@ -157,6 +154,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.sub2sup = sub2sup
 
     def init_ct_scf(self):
+        if (self.nproc and self.pmem):
+            self.mol.max_memory = (self.nproc * self.pmem)
         if self.ct_method[0] == 'u':
             if self.ct_method[1:] == 'hf':
                 scf_obj = scf.UHF(self.mol) 
@@ -216,15 +215,19 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.grids.build()
         self.ct_scf.grids = self.grids
         self.dmat = [None, None]
+        is_chkfile = False
 
         #Initiate all subsystem densities.
-        sup_calc = any([subsystem.initguess == 'supmol' or (subsystem.initguess is None and (self.ft_initguess == 'supmol' or self.initguess == 'supmol')) for subsystem in self.subsystems])
-        if sup_calc:
-            self.get_supersystem_energy()
-        s2s = self.sub2sup
         readchk_init = any([subsystem.initguess == 'readchk' or (subsystem.initguess is None and (self.ft_initguess == 'readchk' or self.initguess == 'readchk')) for subsystem in self.subsystems])
         if readchk_init:
             is_chkfile = self.read_chkfile()
+            if (np.any(self.mo_coeff) and np.any(self.mo_occ)):
+                self.get_supersystem_energy(readchk=True)
+        sup_calc = any([subsystem.initguess == 'supmol' or (subsystem.initguess is None and (self.ft_initguess == 'supmol' or self.initguess == 'supmol' or self.ft_initguess == 'localsup')) for subsystem in self.subsystems]) 
+        if sup_calc or (readchk_init and not is_chkfile):
+            self.get_supersystem_energy()
+        s2s = self.sub2sup
+
         for i in range(len(self.subsystems)):
             dmat = [0.0, 0.0]
             subsystem = self.subsystems[i]
@@ -233,7 +236,82 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 if self.ft_initguess == 'supmol':
                     dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
                     dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
+                    temp_smat = np.copy(self.ct_scf.get_ovlp())
+                    temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
+                    num_e_a = np.trace(np.dot(dmat[0], temp_sm))
+                    num_e_b = np.trace(np.dot(dmat[1], temp_sm))
+                    dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                    dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                     subsystem.init_density(dmat)
+
+                elif self.ft_initguess == 'localsup':
+                    #C = lo.orth_ao(self.ct_scf, 'meta_lowdin')
+                    #C = lo.orth_ao(self.mol, 'lowdin')
+                    #C = lo.orth_ao(self.ct_scf, 'nao')
+                    #mo = np.linalg.solve(C, self.ct_scf.mo_coeff)
+                    #mo_alpha = self.ct_scf.mo_coeff[:, :self.mol.nelec[0]]
+                    #mo_alpha = lo.Boys(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[0]])
+                    #mo_beta = lo.Boys(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[1]])
+                    #mo_alpha = lo.ER(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[0]])
+                    #mo_beta = lo.ER(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[1]])
+                    mo_alpha = lo.PM(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[0]])
+                    mo_beta = lo.PM(self.mol).kernel(self.ct_scf.mo_coeff[:, :self.mol.nelec[1]])
+                    #molden.from_mo(self.mol, 'boys.molden', mo)
+                    #mo = lo.ER(self.mol).kernel(self.ct_scf.mo_coeff)
+                    #molden.from_mo(self.mol, 'er.molden', mo)
+                    #mo = lo.PM(self.mol).kernel(self.ct_scf.mo_coeff)
+                    #molden.from_mo(self.mol, 'pm.molden', mo)
+                    #mo = lo.ibo.ibo(self.mol, self.ct_scf.mo_occ) 
+                    #temp_dm = self.ct_scf.make_rdm1(mo, self.ct_scf.mo_occ)
+                    #temp_dm = self.dmat[0] + self.dmat[1]
+
+                    #Determine which subsystem the MOs belong to
+                    temp_smat = np.copy(self.ct_scf.get_ovlp())
+                    #temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
+                    #sub_smat = np.zeros_like(temp_smat)
+                    #sub_smat[np.ix_(s2s[i], s2s[i])] = temp_sm
+                    #for j in range(len(mo)):
+                    #    one_mo = np.zeros_like(mo)
+                    #    one_mo[:,j] = np.copy(mo[:,j])
+                    #    #one_mo[j] = np.copy(mo[j])
+                    #    #one_mo = np.copy(mo[:,j])
+                    #    print (np.trace(np.dot(one_mo, sub_smat)))
+                    #sub_mo = np.zeros_like(self.ct_scf.mo_coeff)
+                    sub_dmat = 0.
+                    for j in range(self.mol.nelec[0]):
+                        portion = [0 for i in range(len(self.subsystems))]
+                        for n in range(len(self.subsystems)):
+                            temp_smat = np.copy(self.ct_scf.get_ovlp())[np.ix_(s2s[n], s2s[n])]
+                            if n > 0:
+                                dl_n = np.outer(mo_alpha[self.subsystems[n-1].mol.nao_nr():,j].T, mo_alpha[self.subsystems[n-1].mol.nao_nr():,j])
+                                portion[n] = (np.trace(np.dot(dl_n, temp_smat)))
+                            else:
+                                dl = np.outer(mo_alpha[:self.subsystems[n].mol.nao_nr(),j].T, mo_alpha[:self.subsystems[n].mol.nao_nr(),j])
+                                portion[n] = (np.trace(np.dot(dl, temp_smat)))
+                        if portion[i] >= max(portion):
+                            #sub_mo[:,j] += mo_alpha[:,j]
+                            if i > 0:
+                                sub_dmat += (dl_n * 2.)
+                            else:
+                                sub_dmat += (dl * 2.)
+                    #print(sub_mo)
+                    #temp_dm = self.ct_scf.make_rdm1(sub_mo, self.ct_scf.mo_occ)[np.ix_(s2s[i], s2s[i])]
+                    #temp_dm = sub_dmat[np.ix_(s2s[i], s2s[i])]
+                    temp_dm = sub_dmat
+                    #print ("SEP")    
+                    ##One way of determining electrons.
+                    temp_smat = np.copy(self.ct_scf.get_ovlp())
+                    temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
+                    num_e = np.trace(np.dot(temp_dm, temp_sm))
+                    print (f"Subsystem {i} Electrion Number")
+                    print (num_e)
+                    temp_dm *= subsystem.mol.nelectron / num_e
+                    num_e = np.trace(np.dot(temp_dm, temp_sm))
+                    print (num_e)
+                    print ()
+
+                    loc_dm = [temp_dm/2., temp_dm/2.] 
+                    subsystem.init_density(loc_dm)
 
                 elif self.ft_initguess == 'readchk':
                     if is_chkfile:
@@ -242,41 +320,50 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                             dmat[1] = np.dot((subsystem.env_mo_coeff[1] * subsystem.env_mo_occ[1]), subsystem.env_mo_coeff[1].transpose().conjugate())
                             subsystem.init_density(dmat)
                         elif (np.any(self.mo_coeff) and np.any(self.mo_occ)):
-                            sup_dmat[0] = np.dot((self.mo_coeff[0] * self.mo_occ[0]), self.mo_occ[0].transpose().conjugate())
-                            sup_dmat[1] = np.dot((self.mo_coeff[1] * self.mo_occ[1]), self.mo_occ[1].transpose().conjugate())
+                            sup_dmat = [None, None]
+                            sup_dmat[0] = np.dot((self.mo_coeff[0] * self.mo_occ[0]), self.mo_coeff[0].transpose().conjugate())
+                            sup_dmat[1] = np.dot((self.mo_coeff[1] * self.mo_occ[1]), self.mo_coeff[1].transpose().conjugate())
                             dmat[0] = sup_dmat[0][np.ix_(s2s[i], s2s[i])]
                             dmat[1] = sup_dmat[1][np.ix_(s2s[i], s2s[i])]
                             subsystem.init_density(dmat)
                         else:
-                            temp_dmat = self.ct_scf.get_init_guess()
-                            if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                                t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                                temp_dmat = t_d
-                            dmat[0] = temp_dmat[0][np.ix_(s2s[i], s2s[i])]
-                            dmat[1] = temp_dmat[1][np.ix_(s2s[i], s2s[i])]
+                            dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
+                            dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
                             subsystem.init_density(dmat)
                     else:
-                        temp_dmat = self.ct_scf.get_init_guess()
-                        if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                            t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                            temp_dmat = t_d
-                        dmat[0] = temp_dmat[0][np.ix_(s2s[i], s2s[i])]
-                        dmat[1] = temp_dmat[1][np.ix_(s2s[i], s2s[i])]
+                        dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
+                        dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
                         subsystem.init_density(dmat)
-                else:
-                    if self.ft_initguess != None:
-                        temp_dmat = subsystem.env_scf.get_init_guess(key=self.ft_initguess)
-                    else:
-                        temp_dmat = subsystem.env_scf.get_init_guess()
+
+                elif self.ft_initguess == 'submol':
+                    subsystem.env_scf.kernel()
+                    temp_dmat = subsystem.env_scf.make_rdm1() 
                     if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
                         t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
                         temp_dmat = t_d
                     subsystem.init_density(temp_dmat)
+                    
+                else:
+                    if self.ft_initguess in ['atom', '1e', 'minao']:
+                        temp_dmat = subsystem.env_scf.get_init_guess(key=self.ft_initguess)
+                        if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
+                            t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
+                            temp_dmat = t_d
+                            subsystem.init_density(temp_dmat)
 
             elif subsystem.initguess == 'supmol': 
                 dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
                 dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
                 subsystem.init_density(dmat)
+
+            elif subsystem.initguess == 'submol':
+               subsystem.env_scf.kernel()
+               temp_dmat = subsystem.env_scf.make_rdm1() 
+               if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
+                   t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
+                   temp_dmat = t_d
+               subsystem.init_density(temp_dmat)
+
             elif subsystem.initguess == 'readchk':
                 if is_chkfile:
                     if (np.any(subsystem.env_mo_coeff)  and np.any(subsystem.env_mo_occ)):
@@ -291,30 +378,13 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         dmat[1] = sup_dmat[1][np.ix_(s2s[i], s2s[i])]
                         subsystem.init_density(dmat)
                     else:
-                        #temp_dmat = self.ct_scf.get_init_guess()
-                        temp_dmat = subsystem.env_scf.get_init_guess()
-                        if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                            t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                            temp_dmat = t_d
-                        #dmat[0] = temp_dmat[0][np.ix_(s2s[i], s2s[i])]
-                        #dmat[1] = temp_dmat[1][np.ix_(s2s[i], s2s[i])]
-                        #subsystem.init_density(dmat)
-                        subsystem.init_density(temp_dmat)
-            else:
-                if subsystem.initguess != None:
-                    #temp_dmat = self.ct_scf.get_init_guess(key=subsystem.initguess)
-                    temp_dmat = subsystem.env_scf.get_init_guess(key=subsystem.initguess)
+                        dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
+                        dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
+                        subsystem.init_density(dmat)
                 else:
-                    #temp_dmat = self.ct_scf.get_init_guess()
-                    temp_dmat = subsystem.env_scf.get_init_guess()
-
-                if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                    t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                    temp_dmat = t_d
-                #dmat[0] = temp_dmat[0][np.ix_(s2s[i], s2s[i])]
-                #dmat[1] = temp_dmat[1][np.ix_(s2s[i], s2s[i])]
-                #subsystem.init_density(dmat)
-                subsystem.init_density(temp_dmat)
+                    dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
+                    dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
+                    subsystem.init_density(dmat)
 
             # set core embedding hamiltonian.
             sub_hcore = self.hcore[np.ix_(s2s[i], s2s[i])].copy()
@@ -395,7 +465,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         return mol
 
     @time_method("Supersystem Energy")
-    def get_supersystem_energy(self):
+    def get_supersystem_energy(self, readchk=False):
 
         if self.ct_energy is None:
             print ("".center(80,'*'))
@@ -411,9 +481,35 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     ft_dmat[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
     
                 self.ct_scf.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
+            elif readchk:
+                if self.ct_method[0] != 'u' and self.ct_method[:2] != 'ro':
+                    init_guess = self.ct_scf.make_rdm1(mo_coeff=self.mo_coeff[0], mo_occ=(self.mo_occ[0] + self.mo_occ[1]))
+                else:
+                    init_guess = self.ct_scf.make_rdm1(mo_coeff=self.mo_coeff, mo_occ=self.mo_occ)
+                self.ct_scf.scf(dm0=(init_guess))
             else:
                 self.ct_scf.scf()
             self.dmat = self.ct_scf.make_rdm1()
+
+
+            #One way of determining electrons.
+            temp_dmat = np.copy(self.dmat)
+            temp_dmat[:self.subsystems[0].mol.nao_nr(), :self.subsystems[0].mol.nao_nr()] = 0.0
+            temp_dmat[self.subsystems[0].mol.nao_nr():, self.subsystems[0].mol.nao_nr():] = 0.0
+            temp_smat = np.copy(self.ct_scf.get_ovlp())
+            temp_smat[:self.subsystems[0].mol.nao_nr(), :self.subsystems[0].mol.nao_nr()] = 0.0
+            temp_smat[self.subsystems[0].mol.nao_nr():, self.subsystems[0].mol.nao_nr():] = 0.0
+            print ("Interaction Electrion Number")
+            print (np.trace(np.dot(temp_dmat, self.ct_scf.get_ovlp())))
+            print ()
+
+            #A localization way
+            mull_pop = self.ct_scf.mulliken_pop(verbose=3)[1]
+            print ("Mull 1")
+            print (np.sum(mull_pop[:self.subsystems[0].mol.natm]))
+            print ("Mull 2")
+            print (np.sum(mull_pop[self.subsystems[0].mol.natm:]))
+
             if self.dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
                 t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
                 self.dmat = t_d
@@ -797,6 +893,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         self.update_fock(diis=True)
 
                     subsystem.update_fock()
+                    #print (self.fock)
 
                     #this will slow down calculation. 
                     if self.analysis:

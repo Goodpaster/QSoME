@@ -1,0 +1,22 @@
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326273.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/submol_supdiis_fock0.py", line 103, in <module>
+    in_obj = inp_reader.InpReader(inp_path + sys_1_react_fn)
+NameError: name 'inp_reader' is not defined
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326303.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/submol_supdiis_fock0.py", line 89, in <module>
+    shutil.rmtree(inp_path)    
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/shutil.py", line 480, in rmtree
+    _rmtree_safe_fd(fd, path, onerror)
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/shutil.py", line 438, in _rmtree_safe_fd
+    onerror(os.unlink, fullname, sys.exc_info())
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/shutil.py", line 436, in _rmtree_safe_fd
+    os.unlink(name, dir_fd=topfd)
+FileNotFoundError: [Errno 2] No such file or directory: 'sys_1_react.inp'
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326338.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_hcore energy_elec get_fock

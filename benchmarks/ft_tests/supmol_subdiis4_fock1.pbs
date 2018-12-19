@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N benchmarks
+#PBS -l nodes=1:ppn=8
+#PBS -l walltime=02:00:00
+#PBS -l pmem=2500mb
+#PBS -e /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/supmol_subdiis4_fock1.err
+#PBS -o /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/supmol_subdiis4_fock1.log
+#PBS -q mesabi
+
+module load python
+
+export PYTHONPATH="${PYTHONPATH}:/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME"
+ create scratch directory
+scratch=/scratch.global/graha682/benchmarks
+if [[ -d $scratch ]]; then
+    i=0
+    while [[ -d $scratch-$i ]]; do
+        let i++
+    done
+    scratch=$scratch-$i
+fi
+rm -rf $scratch 2> /dev/null
+mkdir -p $scratch
+cd $scratch
+
+python /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/supmol_subdiis4_fock1.py > /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/supmol_subdiis4_fock1.out
+
+#cd ${PBS_O_WORKDIR}
+#rm -rf $scratch 2> /dev/null

@@ -45,7 +45,7 @@ class InpReader:
         subsys.add_line_key('smearsigma', type=float)   # fermi smearing sigma  
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         subsys.add_boolean_key('freeze')                        
-        subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol', 'submol'))            # Set initial guess supmol does supermolecular first and localizes.
         subsys.add_line_key('damp', type=float)         # SCF damping parameter
         subsys.add_line_key('shift', type=float)        # SCF level-shift parameter
         subsys.add_line_key('subcycles', type=int)      # number of subsys diagonalizations
@@ -60,7 +60,7 @@ class InpReader:
         embed.add_line_key('env_method', type=str)      
         embed.add_line_key('diis', type=int)           # start DIIS (0 to turn off)
         embed.add_line_key('updatefock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
-        embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))            # Set initial guess supmol does supermolecular first and localizes.
         embed.add_boolean_key('writeorbs')
 
         # This section needs work.
@@ -95,6 +95,8 @@ class InpReader:
         active_settings.add_line_key('cycles', type=int)       
         active_settings.add_line_key('damp', type=float)         # SCF damping parameter
         active_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
+        active_settings.add_boolean_key('molpro')     # Use Molpro
+        active_settings.add_boolean_key('writeorbs')     # write orbitals
 
         cas_settings = reader.add_block_key('cas_settings')         # CAS method settings
         cas_settings.add_boolean_key('localize_orbitals')           # Localize orbitals prior to CAS
@@ -173,7 +175,7 @@ class InpReader:
                 self.supersystem_kwargs['ft_conv'] = self.inp.embed.conv
             if self.inp.embed.grad:
                 self.supersystem_kwargs['ft_grad'] = self.inp.embed.grad
-            if self.inp.embed.diis:
+            if not self.inp.embed.diis is None:
                 self.supersystem_kwargs['ft_diis'] = self.inp.embed.diis
             if self.inp.embed.setfermi:
                 self.supersystem_kwargs['ft_setfermi'] = self.inp.embed.setfermi
@@ -242,7 +244,7 @@ class InpReader:
                 subsys_settings['shift'] = subsystem.shift
             if subsystem.subcycles:
                 subsys_settings['subcycles'] = subsystem.subcycles
-            if subsystem.diis:
+            if not subsystem.diis is None:
                 subsys_settings['diis'] = subsystem.diis
             if subsystem.freeze:
                 subsys_settings['freeze'] = subsystem.freeze
@@ -275,6 +277,9 @@ class InpReader:
                 self.active_subsystem_kwargs['active_damp'] = self.inp.active_settings.damp
             if self.inp.active_settings.shift:
                 self.active_subsystem_kwargs['active_shift'] = self.inp.active_settings.shift
+
+            self.active_subsystem_kwargs['use_molpro'] = self.inp.active_settings.molpro
+            self.active_subsystem_kwargs['writeorbs'] = self.inp.active_settings.writeorbs
 
 
         
@@ -327,6 +332,8 @@ class InpReader:
         max_bond_dist = 1.76
         for i in range(len(self.inp.subsystem)):
             subsystem = self.inp.subsystem[i]
+            ghAtms = []
+            ghost_link = 'H'
             if subsystem.addlinkbasis:
                 mol1 = self.subsys_mols[i]
                 for j in range(i + 1, len(self.inp.subsystem)):
@@ -345,10 +352,12 @@ class InpReader:
                                 else:
                                     new_atom, new_basis = gen_link_basis(mol1.atom[k], mol2.atom[m], self.inp.basis, ghost_num)
                                 subsys_ghost[i] = ghost_num
+                                ghAtms.append(ghost_link)
                                 link_atoms.append(new_atom)
                                 link_basis.update(new_basis)
                     #WIll not work if link atoms are explicitly defined.
                     self.subsys_mols[i].atom = self.subsys_mols[i].atom + link_atoms
+                    self.subsys_mols[i].ghosts += ghAtms
                     self.subsys_mols[i].basis.update(link_basis)
             self.subsys_mols[i].build(dump_input=False)
 

@@ -1,0 +1,12 @@
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326269.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/submol_subdiis2_fock1.py", line 105, in <module>
+    in_obj = inp_reader.InpReader(inp_path + sys_1_react_fn)
+NameError: name 'inp_reader' is not defined
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326299.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326334.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_hcore get_fock energy_elec

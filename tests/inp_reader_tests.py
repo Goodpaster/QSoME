@@ -589,6 +589,7 @@ class TestGenMols(unittest.TestCase):
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
         self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
+        print (mols[0].basis)
         self.assertEqual(mols[0].basis['ghost:1'], c_pyscf_basis['C'])
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)

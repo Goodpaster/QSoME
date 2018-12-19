@@ -1,0 +1,16 @@
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326276.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/supmol_subdiis2_fock1.py", line 90, in <module>
+    shutil.rmtree(inp_path)    
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/shutil.py", line 484, in rmtree
+    onerror(os.rmdir, path, sys.exc_info())
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/shutil.py", line 482, in rmtree
+    os.rmdir(path)
+OSError: [Errno 39] Directory not empty: '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/temp_inp/'
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326306.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326341.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+<class 'pyscf.gto.mole.Mole'> does not have attributes  ghosts
+<class 'pyscf.scf.hf.RHF'> does not have attributes  get_hcore energy_elec get_fock

@@ -93,22 +93,21 @@ class TestSuperSystemDensity(unittest.TestCase):
         if supersystem.initguess != None:
             pyscf_dmat = sup_scf.get_init_guess(key=supersystem.initguess)
         else:
-            pyscf_dmat = sup_scf.get_init_guess()
+            pyscf_dmat = sup_scf.make_rdm1()
         self.assertTrue(np.array_equal(supersystem.dmat[0] + supersystem.dmat[1], pyscf_dmat))
 
         if subsystems[0].initguess != None:
             pyscf_dmat = subsystem[0].env_scf.get_init_guess(key=subsystems[0].initguess)
         else:
-            pyscf_dmat = subsystems[0].env_scf.get_init_guess()
-        self.assertTrue(np.array_equal(subsystems[0].dmat[0] + subsystems[0].dmat[1], pyscf_dmat))
+            pyscf_dmat = sup_scf.make_rdm1()[np.ix_(supersystem.sub2sup[0], supersystem.sub2sup[0])]
+        self.assertTrue(np.allclose(subsystems[0].dmat[0] + subsystems[0].dmat[1], pyscf_dmat))
 
         if subsystems[1].initguess != None:
             pyscf_dmat = subsystems[1].env_scf.get_init_guess(key=subsystems[1].initguess)
         else:
-            pyscf_dmat = subsystems[1].env_scf.get_init_guess()
+            pyscf_dmat = sup_scf.make_rdm1()[np.ix_(supersystem.sub2sup[1], supersystem.sub2sup[1])]
+        self.assertTrue(np.allclose(subsystems[1].dmat[0] + subsystems[1].dmat[1], pyscf_dmat))
 
-        self.assertTrue(np.array_equal(subsystems[1].dmat[0] + subsystems[1].dmat[1], pyscf_dmat))
-         
     #@unittest.skip('skipping supermol calc')         
     def test_supmol_init(self):
         subsystems = []
@@ -168,9 +167,9 @@ class TestSuperSystemDensity(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             ct_method, **supersystem_kwargs)
 
-        self.assertTrue(np.array_equal(supersystem.dmat, old_dmat))
-        self.assertTrue(np.array_equal(supersystem.subsystems[0].dmat, old_dmat_1))
-        self.assertTrue(np.array_equal(supersystem.subsystems[1].dmat, old_dmat_2))
+        self.assertTrue(np.allclose(supersystem.dmat, old_dmat))
+        self.assertTrue(np.allclose(supersystem.subsystems[0].dmat, old_dmat_1))
+        self.assertTrue(np.allclose(supersystem.subsystems[1].dmat, old_dmat_2))
 
 
     def tearDown(self):

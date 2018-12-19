@@ -1,3 +1,14 @@
-There is something wrong with the high level calculation, but I can't get it working properly and testing is not possible because it does not show up at large seperation. 
+Tests to complete:
 
-The problem is an issue in the kernel where the high level is calculated. One of the potentials may be incorrect.
+Reading input
+Test freeze and thaw
+    Different methods
+    Ghost atoms
+    Different DIIS algorithms
+Test active method energy
+    Differente methods
+    ghost atoms
+Other ouput
+    Densitoes
+    FCIDUMP
+ 

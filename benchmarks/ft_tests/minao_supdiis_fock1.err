@@ -1,0 +1,11 @@
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326267.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+Traceback (most recent call last):
+  File "/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/ft_tests/minao_supdiis_fock1.py", line 101, in <module>
+    in_obj = inp_reader.InpReader(inp_path + sys_1_react_fn)
+NameError: name 'inp_reader' is not defined
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326297.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+/var/spool/torque/mom_priv/jobs/9326332.mesabim3.msi.umn.edu.SC: line 15: create: command not found
+=>> PBS: job killed: walltime 7215 exceeded limit 7200

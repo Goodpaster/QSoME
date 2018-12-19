@@ -14,6 +14,9 @@ def main():
 
     run_args = arguments()
     file_path = abspath(expandvars(expanduser(run_args.inp_file)))
+    nproc = run_args.ppn
+    pmem = run_args.pmem
+    scr_dir = run_args.scr_dir
 
     in_obj = inp_reader.InpReader(file_path)
     subsystems = []
@@ -22,6 +25,9 @@ def main():
             mol = in_obj.subsys_mols[i]
             env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
             env_kwargs = in_obj.env_subsystem_kwargs[i]
+            env_kwargs['nproc'] = nproc
+            env_kwargs['pmem'] = pmem
+            env_kwargs['scr_dir'] = scr_dir
             active_method = in_obj.active_subsystem_kwargs.pop('active_method')
             active_kwargs = in_obj.active_subsystem_kwargs
             active_kwargs.update(env_kwargs)
@@ -36,6 +42,9 @@ def main():
 
     ct_method = in_obj.supersystem_kwargs.pop('ct_method')
     supersystem_kwargs = in_obj.supersystem_kwargs
+    supersystem_kwargs['nproc'] = nproc
+    supersystem_kwargs['pmem'] = pmem
+    supersystem_kwargs['scr_dir'] = scr_dir
     supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
         ct_method, **supersystem_kwargs)
     supersystem.freeze_and_thaw()
@@ -72,7 +81,7 @@ class arguments():
         parser.add_argument('-p', '--ppn', help='The processors per node to use.',
                             type=int)
         parser.add_argument('-m', '--pmem', help='Request a particular amount of '
-                            'memory per processor. Given in MB.', type=int)
+                            'memory per processor. Given in MB.', type=float)
 
         args = parser.parse_args()
 
