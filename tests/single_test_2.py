@@ -7,8 +7,8 @@
 he_fn = 'he.inp'
 system_1_react = '''
 subsystem
-He 0.0000   0.00   0.00
-addlinkbasis
+Li 0.0000   0.00   0.00
+charge +1
 end
 
 subsystem
@@ -22,11 +22,8 @@ embed
 end
 
 basis 6-31g
-active_method hf
+active_method fcidump
 
-active_settings
- molpro
-end
 '''
 
 from qsome import inp_reader, cluster_subsystem

@@ -228,7 +228,7 @@ def generate_molpro_input(mol, method, work_dir, input_file, h0_filename, output
         else:
             method_string += 'ccsd(t)'
     if (method == 'fcidump'):
-        method_string = '{rhf;noenest}\n{fci;dump}\n'
+        method_string = '{rhf;noenest}\n{fci;core;dump}\n'
 
     
 

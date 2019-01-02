@@ -3,7 +3,7 @@
 
 import re
 from qsome import subsystem, custom_pyscf_methods, molpro_calc, comb_diis
-from pyscf import gto, scf, dft, cc
+from pyscf import gto, scf, dft, cc, tools
 from pyscf.cc import ccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
@@ -360,6 +360,20 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     pass
             elif self.active_method[:2] == 'ro': 
                 pass
+            elif self.active_method == 'fcidump':
+                self.active_scf = scf.RHF(self.mol)
+                self.active_scf.conv_tol = self.active_conv
+                self.active_scf.conv_tol_grad = self.active_grad
+                self.active_scf.max_cycle = self.active_cycles
+                self.active_scf.level_shift = self.active_shift
+                self.active_scf.damp = self.active_damp
+                self.active_scf.get_hcore = lambda *args, **kwargs: self.env_hcore
+                self.active_scf.get_fock = lambda *args, **kwargs: custom_pyscf_methods.rhf_get_fock(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2.,(self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_scf.energy_elec = lambda *args, **kwargs: custom_pyscf_methods.rhf_energy_elec(self.active_scf, (self.emb_pot[0] + self.emb_pot[1])/2., (self.proj_pot[0] + self.proj_pot[1])/2., *args, **kwargs)
+                self.active_energy = self.active_scf.kernel(dm0=(self.dmat[0] + self.dmat[1])) #Includes the nuclear
+                fcidump_filename = os.path.splitext(self.filename)[0] + '.fcidump'
+                print (f"FCIDUMP GENERATED AT {fcidump_filename}")
+                tools.fcidump.from_scf(self.active_scf, os.path.splitext(self.filename)[0] + '.fcidump', tol=1e-20)
             else: 
                 if self.active_method[0] == 'r':
                     self.active_method = self.active_method[1:]
