@@ -24,6 +24,10 @@ end
 basis 6-31g
 active_method fcidump
 
+active_settings
+ molpro
+end
+
 '''
 
 from qsome import inp_reader, cluster_subsystem
