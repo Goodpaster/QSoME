@@ -30,7 +30,7 @@ class InpReader:
         Dictionary of settings for creating ClusterEnvSubSystem object.
     active_settings_kwargs : dict
         Dictionary of settings for creating ClusterActiveSubSystem object.
-    subsystem_mols : list
+    subsys_mols : list
         A list of subsystem pyscf Mol objects
     
     Methods
@@ -61,7 +61,7 @@ class InpReader:
         self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
         self.active_subsystem_kwargs = self.get_active_subsystem_kwargs()
-        self.subsystem_mols = self.gen_mols()
+        self.subsys_mols = self.gen_mols()
 
     def read_input(self, filename):
         """Reads a formatted input file, generates an InputReader object.
