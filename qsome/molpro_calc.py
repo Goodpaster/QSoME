@@ -125,6 +125,8 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
     if method == 'fcidump':
         FCIDUMP = scr_dir + "/" + "FCIDUMP"
         copyfile(FCIDUMP, (os.path.splitext(input_file)[0] + '.fcidump'))
+        print (f"FCIDUMP ORIGINAL FILE: {FCIDUMP}")
+        print (f"FCIDUMP file location: {os.path.splitext(input_file)[0] + '.fcidump'}")
     if 'fehler' in proc_results or 'improper' in proc_results:
         sys.stderr.write('molpro tempfiles in %s\n'%scr_dir)
         raise RuntimeError('molpro fail as:\n' + proc_results)
@@ -136,7 +138,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
         dat1 = dat.splitlines()
         nums = []
         elec_e = []
-        if method == 'hf' or method == 'hartree-fock':
+        if method == 'hf' or method == 'hartree-fock' or method == 'fcidump':
             for i in range((len(dat1)-10), len(dat1), 1):
                 if "HF-SCF" in dat1[i]:
                     elec_e = dat1[i+1].split()

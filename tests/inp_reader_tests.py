@@ -514,7 +514,7 @@ class TestGenMols(unittest.TestCase):
     def test_def_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
-        mols = in_obj.subsys_mols
+        mols = in_obj.subsystem_mols
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
         self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
@@ -543,7 +543,7 @@ class TestGenMols(unittest.TestCase):
     def test_exp_set_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + exp_set_filename)
-        mols = in_obj.subsys_mols
+        mols = in_obj.subsystem_mols
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
         self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
@@ -572,7 +572,7 @@ class TestGenMols(unittest.TestCase):
     def test_partial_ghost_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + partial_ghost_filename)
-        mols = in_obj.subsys_mols
+        mols = in_obj.subsystem_mols
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
         self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
@@ -598,7 +598,7 @@ class TestGenMols(unittest.TestCase):
     def test_ghost_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + ghost_filename)
-        mols = in_obj.subsys_mols
+        mols = in_obj.subsystem_mols
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
         self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))
@@ -640,7 +640,7 @@ class TestGenMols(unittest.TestCase):
     def test_mixed_basis_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + mixed_basis_filename)
-        mols = in_obj.subsys_mols
+        mols = in_obj.subsystem_mols
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
         self.assertEqual(mols[0].atom[0][0], curr_atom.group(1))

@@ -520,6 +520,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.save_chkfile()
             self.ct_energy = self.ct_scf.energy_tot()
             print("".center(80,'*'))
+            if self.ft_writeorbs:
+                print('Writing Supersystem Env Densities'.center(80))
+                cubename = os.path.splitext(self.filename)[0] + '_super' + '.cube'
+                dmat = self.dmat[0] + self.dmat[1]
+                cubegen.density(self.ct_scf.mol, cubename, dmat) 
+        print(f"KS-DFT  Energy: {self.ct_energy}  ".center(80))
         return self.ct_energy
 
     @time_method("Subsystem Energies")
@@ -709,8 +715,13 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.env_energy = self.ct_scf.energy_tot(dm=dm_env)
         else:
             self.env_energy = self.ct_scf.energy_tot(dm=(dm_env[0] + dm_env[1]))
+            if self.ft_writeorbs:
+                print('Writing Supersystem Env Densities'.center(80))
+                cubename = os.path.splitext(self.filename)[0] + '_dftindft' + '.cube'
+                dmat = dm_env[0] + dm_env[1]
+                cubegen.density(self.ct_scf.mol, cubename, dmat) 
 
-        print(f"  Energy: {self.env_energy}  ".center(80))
+        print(f"DFT-in-DFT  Energy: {self.env_energy}  ".center(80))
         print("".center(80,'*'))
         return self.env_energy
 

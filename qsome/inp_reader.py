@@ -10,231 +10,309 @@ import re
 
 from pyscf import gto
 
+
 class InpReader:
+    """
+    Reads a specific form of input file for creating objects.
+
+    Takes a formatted text file and generates arg and kwarg 
+    dictionaries to generate the specified embedding system objects.
+
+    Attributes
+    ----------
+    filename : str
+        The path to the input file being read.
+    inp : InputReader
+        The InputReader object of the input file.
+    supersystem_kwargs : dict
+        Dictionary of settings for creating ClusterSupersystem object.
+    env_subsystem_kwargs : dict
+        Dictionary of settings for creating ClusterEnvSubSystem object.
+    active_settings_kwargs : dict
+        Dictionary of settings for creating ClusterActiveSubSystem object.
+    subsystem_mols : list
+        A list of subsystem pyscf Mol objects
+    
+    Methods
+    -------
+    read_input(filename)
+        Opens the file, reads the settings, 
+        and stores as an input_reader object.
+    get_supersystem_kwargs(inp=None)
+        Creates the kwarg dictionary for the supersystem.
+    get_env_subsystem_kwargs(inp=None)
+        Creates the kwarg dictionary for subsystems.
+    get_active_subsystem_kwargs(inp=None)
+        Creates the kwarg dictionary for the active subsystems.
+    gen_mols(inp=None)
+        Generate the mol objects specified in the inp files.  
+    """
+
 
     def __init__(self, filename):
-        self.read_input(filename)
+        """
+        Parameters
+        ----------
+        filename : str
+            Path to input file.
+        """
 
-        self.get_supersystem_kwargs()
-        self.get_env_subsystem_kwargs()
-        self.get_active_subsystem_kwargs()
-        self.gen_mols()
+        self.inp = self.read_input(filename)
+        self.supersystem_kwargs = self.get_supersystem_kwargs()
+        self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
+        self.active_subsystem_kwargs = self.get_active_subsystem_kwargs()
+        self.subsystem_mols = self.gen_mols()
 
     def read_input(self, filename):
-        '''Reads a formatted pySCF input file, and generates
-        an inp object with the relevant attributes.
+        """Reads a formatted input file, generates an InputReader object.
 
-        Input: <filename> the filename of the pySCF input file
-        Output: a formatted inp object
-        '''
-        # initialize reader for a pySCF input
+        Parameters
+        ---------
+        filename : str
+            Path to input file.
+        """
+
         reader = input_reader.InputReader(comment=['!', '#', '::', '//'],
                  case=False, ignoreunknown=False)
-
-        # add subsystems block
         subsys = reader.add_block_key('subsystem', required=True, repeat=True)
-        #subsys.add_regex_line('atoms', '\s*([A-Za-z.]+)(\s+(\-?\d+\.?\d*)){3}',
-                              #repeat=True)
 
-        subsys.add_regex_line('atoms',
-            '\s*([A-Za-z.]+)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)', #This can be shortened. No need to repeat the same regex pattern search.
-            repeat=True)
+        # May be shortened by using repeating regex.
+        subsys.add_regex_line(
+         'atoms',
+         '\s*([A-Za-z.]+)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
+         repeat=True)
         subsys.add_line_key('charge', type=int)     
         subsys.add_line_key('spin', type=int)      
         subsys.add_line_key('basis')              
-        subsys.add_line_key('smearsigma', type=float)   # fermi smearing sigma  
+        subsys.add_line_key('smearsigma', type=float)   # fermi smearing sigma
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
-        subsys.add_boolean_key('freeze')                        
-        subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol', 'submol'))            # Set initial guess supmol does supermolecular first and localizes.
-        subsys.add_line_key('damp', type=float)         # SCF damping parameter
-        subsys.add_line_key('shift', type=float)        # SCF level-shift parameter
-        subsys.add_line_key('subcycles', type=int)      # number of subsys diagonalizations
-        subsys.add_line_key('diis', type=int)      # DIIS for subsystem (0 for off)
-        subsys.add_boolean_key('addlinkbasis')           #Add link H basis functions
+        subsys.add_boolean_key('freeze')
+        subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 
+            'readchk', 'supmol', 'submol'))
+        subsys.add_line_key('damp', type=float) # subsys damping parameter
+        subsys.add_line_key('shift', type=float) # SCF level-shift parameter
+        subsys.add_line_key('subcycles', type=int) # num subsys diag. cycles
+        subsys.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
+        subsys.add_boolean_key('addlinkbasis') # Add link H basis functions
 
-        # add embedding block
+        # Freeze and thaw settings
         embed = reader.add_block_key('embed', required=True)
-        embed.add_line_key('cycles', type=int)         # max freeze-and-thaw cycles
-        embed.add_line_key('conv', type=float)         # f&t conv tolerance
-        embed.add_line_key('grad', type=float)         # f&t conv tolerance
-        embed.add_line_key('env_method', type=str)      
-        embed.add_line_key('diis', type=int)           # start DIIS (0 to turn off)
-        embed.add_line_key('updatefock', type=int)    # frequency of updating fock matrix. 0 is after an embedding cycle, 1 is after every subsystem.
-        embed.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))            # Set initial guess supmol does supermolecular first and localizes.
-        embed.add_boolean_key('writeorbs')
+        embed.add_line_key('cycles', type=int) 
+        embed.add_line_key('conv', type=float)
+        embed.add_line_key('grad', type=float)
+        embed.add_line_key('env_method', type=str) #low-level method
+        embed.add_line_key('diis', type=int) # Use DIIS for fock. (0 for off)
+        # Supersystem fock update frequency. 
+        # 0 is after F&T cycle, 1 is after every subsystem iteration
+        embed.add_line_key('updatefock', type=int)
+        embed.add_line_key('initguess', type=(
+            'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
+        # Output subsystem orbitals after F&T cycles
+        embed.add_boolean_key('writeorbs') 
 
-        # This section needs work.
-        operator = embed.add_mutually_exclusive_group(dest='operator', required=True)
-        operator.add_line_key('mu', type=float, default=1e6)        # manby operator by mu
-        operator.add_boolean_key('manby', action=1e6)               # manby operator
-        operator.add_boolean_key('huzinaga', action='huz')     # huzinaga operator
-        operator.add_boolean_key('hm', action='hm')                 # modified huzinaga
-        operator.add_boolean_key('huzinagafermi', action='huzfermi')# huzinaga-fermi shifted operator
-        operator.add_boolean_key('huzfermi', action='huzfermi')     # huzinaga-fermi shifted operator
+        # This section needs work. Should be uniform option for setting op.
+        operator = embed.add_mutually_exclusive_group(dest='operator', 
+                                                      required=True)
+        operator.add_line_key('mu', type=float, default=1e6)
+        operator.add_boolean_key('manby', action=1e6)
+        operator.add_boolean_key('huzinaga', action='huz')
+        operator.add_boolean_key('hm', action='hm')
+        # Fermi shifted
+        operator.add_boolean_key('huzinagafermi', action='huzfermi')
+        operator.add_boolean_key('huzfermi', action='huzfermi')
         embed.add_line_key('setfermi', type=float)
 
-        # add simple line keys
-        reader.add_line_key('memory', type=(int, float))             # max memory in MB
+        reader.add_line_key('memory', type=(int, float)) # MB
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
-        reader.add_line_key('basis')                                 # global basis
-        reader.add_line_key('ct_method', type=('r', 'ro', 'u'), default='r') # supersystem env method.
+        reader.add_line_key('basis')
+        # Supersystem method restricted, restricted os, unrestricted
+        reader.add_line_key('ct_method', type=('r', 'ro', 'u'), default='r')
 
+        # Supersystem calculation settings
         ct_settings = reader.add_block_key('ct_settings')
         ct_settings.add_line_key('conv', type=float)
         ct_settings.add_line_key('grad', type=float)
         ct_settings.add_line_key('cycles', type=int)
-        ct_settings.add_line_key('damp', type=float)         # SCF damping parameter
-        ct_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
-        ct_settings.add_line_key('smearsigma', type=float)   # supermolecular dft smearing
-        ct_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk', 'supmol'))            # Set initial guess supmol does supermolecular first and localizes.
+        ct_settings.add_line_key('damp', type=float)
+        ct_settings.add_line_key('shift', type=float)
+        ct_settings.add_line_key('smearsigma', type=float)
+        ct_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
+                                                    'readchk', 'supmol'))
 
-        reader.add_line_key('active_method', type=str, required=True)                  # Active method
+        # High level subsystem settings.
+        reader.add_line_key('active_method', type=str, required=True)
         active_settings = reader.add_block_key('active_settings')
         active_settings.add_line_key('conv', type=float)       
         active_settings.add_line_key('grad', type=float)       
         active_settings.add_line_key('cycles', type=int)       
-        active_settings.add_line_key('damp', type=float)         # SCF damping parameter
-        active_settings.add_line_key('shift', type=float)        # SCF level-shift parameter
-        active_settings.add_boolean_key('molpro')     # Use Molpro
-        active_settings.add_boolean_key('writeorbs')     # write orbitals
+        active_settings.add_line_key('damp', type=float)
+        active_settings.add_line_key('shift', type=float)
+        active_settings.add_boolean_key('molpro')
+        active_settings.add_boolean_key('writeorbs')
 
-        cas_settings = reader.add_block_key('cas_settings')         # CAS method settings
-        cas_settings.add_boolean_key('localize_orbitals')           # Localize orbitals prior to CAS
-        cas_settings.add_line_key('active_orbs', type=str, default='')         # Which orbitals to include in the active space
+        cas_settings = reader.add_block_key('cas_settings')
+        # Localize HF orbitals prior to CAS
+        cas_settings.add_boolean_key('localize_orbitals')
+        #A list to specity active orbitals by number. Ex. [5,6]
+        cas_settings.add_line_key('active_orbs', type=str, default='') 
 
-        reader.add_line_key('grid', type=int)            # becke integration grid
-        reader.add_line_key('rhocutoff', type=float)     # small rho cutoff
-        reader.add_line_key('verbose', type=int)         # pySCF verbose level
-        reader.add_line_key('gencube', type=str)              # generate Cube file
-        reader.add_line_key('compden', type=str)              # compare densities
+        reader.add_line_key('grid', type=int)
+        reader.add_line_key('rhocutoff', type=float)
+        reader.add_line_key('verbose', type=int)
+        reader.add_line_key('gencube', type=str) # Generate final cubefile
+        reader.add_line_key('compden', type=str) # Compare DFT-in-DFT to KS-DFT
+        reader.add_boolean_key('analysis')
+        reader.add_boolean_key('debug')
 
-        # add simple boolean keys
-        reader.add_boolean_key('analysis')                          # whether to do pySCF analysis
-        reader.add_boolean_key('debug')                             # debug flag
-
-        # read the input filename
         inp  = reader.read_input(filename)
-        inp.filename = filename # save filename for later
-
-        # some defaults
+        inp.filename = filename 
         inp.active_method = inp.active_method.lower()
         inp.embed.env_method = inp.embed.env_method.lower()
 
-        # extract CAS space
+        # Extract CAS space
         if re.match(re.compile('cas(pt2)?\[.*\].*'), inp.active_method):
             cas_str = inp.active_method
-            inp.cas_space = [int(i) for i in (cas_str[cas_str.find("[") + 1:cas_str.find("]")]).split(',')]
+            inp.cas_space = [int(i.strip()) 
+                             for i in (cas_str[cas_str.find("[") + 1:
+                                               cas_str.find("]")]).split(',')]
 
+        # This could be done better.
         if inp.cas_settings and inp.cas_settings.active_orbs:
             inp.cas_settings.active_orbs = eval(inp.cas_settings.active_orbs)
 
-        # print input file to output.
         print("".center(80, '*'))
         print("Input File".center(80))
         print("".center(80, '*'))
         with open(filename, 'r') as f:
             print(f.read())
-
         print("".center(80, '*'))
-        
-        self.inp = inp
+        return inp
 
-    def get_supersystem_kwargs(self):
-        self.supersystem_kwargs = {}
-        if not self.inp.ct_method:
+    def get_supersystem_kwargs(self, inp=None):
+        """Generates a kwarg dictionary for ClusterSupersystem object.
+
+        Parameters
+        ----------
+        inp : InputReader, optional
+            InputReader object to extract supersystem settings from.
+            (default is None)
+        """
+
+        if inp is None:
+            inp = self.inp
+        supersystem_kwargs = {}
+        if not inp.ct_method:
             spin = 0
-            for system in self.inp.subsystem:
+            for system in inp.subsystem:
                 if system.spin:
                     spin += system.spin
             if spin != 0:
-                self.inp.ct_method = 'ro'
+                inp.ct_method = 'ro'
             else:
-                self.inp.ct_method = 'r'
+                inp.ct_method = 'r'
 
-        # Convert method type to actual charge transfer method.
+        # Setup supersystem method
         # There is a way to do this that is way better. This works.
-        env_method = self.inp.embed.env_method
+        env_method = inp.embed.env_method
         if env_method[:2] == 'ro':
-            self.supersystem_kwargs['ct_method'] = self.inp.ct_method + env_method[2:]
+            supersystem_kwargs['ct_method'] = (inp.ct_method 
+                                               + env_method[2:])
         elif env_method[:1] == 'u' or env_method[:1] == 'r':
-            self.supersystem_kwargs['ct_method'] = self.inp.ct_method + env_method[1:]
+            supersystem_kwargs['ct_method'] = (inp.ct_method
+                                               + env_method[1:])
         else:
-            self.supersystem_kwargs['ct_method'] = self.inp.ct_method + env_method
+            supersystem_kwargs['ct_method'] = (inp.ct_method
+                                                   + env_method)
 
-        
-        self.supersystem_kwargs['proj_oper'] = self.inp.embed.operator   
-        self.supersystem_kwargs['filename'] = self.inp.filename
+        supersystem_kwargs['proj_oper'] = inp.embed.operator   
+        supersystem_kwargs['filename'] = inp.filename
 
         #The following are optional arguments.
+        # There is also a better way to do this than conditional statements
+        if inp.embed:
+            if inp.embed.cycles:
+                supersystem_kwargs['ft_cycles'] = inp.embed.cycles
+            if inp.embed.conv:
+                supersystem_kwargs['ft_conv'] = inp.embed.conv
+            if inp.embed.grad:
+                supersystem_kwargs['ft_grad'] = inp.embed.grad
+            if not inp.embed.diis is None:
+                supersystem_kwargs['ft_diis'] = inp.embed.diis
+            if inp.embed.setfermi:
+                supersystem_kwargs['ft_setfermi'] = (
+                    inp.embed.setfermi)
+            if inp.embed.initguess:
+                supersystem_kwargs['ft_initguess'] = (
+                    inp.embed.initguess)
+            if inp.embed.updatefock:
+                supersystem_kwargs['ft_updatefock'] = (
+                    inp.embed.updatefock)
 
-        # There is also a better way to do this. rather than conditional statements
-        if self.inp.embed:
-            if self.inp.embed.cycles:
-                self.supersystem_kwargs['ft_cycles'] = self.inp.embed.cycles
-            if self.inp.embed.conv:
-                self.supersystem_kwargs['ft_conv'] = self.inp.embed.conv
-            if self.inp.embed.grad:
-                self.supersystem_kwargs['ft_grad'] = self.inp.embed.grad
-            if not self.inp.embed.diis is None:
-                self.supersystem_kwargs['ft_diis'] = self.inp.embed.diis
-            if self.inp.embed.setfermi:
-                self.supersystem_kwargs['ft_setfermi'] = self.inp.embed.setfermi
-            if self.inp.embed.initguess:
-                self.supersystem_kwargs['ft_initguess'] = self.inp.embed.initguess
-            if self.inp.embed.updatefock:
-                self.supersystem_kwargs['ft_updatefock'] = self.inp.embed.updatefock
+            supersystem_kwargs['ft_writeorbs'] = inp.embed.writeorbs
 
-            self.supersystem_kwargs['ft_writeorbs'] = self.inp.embed.writeorbs
+        if inp.ct_settings:
+            if inp.ct_settings.cycles:
+                supersystem_kwargs['cycles'] = inp.ct_settings.cycles
+            if inp.ct_settings.conv:
+                supersystem_kwargs['conv'] = inp.ct_settings.conv
+            if inp.ct_settings.grad:
+                supersystem_kwargs['grad'] = inp.ct_settings.grad
+            if inp.ct_settings.damp:
+                supersystem_kwargs['damp'] = inp.ct_settings.damp
+            if inp.ct_settings.shift:
+                supersystem_kwargs['shift'] = inp.ct_settings.shift
+            if inp.ct_settings.smearsigma:
+                supersystem_kwargs['smearsigma'] = (
+                    inp.ct_settings.smearsigma)
+            if inp.ct_settings.initguess:
+                supersystem_kwargs['initguess'] = (
+                    inp.ct_settings.initguess)
 
-        if self.inp.ct_settings:
-            if self.inp.ct_settings.cycles:
-                self.supersystem_kwargs['cycles'] = self.inp.ct_settings.cycles
-            if self.inp.ct_settings.conv:
-                self.supersystem_kwargs['conv'] = self.inp.ct_settings.conv
-            if self.inp.ct_settings.grad:
-                self.supersystem_kwargs['grad'] = self.inp.ct_settings.grad
-            if self.inp.ct_settings.damp:
-                self.supersystem_kwargs['damp'] = self.inp.ct_settings.damp
-            if self.inp.ct_settings.shift:
-                self.supersystem_kwargs['shift'] = self.inp.ct_settings.shift
-            if self.inp.ct_settings.smearsigma:
-                self.supersystem_kwargs['smearsigma'] = self.inp.ct_settings.smearsigma
-            if self.inp.ct_settings.initguess:
-                self.supersystem_kwargs['initguess'] = self.inp.ct_settings.initguess
+        if inp.grid:
+            supersystem_kwargs['grid_level'] = inp.grid
+        if inp.rhocutoff:
+            supersystem_kwargs['rhocutoff'] = inp.rhocutoff
+        if inp.verbose:
+            supersystem_kwargs['verbose'] = inp.verbose
+        if inp.analysis:
+            supersystem_kwargs['analysis'] = inp.analysis
+        if inp.debug:
+            supersystem_kwargs['debug'] = inp.debug
 
-        if self.inp.grid:
-            self.supersystem_kwargs['grid_level'] = self.inp.grid
-        if self.inp.rhocutoff:
-            self.supersystem_kwargs['rhocutoff'] = self.inp.rhocutoff
-        if self.inp.verbose:
-            self.supersystem_kwargs['verbose'] = self.inp.verbose
-        if self.inp.analysis:
-            self.supersystem_kwargs['analysis'] = self.inp.analysis
-        if self.inp.debug:
-            self.supersystem_kwargs['debug'] = self.inp.debug
+        return supersystem_kwargs
 
         
 
-    def get_env_subsystem_kwargs(self):
-        
+    def get_env_subsystem_kwargs(self, inp=None):
+        """Generates a kwarg dictionary for ClusterEnvSubSystem object.
+
+        Parameters
+        ----------
+        inp : InputReader, optional
+            InputReader object to extract subsystem settings from.
+            (default is None)
+        """
+       
+        if inp is None:
+            inp = self.inp
         # There is certainly a better way to do this. But this works.
         # subsystem universal settings
         universal_subsys_settings = {}
-        universal_subsys_settings['filename'] = self.inp.filename
-        universal_subsys_settings['env_method'] = self.inp.embed.env_method
-        if self.inp.rhocutoff:
-            universal_subsys_settings['rhocutoff'] = self.inp.rhocutoff
-        if self.inp.grid:
-            universal_subsys_settings['grid_level'] = self.inp.grid
-        if self.inp.verbose:
-            universal_subsys_settings['verbose'] = self.inp.verbose
-        if self.inp.analysis:
-            universal_subsys_settings['analysis'] = self.inp.analysis
-        if self.inp.debug:
-            universal_subsys_settings['debug'] = self.inp.debug
+        universal_subsys_settings['filename'] = inp.filename
+        universal_subsys_settings['env_method'] = inp.embed.env_method
+        if inp.rhocutoff:
+            universal_subsys_settings['rhocutoff'] = inp.rhocutoff
+        if inp.grid:
+            universal_subsys_settings['grid_level'] = inp.grid
+        if inp.verbose:
+            universal_subsys_settings['verbose'] = inp.verbose
+        if inp.analysis:
+            universal_subsys_settings['analysis'] = inp.analysis
+        if inp.debug:
+            universal_subsys_settings['debug'] = inp.debug
         
-        self.env_subsystem_kwargs = []
-        for subsystem in self.inp.subsystem:
+        env_subsystem_kwargs = []
+        for subsystem in inp.subsystem:
             subsys_settings = {}
             if subsystem.smearsigma:
                 subsys_settings['smearsigma'] = subsystem.smearsigma
@@ -252,43 +330,76 @@ class InpReader:
                 subsys_settings['initguess'] = subsystem.initguess
             
             subsys_settings.update(universal_subsys_settings.copy())
-            self.env_subsystem_kwargs.append(subsys_settings.copy())
+            env_subsystem_kwargs.append(subsys_settings.copy())
+
+        return env_subsystem_kwargs
             
 
 
 
-    def get_active_subsystem_kwargs(self):
-        self.active_subsystem_kwargs = {}
-        self.active_subsystem_kwargs['active_method'] = self.inp.active_method
-        if self.inp.cas_settings:
-            if self.inp.cas_settings.localize_orbitals:
-                self.active_subsystem_kwargs['localize_orbitals'] = self.inp.cas_settings.localize_orbitals
-            if self.inp.cas_settings.active_orbs:
-                self.active_subsystem_kwargs['active_orbs'] = self.inp.cas_settings.active_orbs
+    def get_active_subsystem_kwargs(self, inp=None):
+        """Generates a kwarg dictionary for ClusterActiveSubSystem object.
 
-        if self.inp.active_settings:
-            if self.inp.active_settings.conv:
-                self.active_subsystem_kwargs['active_conv'] = self.inp.active_settings.conv 
-            if self.inp.active_settings.grad:
-                self.active_subsystem_kwargs['active_grad'] = self.inp.active_settings.grad 
-            if self.inp.active_settings.cycles:
-                self.active_subsystem_kwargs['active_cycles'] = self.inp.active_settings.cycles
-            if self.inp.active_settings.damp:
-                self.active_subsystem_kwargs['active_damp'] = self.inp.active_settings.damp
-            if self.inp.active_settings.shift:
-                self.active_subsystem_kwargs['active_shift'] = self.inp.active_settings.shift
+        Parameters
+        ----------
+        inp : InputReader, optional
+            InputReader object to extract active subsystem settings from.
+            (default is None)
+        """
 
-            self.active_subsystem_kwargs['use_molpro'] = self.inp.active_settings.molpro
-            self.active_subsystem_kwargs['writeorbs'] = self.inp.active_settings.writeorbs
+        if inp is None:
+            inp = self.inp
 
+        active_subsystem_kwargs = {}
+        active_subsystem_kwargs['active_method'] = inp.active_method
+        if inp.cas_settings:
+            if inp.cas_settings.localize_orbitals:
+                active_subsystem_kwargs['localize_orbitals'] = (
+                    inp.cas_settings.localize_orbitals)
+            if inp.cas_settings.active_orbs:
+                active_subsystem_kwargs['active_orbs'] = (
+                    inp.cas_settings.active_orbs)
 
-        
+        if inp.active_settings:
+            if inp.active_settings.conv:
+                active_subsystem_kwargs['active_conv'] = (
+                    inp.active_settings.conv)
+            if inp.active_settings.grad:
+                active_subsystem_kwargs['active_grad'] = (
+                    inp.active_settings.grad)
+            if inp.active_settings.cycles:
+                active_subsystem_kwargs['active_cycles'] = (
+                    inp.active_settings.cycles)
+            if inp.active_settings.damp:
+                active_subsystem_kwargs['active_damp'] = (
+                    inp.active_settings.damp)
+            if inp.active_settings.shift:
+                active_subsystem_kwargs['active_shift'] = (
+                    inp.active_settings.shift)
+
+            active_subsystem_kwargs['use_molpro'] = (
+                inp.active_settings.molpro)
+            active_subsystem_kwargs['writeorbs'] = (
+                inp.active_settings.writeorbs)
+
+        return active_subsystem_kwargs
+
     #Add link basis functions when mol objects are generated.
-    def gen_mols(self):
+    def gen_mols(self, inp=None):
+        """Generates the mol objects specified in inp..
 
-        self.subsys_mols = []
+        Parameters
+        ----------
+        inp : InputReader, optional
+            InputReader object to extract mol information from.
+            (default is None)
+        """
+
+        if inp is None:
+            inp = self.inp
+        subsys_mols = []
         subsys_ghost = []
-        for subsystem in self.inp.subsystem:
+        for subsystem in inp.subsystem:
             atom_list = subsystem.atoms
             mol = gto.Mole()
             mol.atom = []
@@ -299,22 +410,25 @@ class InpReader:
             if subsystem.basis:
                 basis = subsystem.basis
             else:
-                basis = self.inp.basis
+                basis = inp.basis
 
             for atom in atom_list:
-                if 'ghost.' in atom.group(1).lower() or 'gh.' in atom.group(1).lower():
+                if ('ghost.' in atom.group(1).lower() 
+                    or 'gh.' in atom.group(1).lower()):
                     atom_name = atom.group(1).split('.')[1]
                     nghost += 1
                     mol.ghosts.append(atom_name)
                     ghost_name = f'ghost:{nghost}'
                     mol.atom.append([ghost_name, (float(atom.group(2)), 
                         float(atom.group(3)), float(atom.group(4)))])
-                    mol.basis.update({ghost_name: gto.basis.load(basis, atom_name)})
+                    mol.basis.update({ghost_name: gto.basis.load(basis, 
+                                                                 atom_name)})
                 else:
                     atom_name = atom.group(1)
                     mol.atom.append([atom.group(1), (float(atom.group(2)), 
                         float(atom.group(3)), float(atom.group(4)))])
-                    mol.basis.update({atom_name: gto.basis.load(basis, atom_name)})
+                    mol.basis.update({atom_name: gto.basis.load(basis, 
+                                                                atom_name)})
 
             if subsystem.charge:
                 mol.charge = subsystem.charge
@@ -322,22 +436,22 @@ class InpReader:
                 mol.spin = subsystem.spin
             if subsystem.unit:
                 mol.unit = subsystem.unit
-            if self.inp.verbose:
-                mol.verbose = self.inp.verbose
+            if inp.verbose:
+                mol.verbose = inp.verbose
             mol.build(dump_input=False)
-            self.subsys_mols.append(mol) 
+            subsys_mols.append(mol) 
             subsys_ghost.append(nghost)
 
         #Add ghost link atoms Assumes angstroms.
         max_bond_dist = 1.76
-        for i in range(len(self.inp.subsystem)):
-            subsystem = self.inp.subsystem[i]
+        for i in range(len(inp.subsystem)):
+            subsystem = inp.subsystem[i]
             ghAtms = []
             ghost_link = 'H'
             if subsystem.addlinkbasis:
-                mol1 = self.subsys_mols[i]
-                for j in range(i + 1, len(self.inp.subsystem)):
-                    mol2 = self.subsys_mols[j]
+                mol1 = subsys_mols[i]
+                for j in range(i + 1, len(inp.subsystem)):
+                    mol2 = subsys_mols[j]
                     link_atoms = []
                     link_basis = {}
                     for k in range(len(mol1.atom)):
@@ -348,28 +462,44 @@ class InpReader:
                             if atom_dist <= max_bond_dist:
                                 ghost_num = subsys_ghost[i] + 1
                                 if subsystem.basis:
-                                    new_atom, new_basis = gen_link_basis(mol1.atom[k], mol2.atom[m], subsystem.basis, ghost_num)
+                                    new_atom, new_basis = gen_link_basis(
+                                                              mol1.atom[k], 
+                                                              mol2.atom[m], 
+                                                              subsystem.basis, 
+                                                              ghost_num)
                                 else:
-                                    new_atom, new_basis = gen_link_basis(mol1.atom[k], mol2.atom[m], self.inp.basis, ghost_num)
+                                    new_atom, new_basis = gen_link_basis(
+                                                              mol1.atom[k], 
+                                                              mol2.atom[m], 
+                                                              inp.basis, 
+                                                              ghost_num)
                                 subsys_ghost[i] = ghost_num
                                 ghAtms.append(ghost_link)
                                 link_atoms.append(new_atom)
                                 link_basis.update(new_basis)
-                    #WIll not work if link atoms are explicitly defined.
-                    self.subsys_mols[i].atom = self.subsys_mols[i].atom + link_atoms
-                    self.subsys_mols[i].ghosts += ghAtms
-                    self.subsys_mols[i].basis.update(link_basis)
-            self.subsys_mols[i].build(dump_input=False)
+
+                    # Will not work if link atoms are explicitly defined.
+                    subsys_mols[i].atom = (subsys_mols[i].atom 
+                                           + link_atoms)
+                    subsys_mols[i].ghosts += ghAtms
+                    subsys_mols[i].basis.update(link_basis)
+            subsys_mols[i].build(dump_input=False)
+
+        return subsys_mols
 
 
 def bond_dist(atom1_coord, atom2_coord):
+
+
     total = 0.0
     for i in range(len(atom1_coord)):
         total += (atom2_coord[i] - atom1_coord[i]) ** 2.
-
     return (total ** 0.5)
 
+
 def gen_link_basis(atom1, atom2, basis, ghost_num):
+
+
     basis_atom = 'H'
     ghost_name = f'ghost:{ghost_num}'
     basis_x = (atom2[1][0] + atom1[1][0]) / 2.

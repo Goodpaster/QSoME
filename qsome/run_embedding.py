@@ -48,7 +48,7 @@ def main():
     supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
         ct_method, **supersystem_kwargs)
     supersystem.freeze_and_thaw()
-    #supersystem.env_in_env_energy()
+    supersystem.env_in_env_energy()
     supersystem.get_active_energy()
     super_energy = supersystem.get_supersystem_energy()
 

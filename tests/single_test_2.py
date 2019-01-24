@@ -19,19 +19,16 @@ embed
  env_method pbe
  huzinaga
  cycles 20
+ writeorbs
 end
 
 basis 6-31g
-active_method fcidump
-
-active_settings
- molpro
-end
+active_method hf
 
 '''
 
 from qsome import inp_reader, cluster_subsystem
-import qsome.cluster_supersystem_2 as cluster_supersystem
+import qsome.cluster_supersystem as cluster_supersystem
 from pyscf import gto, scf, dft, cc
 
 import os

@@ -12,12 +12,9 @@ embed
  env_method pbe
  huzinaga
  cycles 20
+ writeorbs
 end
 
 basis 6-31g
-active_method fcidump
-
-active_settings
- molpro
-end
+active_method hf
 
