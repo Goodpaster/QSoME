@@ -43,6 +43,8 @@ initguess minao
 damp 0.2
 shift 0.1
 subcycles 4
+save_orbs
+save_density
 end
 
 subsystem
@@ -50,6 +52,7 @@ Si    2.0000    0.0000    0.0000
 charge +2
 spin -2
 smearsigma 0.01
+unrestricted
 unit bohr
 freeze
 initguess supmol
@@ -67,11 +70,13 @@ embed
  updatefock 2
  initguess atom
  setfermi -4
+ save_orbs
+ save_density
 end
 
-ct_method u
 basis 3-21g
-ct_settings
+fullsys_settings
+ unrestricted
  conv 1e-3
  grad 1e-2
  cycles 300
@@ -79,6 +84,8 @@ ct_settings
  shift 0.3
  smearsigma 0.2
  initguess 1e
+ save_orbs
+ save_density
 end
 
 active_method caspt2[2,2]
@@ -88,18 +95,20 @@ cas_settings
 end
  
 active_settings
+ unrestricted
  conv 1e-10
  grad 1e-11
  cycles 500
  damp 0.1
  shift 0.2
+ save_orbs
+ save_density
 end
 
 rhocutoff 1e-4
 grid 5
 verbose 1
-gencube test1
-compden test2
+compare_density
 analysis
 debug
 """
@@ -244,9 +253,12 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.subsystem[0].damp, 0.2)
         self.assertEqual(inp.subsystem[0].shift, 0.1)
         self.assertEqual(inp.subsystem[0].initguess, 'minao')
+        self.assertEqual(inp.subsystem[0].save_orbs, True)
+        self.assertEqual(inp.subsystem[0].save_density, True)
 
         self.assertEqual(inp.subsystem[1].charge, 2)
         self.assertEqual(inp.subsystem[1].spin, -2) 
+        self.assertEqual(inp.subsystem[1].unrestricted , True)
         self.assertEqual(inp.subsystem[1].smearsigma, 0.01) 
         self.assertEqual(inp.subsystem[1].unit, 'bohr')
         self.assertEqual(inp.subsystem[1].damp, 0.1)
@@ -264,34 +276,41 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.embed.updatefock, 2)
         self.assertEqual(inp.embed.initguess, 'atom')
         self.assertEqual(inp.embed.setfermi, -4.0)
+        self.assertEqual(inp.embed.save_orbs, True)
+        self.assertEqual(inp.embed.save_density, True)
 
-        #Check CT settings
+        #Check FS settings
         self.assertEqual(inp.basis, '3-21g')
-        self.assertEqual(inp.ct_method, 'u')
-        self.assertEqual(inp.ct_settings.conv, 1e-3)
-        self.assertEqual(inp.ct_settings.grad, 1e-2)
-        self.assertEqual(inp.ct_settings.cycles, 300)
-        self.assertEqual(inp.ct_settings.damp, 0.1)
-        self.assertEqual(inp.ct_settings.shift, 0.3)
-        self.assertEqual(inp.ct_settings.smearsigma, 0.2)
-        self.assertEqual(inp.ct_settings.initguess, '1e')
+        self.assertEqual(inp.fullsys_settings.unrestricted, True)
+        self.assertEqual(inp.fullsys_settings.conv, 1e-3)
+        self.assertEqual(inp.fullsys_settings.grad, 1e-2)
+        self.assertEqual(inp.fullsys_settings.cycles, 300)
+        self.assertEqual(inp.fullsys_settings.damp, 0.1)
+        self.assertEqual(inp.fullsys_settings.shift, 0.3)
+        self.assertEqual(inp.fullsys_settings.smearsigma, 0.2)
+        self.assertEqual(inp.fullsys_settings.initguess, '1e')
+        self.assertEqual(inp.fullsys_settings.save_orbs, True)
+        self.assertEqual(inp.fullsys_settings.save_density, True)
 
         #Check active settings
         self.assertEqual(inp.active_method, 'caspt2[2,2]')
+        self.assertEqual(inp.active_settings.unrestricted, True)
         self.assertEqual(inp.active_settings.conv, 1e-10)
         self.assertEqual(inp.active_settings.grad, 1e-11)
         self.assertEqual(inp.active_settings.cycles, 500)
         self.assertEqual(inp.active_settings.damp, 0.1)
         self.assertEqual(inp.active_settings.shift, 0.2)
+        self.assertEqual(inp.active_settings.save_orbs, True)
+        self.assertEqual(inp.active_settings.save_density, True)
 
         #Check system settings
         self.assertEqual(inp.grid, 5)
         self.assertEqual(inp.rhocutoff, 1e-4)
         self.assertEqual(inp.verbose, 1)
-        self.assertEqual(inp.gencube, 'test1')
-        self.assertEqual(inp.compden, 'test2')
         self.assertTrue(inp.analysis)
         self.assertTrue(inp.debug)
+        self.assertTrue(inp.compare_density)
+    
     
 
     def test_cas_settings(self):
@@ -327,7 +346,7 @@ class TestSuperSystemKwargs(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + def_filename)
         sup_kwargs = in_obj.supersystem_kwargs
 
-        self.assertEqual(sup_kwargs['ct_method'], 'rpbe')
+        self.assertEqual(sup_kwargs['fs_method'], 'pbe')
         self.assertEqual(sup_kwargs['proj_oper'], 'huz')
         self.assertEqual(sup_kwargs['filename'], path + def_filename)
 
@@ -346,9 +365,14 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['ft_updatefock'], 2)
         self.assertEqual(sup_kwargs['ft_initguess'], 'atom')
         self.assertEqual(sup_kwargs['ft_setfermi'], -4.)
+        self.assertEqual(sup_kwargs['ft_save_orbs'],True)
+        self.assertEqual(sup_kwargs['ft_save_density'],True)
 
         # Supersystem environment calculation kwargs
-        self.assertEqual(sup_kwargs['ct_method'], 'upbe')
+        self.assertEqual(sup_kwargs['fs_method'], 'pbe')
+        self.assertEqual(sup_kwargs['fs_unrestricted'], True)
+        self.assertEqual(sup_kwargs['fs_save_orbs'],True)
+        self.assertEqual(sup_kwargs['fs_save_density'],True)
         self.assertEqual(sup_kwargs['cycles'], 300)
         self.assertEqual(sup_kwargs['conv'], 1e-3)
         self.assertEqual(sup_kwargs['grad'], 1e-2)
@@ -421,6 +445,8 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)
+        self.assertEqual(sub_kwargs['save_orbs'], True)
+        self.assertEqual(sub_kwargs['save_density'], True)
 
         sub_kwargs = in_obj.env_subsystem_kwargs[1]
         self.assertEqual(sub_kwargs['env_method'], 'pbe')
@@ -476,11 +502,14 @@ class TestActiveSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['active_orbs'], [4,5])
 
         # other options
+        self.assertEqual(sub_kwargs['active_unrestricted'], True)
         self.assertEqual(sub_kwargs['active_conv'], 1e-10)
         self.assertEqual(sub_kwargs['active_grad'], 1e-11)
         self.assertEqual(sub_kwargs['active_cycles'], 500)
         self.assertEqual(sub_kwargs['active_damp'], 0.1)
         self.assertEqual(sub_kwargs['active_shift'], 0.2)
+        self.assertEqual(sub_kwargs['active_save_orbs'], True)
+        self.assertEqual(sub_kwargs['active_save_density'], True)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -523,7 +552,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
-        self.assertEqual(mols[0].basis, he_pyscf_basis)
+        self.assertEqual(mols[0]._basis, he_pyscf_basis)
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)
         self.assertEqual(mols[0].unit, 'angstrom')
@@ -535,7 +564,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
-        self.assertEqual(mols[1].basis, c_pyscf_basis)
+        self.assertEqual(mols[1]._basis, c_pyscf_basis)
         self.assertEqual(mols[1].charge, 0)
         self.assertEqual(mols[1].spin, 0)
         self.assertEqual(mols[1].unit, 'angstrom')
@@ -552,7 +581,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.subsystem[0].basis, 'C')} 
-        self.assertEqual(mols[0].basis, c_pyscf_basis)
+        self.assertEqual(mols[0]._basis, c_pyscf_basis)
         self.assertEqual(mols[0].charge, -1)
         self.assertEqual(mols[0].spin, 1)
         self.assertEqual(mols[0].unit, 'angstrom')
@@ -564,7 +593,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
         si_pyscf_basis = {'Si': gto.basis.load(in_obj.inp.basis, 'Si')} 
-        self.assertEqual(mols[1].basis, si_pyscf_basis)
+        self.assertEqual(mols[1]._basis, si_pyscf_basis)
         self.assertEqual(mols[1].charge, 2)
         self.assertEqual(mols[1].spin, -2)
         self.assertEqual(mols[1].unit, 'bohr')
@@ -581,16 +610,15 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
 
         curr_atom = in_obj.inp.subsystem[1].atoms[0]
-        self.assertEqual(mols[0].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[0].atom[1][0], 'ghost:C')
         self.assertEqual(mols[0].atom[1][1][0], float(curr_atom.group(2)))
         self.assertEqual(mols[0].atom[1][1][1], float(curr_atom.group(3)))
         self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
-        self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
-        print (mols[0].basis)
-        self.assertEqual(mols[0].basis['ghost:1'], c_pyscf_basis['C'])
+        self.assertEqual(mols[0]._basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0]._basis['ghost:C'], c_pyscf_basis['C'])
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)
         self.assertEqual(mols[0].unit, 'angstrom')
@@ -607,15 +635,15 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
 
         curr_atom = in_obj.inp.subsystem[1].atoms[0]
-        self.assertEqual(mols[0].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[0].atom[1][0], 'ghost:C')
         self.assertEqual(mols[0].atom[1][1][0], float(curr_atom.group(2)))
         self.assertEqual(mols[0].atom[1][1][1], float(curr_atom.group(3)))
         self.assertEqual(mols[0].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
-        self.assertEqual(mols[0].basis['He'], he_pyscf_basis['He'])
-        self.assertEqual(mols[0].basis['ghost:1'], c_pyscf_basis['C'])
+        self.assertEqual(mols[0]._basis['He'], he_pyscf_basis['He'])
+        self.assertEqual(mols[0]._basis['ghost:C'], c_pyscf_basis['C'])
 
         curr_atom = in_obj.inp.subsystem[1].atoms[0]
         self.assertEqual(mols[1].atom[0][0], curr_atom.group(1))
@@ -624,14 +652,14 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[1].atom[0][1][2], float(curr_atom.group(4)))
 
         curr_atom = in_obj.inp.subsystem[0].atoms[0]
-        self.assertEqual(mols[1].atom[1][0], 'ghost:1')
+        self.assertEqual(mols[1].atom[1][0], 'ghost:He')
         self.assertEqual(mols[1].atom[1][1][0], float(curr_atom.group(2)))
         self.assertEqual(mols[1].atom[1][1][1], float(curr_atom.group(3)))
         self.assertEqual(mols[1].atom[1][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
-        self.assertEqual(mols[1].basis['C'], c_pyscf_basis['C'])
-        self.assertEqual(mols[1].basis['ghost:1'], he_pyscf_basis['He'])
+        self.assertEqual(mols[1]._basis['C'], c_pyscf_basis['C'])
+        self.assertEqual(mols[1]._basis['ghost:He'], he_pyscf_basis['He'])
 
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)
@@ -649,7 +677,7 @@ class TestGenMols(unittest.TestCase):
         self.assertEqual(mols[0].atom[0][1][2], float(curr_atom.group(4)))
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.subsystem[0].basis, 'He')} 
-        self.assertEqual(mols[0].basis, he_pyscf_basis)
+        self.assertEqual(mols[0]._basis, he_pyscf_basis)
         self.assertEqual(mols[0].charge, 0)
         self.assertEqual(mols[0].spin, 0)
         self.assertEqual(mols[0].unit, 'angstrom')
@@ -662,7 +690,7 @@ class TestGenMols(unittest.TestCase):
 
         he_pyscf_basis = {'He': gto.basis.load(in_obj.inp.basis, 'He')} 
         c_pyscf_basis = {'C': gto.basis.load(in_obj.inp.basis, 'C')} 
-        self.assertEqual(mols[1].basis, c_pyscf_basis)
+        self.assertEqual(mols[1]._basis, c_pyscf_basis)
         self.assertEqual(mols[1].charge, 0)
         self.assertEqual(mols[1].spin, 0)
         self.assertEqual(mols[1].unit, 'angstrom')

@@ -83,10 +83,14 @@ class InpReader:
          repeat=True)
         subsys.add_line_key('charge', type=int)     
         subsys.add_line_key('spin', type=int)      
+        # All methods default to restricted unless specified
+        subsys.add_boolean_key('unrestricted')
         subsys.add_line_key('basis')              
         subsys.add_line_key('smearsigma', type=float)   # fermi smearing sigma
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         subsys.add_boolean_key('freeze')
+        subsys.add_boolean_key('save_orbs')
+        subsys.add_boolean_key('save_density')
         subsys.add_line_key('initguess', type=('minao', 'atom', '1e', 
             'readchk', 'supmol', 'submol'))
         subsys.add_line_key('damp', type=float) # subsys damping parameter
@@ -108,7 +112,8 @@ class InpReader:
         embed.add_line_key('initguess', type=(
             'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
         # Output subsystem orbitals after F&T cycles
-        embed.add_boolean_key('writeorbs') 
+        embed.add_boolean_key('save_orbs') 
+        embed.add_boolean_key('save_density') 
 
         # This section needs work. Should be uniform option for setting op.
         operator = embed.add_mutually_exclusive_group(dest='operator', 
@@ -125,30 +130,35 @@ class InpReader:
         reader.add_line_key('memory', type=(int, float)) # MB
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         reader.add_line_key('basis')
-        # Supersystem method restricted, restricted os, unrestricted
-        reader.add_line_key('ct_method', type=('r', 'ro', 'u'), default='r')
 
         # Supersystem calculation settings
-        ct_settings = reader.add_block_key('ct_settings')
-        ct_settings.add_line_key('conv', type=float)
-        ct_settings.add_line_key('grad', type=float)
-        ct_settings.add_line_key('cycles', type=int)
-        ct_settings.add_line_key('damp', type=float)
-        ct_settings.add_line_key('shift', type=float)
-        ct_settings.add_line_key('smearsigma', type=float)
-        ct_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
+        fs_settings = reader.add_block_key('fullsys_settings')
+        # All methods default to restricted unless specified
+        fs_settings.add_boolean_key('unrestricted')
+        fs_settings.add_boolean_key('save_orbs')
+        fs_settings.add_boolean_key('save_density')
+        fs_settings.add_line_key('conv', type=float)
+        fs_settings.add_line_key('grad', type=float)
+        fs_settings.add_line_key('cycles', type=int)
+        fs_settings.add_line_key('damp', type=float)
+        fs_settings.add_line_key('shift', type=float)
+        fs_settings.add_line_key('smearsigma', type=float)
+        fs_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
                                                     'readchk', 'supmol'))
 
         # High level subsystem settings.
         reader.add_line_key('active_method', type=str, required=True)
         active_settings = reader.add_block_key('active_settings')
+        # All methods default to restricted unless specified
+        active_settings.add_boolean_key('unrestricted')
         active_settings.add_line_key('conv', type=float)       
         active_settings.add_line_key('grad', type=float)       
         active_settings.add_line_key('cycles', type=int)       
         active_settings.add_line_key('damp', type=float)
         active_settings.add_line_key('shift', type=float)
         active_settings.add_boolean_key('molpro')
-        active_settings.add_boolean_key('writeorbs')
+        active_settings.add_boolean_key('save_orbs')
+        active_settings.add_boolean_key('save_density')
 
         cas_settings = reader.add_block_key('cas_settings')
         # Localize HF orbitals prior to CAS
@@ -159,8 +169,7 @@ class InpReader:
         reader.add_line_key('grid', type=int)
         reader.add_line_key('rhocutoff', type=float)
         reader.add_line_key('verbose', type=int)
-        reader.add_line_key('gencube', type=str) # Generate final cubefile
-        reader.add_line_key('compden', type=str) # Compare DFT-in-DFT to KS-DFT
+        reader.add_boolean_key('compare_density') # Compare DFT-in-DFT to KS-DFT
         reader.add_boolean_key('analysis')
         reader.add_boolean_key('debug')
 
@@ -201,31 +210,14 @@ class InpReader:
         if inp is None:
             inp = self.inp
         supersystem_kwargs = {}
-        if not inp.ct_method:
-            spin = 0
-            for system in inp.subsystem:
-                if system.spin:
-                    spin += system.spin
-            if spin != 0:
-                inp.ct_method = 'ro'
-            else:
-                inp.ct_method = 'r'
-
         # Setup supersystem method
         # There is a way to do this that is way better. This works.
         env_method = inp.embed.env_method
-        if env_method[:2] == 'ro':
-            supersystem_kwargs['ct_method'] = (inp.ct_method 
-                                               + env_method[2:])
-        elif env_method[:1] == 'u' or env_method[:1] == 'r':
-            supersystem_kwargs['ct_method'] = (inp.ct_method
-                                               + env_method[1:])
-        else:
-            supersystem_kwargs['ct_method'] = (inp.ct_method
-                                                   + env_method)
-
+        supersystem_kwargs['fs_method'] = env_method
         supersystem_kwargs['proj_oper'] = inp.embed.operator   
         supersystem_kwargs['filename'] = inp.filename
+        if inp.compare_density:
+            supersystem_kwargs['compare_density'] = inp.compare_density
 
         #The following are optional arguments.
         # There is also a better way to do this than conditional statements
@@ -247,26 +239,39 @@ class InpReader:
             if inp.embed.updatefock:
                 supersystem_kwargs['ft_updatefock'] = (
                     inp.embed.updatefock)
+            if inp.embed.save_orbs:
+                supersystem_kwargs['ft_save_orbs'] = (
+                    inp.embed.save_orbs)
+            if inp.embed.save_density:
+                supersystem_kwargs['ft_save_density'] = (
+                    inp.embed.save_density)
 
-            supersystem_kwargs['ft_writeorbs'] = inp.embed.writeorbs
-
-        if inp.ct_settings:
-            if inp.ct_settings.cycles:
-                supersystem_kwargs['cycles'] = inp.ct_settings.cycles
-            if inp.ct_settings.conv:
-                supersystem_kwargs['conv'] = inp.ct_settings.conv
-            if inp.ct_settings.grad:
-                supersystem_kwargs['grad'] = inp.ct_settings.grad
-            if inp.ct_settings.damp:
-                supersystem_kwargs['damp'] = inp.ct_settings.damp
-            if inp.ct_settings.shift:
-                supersystem_kwargs['shift'] = inp.ct_settings.shift
-            if inp.ct_settings.smearsigma:
+        if inp.fullsys_settings:
+            if inp.fullsys_settings.unrestricted:
+                supersystem_kwargs['fs_unrestricted'] = (
+                    inp.fullsys_settings.unrestricted)
+            if inp.fullsys_settings.save_orbs:
+                supersystem_kwargs['fs_save_orbs'] = (
+                    inp.fullsys_settings.save_orbs)
+            if inp.fullsys_settings.save_density:
+                supersystem_kwargs['fs_save_density'] = (
+                    inp.fullsys_settings.save_density)
+            if inp.fullsys_settings.cycles:
+                supersystem_kwargs['cycles'] = inp.fullsys_settings.cycles
+            if inp.fullsys_settings.conv:
+                supersystem_kwargs['conv'] = inp.fullsys_settings.conv
+            if inp.fullsys_settings.grad:
+                supersystem_kwargs['grad'] = inp.fullsys_settings.grad
+            if inp.fullsys_settings.damp:
+                supersystem_kwargs['damp'] = inp.fullsys_settings.damp
+            if inp.fullsys_settings.shift:
+                supersystem_kwargs['shift'] = inp.fullsys_settings.shift
+            if inp.fullsys_settings.smearsigma:
                 supersystem_kwargs['smearsigma'] = (
-                    inp.ct_settings.smearsigma)
-            if inp.ct_settings.initguess:
+                    inp.fullsys_settings.smearsigma)
+            if inp.fullsys_settings.initguess:
                 supersystem_kwargs['initguess'] = (
-                    inp.ct_settings.initguess)
+                    inp.fullsys_settings.initguess)
 
         if inp.grid:
             supersystem_kwargs['grid_level'] = inp.grid
@@ -314,6 +319,12 @@ class InpReader:
         env_subsystem_kwargs = []
         for subsystem in inp.subsystem:
             subsys_settings = {}
+            if subsystem.unrestricted:
+                subsys_settings['unrestricted'] = subsystem.unrestricted
+            if subsystem.save_orbs:
+                subsys_settings['save_orbs'] = subsystem.save_orbs
+            if subsystem.save_density:
+                subsys_settings['save_density'] = subsystem.save_density
             if subsystem.smearsigma:
                 subsys_settings['smearsigma'] = subsystem.smearsigma
             if subsystem.damp:
@@ -361,6 +372,15 @@ class InpReader:
                     inp.cas_settings.active_orbs)
 
         if inp.active_settings:
+            if inp.active_settings.unrestricted:
+                active_subsystem_kwargs['active_unrestricted'] = (
+                    inp.active_settings.unrestricted)
+            if inp.active_settings.save_orbs:
+                active_subsystem_kwargs['active_save_orbs'] = (
+                    inp.active_settings.save_orbs)
+            if inp.active_settings.save_density:
+                active_subsystem_kwargs['active_save_density'] = (
+                    inp.active_settings.save_density)
             if inp.active_settings.conv:
                 active_subsystem_kwargs['active_conv'] = (
                     inp.active_settings.conv)
@@ -379,8 +399,6 @@ class InpReader:
 
             active_subsystem_kwargs['use_molpro'] = (
                 inp.active_settings.molpro)
-            active_subsystem_kwargs['writeorbs'] = (
-                inp.active_settings.writeorbs)
 
         return active_subsystem_kwargs
 
@@ -404,7 +422,6 @@ class InpReader:
             mol = gto.Mole()
             mol.atom = []
             mol.ghosts = []
-            mol.basis = {}
             nghost = 0
 
             if subsystem.basis:
@@ -418,17 +435,13 @@ class InpReader:
                     atom_name = atom.group(1).split('.')[1]
                     nghost += 1
                     mol.ghosts.append(atom_name)
-                    ghost_name = f'ghost:{nghost}'
+                    ghost_name = f'ghost:{atom_name}'
                     mol.atom.append([ghost_name, (float(atom.group(2)), 
                         float(atom.group(3)), float(atom.group(4)))])
-                    mol.basis.update({ghost_name: gto.basis.load(basis, 
-                                                                 atom_name)})
                 else:
                     atom_name = atom.group(1)
                     mol.atom.append([atom.group(1), (float(atom.group(2)), 
                         float(atom.group(3)), float(atom.group(4)))])
-                    mol.basis.update({atom_name: gto.basis.load(basis, 
-                                                                atom_name)})
 
             if subsystem.charge:
                 mol.charge = subsystem.charge
@@ -438,6 +451,7 @@ class InpReader:
                 mol.unit = subsystem.unit
             if inp.verbose:
                 mol.verbose = inp.verbose
+            mol.basis = basis
             mol.build(dump_input=False)
             subsys_mols.append(mol) 
             subsys_ghost.append(nghost)
@@ -465,14 +479,12 @@ class InpReader:
                                     new_atom, new_basis = gen_link_basis(
                                                               mol1.atom[k], 
                                                               mol2.atom[m], 
-                                                              subsystem.basis, 
-                                                              ghost_num)
+                                                              subsystem.basis)
                                 else:
                                     new_atom, new_basis = gen_link_basis(
                                                               mol1.atom[k], 
                                                               mol2.atom[m], 
-                                                              inp.basis, 
-                                                              ghost_num)
+                                                              inp.basis)
                                 subsys_ghost[i] = ghost_num
                                 ghAtms.append(ghost_link)
                                 link_atoms.append(new_atom)
@@ -482,7 +494,7 @@ class InpReader:
                     subsys_mols[i].atom = (subsys_mols[i].atom 
                                            + link_atoms)
                     subsys_mols[i].ghosts += ghAtms
-                    subsys_mols[i].basis.update(link_basis)
+                    subsys_mols[i]._basis.update(link_basis)
             subsys_mols[i].build(dump_input=False)
 
         return subsys_mols
@@ -497,11 +509,11 @@ def bond_dist(atom1_coord, atom2_coord):
     return (total ** 0.5)
 
 
-def gen_link_basis(atom1, atom2, basis, ghost_num):
+def gen_link_basis(atom1, atom2, basis):
 
 
     basis_atom = 'H'
-    ghost_name = f'ghost:{ghost_num}'
+    ghost_name = f'ghost:{basis_atom}'
     basis_x = (atom2[1][0] + atom1[1][0]) / 2.
     basis_y = (atom2[1][1] + atom1[1][1]) / 2.
     basis_z = (atom2[1][2] + atom1[1][2]) / 2.

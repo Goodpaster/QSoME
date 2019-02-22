@@ -22,7 +22,7 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def update_fock(self):
+    def update_emb_fock(self):
         pass
 
     @abstractmethod

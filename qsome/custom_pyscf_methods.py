@@ -80,7 +80,7 @@ def rhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None
     return e1+e_coul, e_coul
 
 #ROHF Methods
-def rohf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
+def rohf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
              diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
     '''Build fock matrix based on Roothaan's effective fock.
     See also :func:`get_roothaan_fock`
@@ -95,8 +95,8 @@ def rohf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle
 # To Get orbital energy in get_occ, we saved alpha and beta fock, because
 # Roothaan effective Fock cannot provide correct orbital energy with `eig`
 # TODO, check other treatment  J. Chem. Phys. 133, 141102
-    focka = h1e + vhf[0] + emb_pot[0] #Add embedding potential
-    fockb = h1e + vhf[1] + emb_pot[1] #Add embedding potential
+    focka = h1e + vhf[0] + emb_pot[0] + proj_pot[0]#Add embedding potential
+    fockb = h1e + vhf[1] + emb_pot[1] + proj_pot[1]#Add embedding potential
     f = rohf.get_roothaan_fock((focka,fockb), dm, s1e)
     if cycle < 0 and diis is None:  # Not inside the SCF iteration
         return f
@@ -118,23 +118,24 @@ def rohf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle
     f = lib.tag_array(f, focka=focka, fockb=fockb)
     return f
 
-def rohf_energy_elec(mf, emb_pot=None, dm=None, h1e=None, vhf=None):
+def rohf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None):
 
     if emb_pot is None: emb_pot = [0.0, 0.0]
     if dm is None: dm = mf.make_rdm1()
     elif isinstance(dm, np.ndarray) and dm.ndim == 2:
         dm = np.array((dm*.5, dm*.5))
-    ee, ecoul = uhf_energy_elec(mf, emb_pot, dm, h1e, vhf)
+    ee, ecoul = uhf_energy_elec(mf, emb_pot, proj_pot, dm, h1e, vhf)
     logger.debug(mf, 'Ecoul = %.15g', ecoul)
     return ee, ecoul
 
 
 #UHF Methods
-def uhf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
+def uhf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
              diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
 
 
     if emb_pot is None: emb_pot = [0.0, 0.0]
+    if proj_pot is None: proj_pot = [0.0, 0.0]
     if h1e is None: h1e = mf.get_hcore()
     #if vhf is None: vhf = mf.get_veff(dm=dm)
     #For some reason the vhf being passed is wrong I believe.
@@ -142,8 +143,8 @@ def uhf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=
     f = h1e + vhf 
     if f.ndim == 2:
         f = (f, f)
-    f[0] = f[0] + emb_pot[0] #Add embedding potential
-    f[1] = f[1] + emb_pot[1] #Add embedding potential
+    f[0] = f[0] + emb_pot[0] + proj_pot[0] #Add embedding potential
+    f[1] = f[1] + emb_pot[1] + proj_pot[1] #Add embedding potential
 
 
     if cycle < 0 and diis is None:  # Not inside the SCF iteration
@@ -179,12 +180,13 @@ def uhf_get_fock(mf, emb_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=
              hf.level_shift(s1e, dm[1], f[1], shiftb))
     return np.array(f)
 
-def uhf_energy_elec(mf, emb_pot=None, dm=None, h1e=None, vhf=None):
+def uhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None):
     '''Electronic energy of Unrestricted Hartree-Fock
     Returns:
         Hartree-Fock electronic energy and the 2-electron part contribution
     '''
     if emb_pot is None: emb_pot = [0.0, 0.0]
+    if proj_pot is None: proj_pot = [0.0, 0.0]
     if dm is None: dm = mf.make_rdm1()
     if h1e is None:
         h1e = mf.get_hcore()
@@ -194,8 +196,8 @@ def uhf_energy_elec(mf, emb_pot=None, dm=None, h1e=None, vhf=None):
         vhf = mf.get_veff(mf.mol, dm)
     e1 = np.einsum('ij,ij', h1e.conj(), dm[0]+dm[1])
 
-    vhf[0] = vhf[0] + 2.*emb_pot[0] #May need to multiply emb_pot by 2
-    vhf[1] = vhf[1] + 2.*emb_pot[1]
+    vhf[0] = vhf[0] + 2.*(emb_pot[0] + proj_pot[0])
+    vhf[1] = vhf[1] + 2.*(emb_pot[1] + proj_pot[1])
 
     e_coul =(np.einsum('ij,ji', vhf[0], dm[0]) +
              np.einsum('ij,ji', vhf[1], dm[1])).real * .5
@@ -230,7 +232,7 @@ rks_get_fock = rhf_get_fock
 
 
 #UKS Methods
-def uks_energy_elec(ks, emb_pot=None, dm=None, h1e=None, vhf=None):
+def uks_energy_elec(ks, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None):
     if emb_pot is None: emb_pot = [0.0,0.0]
     if dm is None: dm = ks.make_rdm1()
     if h1e is None: h1e = ks.get_hcore()
@@ -239,8 +241,8 @@ def uks_energy_elec(ks, emb_pot=None, dm=None, h1e=None, vhf=None):
     if isinstance(dm, np.ndarray) and dm.ndim == 2:
         dm = np.array((dm*.5, dm*.5))
     emb_h1e = [None,None] 
-    emb_h1e[0] = h1e + emb_pot[0]
-    emb_h1e[1] = h1e + emb_pot[1]
+    emb_h1e[0] = h1e + emb_pot[0] + proj_pot[0]
+    emb_h1e[1] = h1e + emb_pot[1] + proj_pot[1]
     e1 = np.einsum('ij,ji', emb_h1e[0], dm[0]) + np.einsum('ij,ji', emb_h1e[1], dm[1])
     tot_e = e1.real + vhf.ecoul + vhf.exc
     logger.debug(ks, 'Ecoul = %s  Exc = %s', vhf.ecoul, vhf.exc)

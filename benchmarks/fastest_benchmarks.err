@@ -1,0 +1,18 @@
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Overwritten attributes  energy_elec get_fock  of <class 'pyscf.scf.hf.RHF'>
+Traceback (most recent call last):
+  File "/home/goodpast/graha682/code/python/QSoME_2/benchmarks/fastest_benchmarks.py", line 93, in <module>
+    sup_trans = cluster_supersystem.ClusterSuperSystem([sub1_trans, sub2_trans], dft_method)
+  File "/home/goodpast/graha682/code/python/QSoME_2/qsome/cluster_supersystem.py", line 307, in __init__
+    self.save_chkfile()
+  File "/home/goodpast/graha682/code/python/QSoME_2/qsome/cluster_supersystem.py", line 1249, in save_chkfile
+    supsys_coeff[...] = self.mo_coeff
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/site-packages/h5py/_hl/dataset.py", line 631, in __setitem__
+    for fspace in selection.broadcast(mshape):
+  File "/panfs/roc/msisoft/anaconda/anaconda3-5.0.1/lib/python3.6/site-packages/h5py/_hl/selections.py", line 299, in broadcast
+    raise TypeError("Can't broadcast %s -> %s" % (target_shape, count))
+TypeError: Can't broadcast (2, 157, 157) -> (2, 143, 143)
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Overwritten attributes  get_fock energy_elec  of <class 'pyscf.scf.hf.RHF'>

@@ -1,0 +1,5 @@
+The benchmarks should be run after a performance or accuracy update is applied.
+If you don't beat the previous benchmarks, do not move the output files to the
+completed benchmarks folder. If you do beat the previous benchmarks, replace
+previous best benchmarks and update the default settings to apply your settings
+

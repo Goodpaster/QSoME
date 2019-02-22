@@ -1,29 +1,8 @@
-#TO test for the accuracy of the method. This is the most accurate configuration.
-
+#Parameters which generate good results fastest.
 import numpy as np
 from pyscf import gto, scf, cc
 from pyscf.cc import ccsd_t
 from qsome import cluster_subsystem, cluster_supersystem
-
-full_react = '''
-C          1.32733        0.65646       -0.00000
-H          1.31466        1.29233       -0.88425
-H          1.31464        1.29232        0.88424
-Cl         2.91844       -0.18529        0.00001
-C          0.18538       -0.32225       -0.00002
-H          0.26448       -0.97314       -0.87599
-H          0.26448       -0.97316        0.87594
-C         -1.15407        0.38973       -0.00001
-H         -1.22228        1.04790        0.87504
-H         -1.22230        1.04790       -0.87506
-C         -2.32898       -0.56797       -0.00000
-H         -2.25617       -1.22432       -0.87362
-H         -2.25615       -1.22432        0.87362
-C         -3.66168        0.14952        0.00001
-H         -4.50033       -0.54680        0.00004
-H         -3.76119        0.78917        0.87984
-H         -3.76123        0.78914       -0.87983
-'''
 
 sub1_react = '''
 C          1.32733        0.65646       -0.00000
@@ -46,27 +25,6 @@ C         -3.66168        0.14952        0.00001
 H         -4.50033       -0.54680        0.00004
 H         -3.76119        0.78917        0.87984
 H         -3.76123        0.78914       -0.87983
-'''
-
-full_trans = '''
-C         -1.40554        0.58881       -0.01889
-H         -2.26382        0.96377        0.50578
-H         -1.41299        0.68348       -1.08814
-Cl        -2.16538       -1.46213       -0.10012
-F         -0.98381        2.61999       -0.26484
-C         -0.12057        0.38814        0.70776
-H          0.10969        1.34494        1.18299
-H         -0.25082       -0.36818        1.48815
-C          1.01165       -0.00388       -0.21483
-H          0.74024       -0.92339       -0.74823
-H          1.12521        0.78460       -0.96808
-C          2.32405       -0.20742        0.51295
-H          2.57757        0.70882        1.05856
-H          2.19751       -0.98641        1.27430
-C          3.45731       -0.58142       -0.42016
-H          4.40140       -0.73248        0.10838
-H          3.22542       -1.50333       -0.96012
-H          3.61494        0.19921       -1.16898
 '''
 
 sub1_trans = '''
@@ -97,17 +55,6 @@ basis_to_use = 'cc-pVDZ'
 dft_method = 'm06'
 active_method = 'ccsd(t)'
 
-react_mol = gto.Mole()
-react_mol.atom = full_react
-react_mol.basis = basis_to_use
-react_mol.build()
-
-trans_mol = gto.Mole()
-trans_mol.atom = full_trans
-trans_mol.basis = basis_to_use
-trans_mol.charge = -1
-trans_mol.build()
-
 sub1_react_mol = gto.Mole()
 sub1_react_mol.atom = sub1_react
 sub1_react_mol.basis = basis_to_use
@@ -132,21 +79,6 @@ sub2_trans_mol.basis = basis_to_use
 sub2_trans_mol.charge = 1
 sub2_trans_mol.build()
 
-react_mf = scf.RHF(react_mol)
-react_total_energy = react_mf.kernel()
-react_cc = cc.CCSD(react_mf)
-react_total_energy += react_cc.kernel()[0]
-react_total_energy += ccsd_t.kernel(react_cc, react_cc.ao2mo())
-
-trans_mf = scf.RHF(trans_mol)
-trans_total_energy = trans_mf.kernel()
-trans_cc = cc.CCSD(trans_mf)
-trans_total_energy += trans_cc.kernel()[0]
-trans_total_energy += ccsd_t.kernel(trans_cc, trans_cc.ao2mo())
-
-print ("Canonical Difference")
-print (trans_total_energy - react_total_energy)
-
 sub1_react = cluster_subsystem.ClusterActiveSubSystem(sub1_react_mol, dft_method, active_method)
 sub2_react = cluster_subsystem.ClusterEnvSubSystem(sub2_react_mol, dft_method)
 sup_react = cluster_supersystem.ClusterSuperSystem([sub1_react, sub2_react], dft_method)
@@ -163,12 +95,5 @@ sup_trans.freeze_and_thaw()
 sup_trans.get_active_energy()
 sup_trans_energy = sup_trans.get_supersystem_energy()
 trans_energy = sup_trans_energy - sup_trans.subsystems[0].env_energy + sup_trans.subsystems[0].active_energy
-
-print ("Embedding Difference")
-print (trans_energy - react_energy)
-
-print ("Error (kcal/mol)")
-print (((trans_total_energy - react_total_energy) - (trans_energy - react_energy)) * 627.5)
-
 
 

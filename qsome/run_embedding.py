@@ -40,17 +40,19 @@ def main():
             subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
             subsystems.append(subsys)
 
-    ct_method = in_obj.supersystem_kwargs.pop('ct_method')
+    fs_method = in_obj.supersystem_kwargs.pop('fs_method')
     supersystem_kwargs = in_obj.supersystem_kwargs
     supersystem_kwargs['nproc'] = nproc
     supersystem_kwargs['pmem'] = pmem
     supersystem_kwargs['scr_dir'] = scr_dir
     supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
-        ct_method, **supersystem_kwargs)
+        fs_method, **supersystem_kwargs)
     supersystem.freeze_and_thaw()
     supersystem.env_in_env_energy()
     supersystem.get_active_energy()
+    #supersystem.get_env_energy()
     super_energy = supersystem.get_supersystem_energy()
+    supersystem.get_dft_diff_parameters()
 
     total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
 

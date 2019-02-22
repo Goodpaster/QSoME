@@ -20,13 +20,6 @@ from shutil import copyfile, move
 import multiprocessing
 import psutil
 
-#TODO: Changes some part of the pyscf object such that if get_interaction_energy is called after molpro_energy, it returns incorrect results.
-
-#MOLPROEXE = os.environ['HOME'] + '/workspace/molpro-dev/bin/molpro'
-#nprocs = multiprocessing.cpu_count()
-#mempp = 450
-#MOLPROEXE = 'molpro -n 8'#+str(nprocs)
-
 molpro_template=Template('''
 !leave this line blank
 memory, $MEMORY, m
