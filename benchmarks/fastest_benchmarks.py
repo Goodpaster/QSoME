@@ -81,7 +81,7 @@ sub2_trans_mol.build()
 
 sub1_react = cluster_subsystem.ClusterActiveSubSystem(sub1_react_mol, dft_method, active_method)
 sub2_react = cluster_subsystem.ClusterEnvSubSystem(sub2_react_mol, dft_method)
-sup_react = cluster_supersystem.ClusterSuperSystem([sub1_react, sub2_react], dft_method)
+sup_react = cluster_supersystem.ClusterSuperSystem([sub1_react, sub2_react], dft_method, ft_initguess='localsup')
 sup_react.freeze_and_thaw()
 sup_react.get_active_energy()
 sup_react_energy = sup_react.get_supersystem_energy()
@@ -90,7 +90,7 @@ react_energy = sup_react_energy - sup_react.subsystems[0].env_energy + sup_react
 
 sub1_trans = cluster_subsystem.ClusterActiveSubSystem(sub1_trans_mol, dft_method, active_method)
 sub2_trans = cluster_subsystem.ClusterEnvSubSystem(sub2_trans_mol, dft_method)
-sup_trans = cluster_supersystem.ClusterSuperSystem([sub1_trans, sub2_trans], dft_method)
+sup_trans = cluster_supersystem.ClusterSuperSystem([sub1_trans, sub2_trans], dft_method, ft_initguess='localsup')
 sup_trans.freeze_and_thaw()
 sup_trans.get_active_energy()
 sup_trans_energy = sup_trans.get_supersystem_energy()

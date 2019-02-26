@@ -80,15 +80,15 @@ sub2_trans_mol.basis = basis_to_use
 sub2_trans_mol.charge = 1
 sub2_trans_mol.build()
 
-sub1_react = cluster_subsystem.ClusterActiveSubSystem(sub1_react_mol, dft_method, active_method, initguess='submol')
-sub2_react = cluster_subsystem.ClusterEnvSubSystem(sub2_react_mol, dft_method, initguess='submol')
-sup_react = cluster_supersystem.ClusterSuperSystem([sub1_react, sub2_react], dft_method, ft_updatefock=1)
+sub1_react = cluster_subsystem.ClusterActiveSubSystem(sub1_react_mol, dft_method, active_method)
+sub2_react = cluster_subsystem.ClusterEnvSubSystem(sub2_react_mol, dft_method)
+sup_react = cluster_supersystem.ClusterSuperSystem([sub1_react, sub2_react], dft_method, ft_initguess='localsup', ft_updatefock=1)
 sup_react.freeze_and_thaw()
 
 
-sub1_trans = cluster_subsystem.ClusterActiveSubSystem(sub1_trans_mol, dft_method, active_method, initguess='submol')
-sub2_trans = cluster_subsystem.ClusterEnvSubSystem(sub2_trans_mol, dft_method, initguess='submol')
-sup_trans = cluster_supersystem.ClusterSuperSystem([sub1_trans, sub2_trans], dft_method)
+sub1_trans = cluster_subsystem.ClusterActiveSubSystem(sub1_trans_mol, dft_method, active_method)
+sub2_trans = cluster_subsystem.ClusterEnvSubSystem(sub2_trans_mol, dft_method)
+sup_trans = cluster_supersystem.ClusterSuperSystem([sub1_trans, sub2_trans], dft_method, ft_initguess='localsup', ft_updatefock=1)
 sup_trans.freeze_and_thaw()
 
 

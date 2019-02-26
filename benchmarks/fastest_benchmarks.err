@@ -16,3 +16,7 @@ Traceback (most recent call last):
 TypeError: Can't broadcast (2, 157, 157) -> (2, 143, 143)
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 Overwritten attributes  get_fock energy_elec  of <class 'pyscf.scf.hf.RHF'>
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Overwritten attributes  energy_elec get_fock  of <class 'pyscf.scf.hf.RHF'>
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Overwritten attributes  get_fock energy_elec  of <class 'pyscf.scf.hf.RHF'>

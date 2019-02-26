@@ -177,6 +177,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if filename == None:
             filename = os.getcwd() + '/temp.inp'
         self.filename = filename
+        self.fermi = [0., 0.]
 
         self.env_scf = self.init_env_scf()
         self.dmat = self.init_density()
@@ -995,6 +996,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 #temp_dmat = copy(self.active_dmat)
                 #self.active_dmat = [temp_dmat/2., temp_dmat/2.]
         self.active_energy = active_energy 
+
+        if self.active_save_density:
+            pass
+        if self.active_save_orbs:
+            pass
         return self.active_energy
  
 class ClusterExcitedSubSystem(ClusterActiveSubSystem):

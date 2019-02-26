@@ -16,3 +16,17 @@ TypeError: Can't broadcast (2, 157, 157) -> (2, 143, 143)
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Traceback (most recent call last):
+  File "/home/goodpast/graha682/code/python/QSoME/benchmarks/min_cycles_benchmarks.py", line 86, in <module>
+    sup_react.freeze_and_thaw()
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_supersystem.py", line 36, in wrapper_time_method
+    result = func(*args, **kwargs)
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_supersystem.py", line 1407, in freeze_and_thaw
+    sub_list[j].diagonalize()
+  File "/home/goodpast/graha682/code/python/QSoME/qsome/cluster_subsystem.py", line 543, in diagonalize
+    emb_proj_fock = fock[0] + proj_pot[0]
+ValueError: operands could not be broadcast together with shapes (114,114) (29,29) 
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists

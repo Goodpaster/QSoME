@@ -1,15 +1,15 @@
 #!/bin/bash
 #PBS -N min_cycles_benchmark
 #PBS -l nodes=1:ppn=8
-#PBS -l walltime=08:00:00
+#PBS -l walltime=01:00:00
 #PBS -l pmem=2500mb
-#PBS -e /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME_2/benchmarks/min_cycles_benchmarks.err
-#PBS -o /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME_2/benchmarks/min_cycles_benchmarks.log
+#PBS -e /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/min_cycles_benchmarks.err
+#PBS -o /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/min_cycles_benchmarks.log
 #PBS -q mesabi
 
 module load python
 # create scratch directory
-scratch=/scratch.global/graha682/code/python/QSoME_2/benchmarks
+scratch=/scratch.global/graha682/code/python/QSoME/benchmarks
 if [[ -d $scratch ]]; then
     i=0
     while [[ -d $scratch-$i ]]; do
@@ -21,7 +21,7 @@ rm -rf $scratch 2> /dev/null
 mkdir -p $scratch
 cd $scratch
 
-python /home/goodpast/graha682/code/python/QSoME_2/benchmarks/min_cycles_benchmarks.py > /home/goodpast/graha682/code/python/QSoME_2/benchmarks/min_cycles_benchmarks.out
+python /home/goodpast/graha682/code/python/QSoME/benchmarks/min_cycles_benchmarks.py > /home/goodpast/graha682/code/python/QSoME/benchmarks/min_cycles_benchmarks.out
 
 cd ${PBS_O_WORKDIR}
 rm -rf $scratch 2> /dev/null
