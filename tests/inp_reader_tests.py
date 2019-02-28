@@ -23,7 +23,6 @@ end
 
 embed
  env_method pbe
- huzinaga
 end
 
 basis 3-21g
@@ -232,7 +231,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(float(inp.subsystem[1].atoms[0].group(4)), 0.0)
 
         #Check operator and methods
-        self.assertEqual(inp.embed.operator, 'huz')
+        self.assertEqual(inp.embed.operator, None)
         self.assertEqual(inp.embed.env_method, 'pbe')
         self.assertEqual(inp.active_method, 'hf')
         self.assertEqual(inp.basis, '3-21g')
@@ -347,7 +346,6 @@ class TestSuperSystemKwargs(unittest.TestCase):
         sup_kwargs = in_obj.supersystem_kwargs
 
         self.assertEqual(sup_kwargs['fs_method'], 'pbe')
-        self.assertEqual(sup_kwargs['proj_oper'], 'huz')
         self.assertEqual(sup_kwargs['filename'], path + def_filename)
 
 

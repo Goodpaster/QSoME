@@ -19,3 +19,5 @@ Traceback (most recent call last):
     react_total_energy += react_cc.kernel()
 ValueError: setting an array element with a sequence.
 mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+mkdir: cannot create directory ‘/scratch/graha682.molpro_temp’: File exists
+Overwritten attributes  get_fock energy_elec  of <class 'pyscf.scf.hf.RHF'>

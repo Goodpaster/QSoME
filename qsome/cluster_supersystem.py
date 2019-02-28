@@ -1553,6 +1553,5 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                      + 0.5 * np.trace(self.dmat[1] - self.dftindft_dmat[1]))
 
         print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}") 
-        #print (f"Fidelity of KS-DFT to DFT-in-DFT: {fidelity}") 
  
        

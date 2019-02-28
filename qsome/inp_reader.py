@@ -117,7 +117,7 @@ class InpReader:
 
         # This section needs work. Should be uniform option for setting op.
         operator = embed.add_mutually_exclusive_group(dest='operator', 
-                                                      required=True)
+                                                      required=False)
         operator.add_line_key('mu', type=float, default=1e6)
         operator.add_boolean_key('manby', action=1e6)
         operator.add_boolean_key('huzinaga', action='huz')
@@ -214,7 +214,6 @@ class InpReader:
         # There is a way to do this that is way better. This works.
         env_method = inp.embed.env_method
         supersystem_kwargs['fs_method'] = env_method
-        supersystem_kwargs['proj_oper'] = inp.embed.operator   
         supersystem_kwargs['filename'] = inp.filename
         if inp.compare_density:
             supersystem_kwargs['compare_density'] = inp.compare_density
@@ -245,6 +244,8 @@ class InpReader:
             if inp.embed.save_density:
                 supersystem_kwargs['ft_save_density'] = (
                     inp.embed.save_density)
+            if inp.embed.operator:
+                supersystem_kwargs['proj_oper'] = inp.embed.operator
 
         if inp.fullsys_settings:
             if inp.fullsys_settings.unrestricted:
