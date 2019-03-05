@@ -114,27 +114,27 @@ debug
 
 hcore_guess_filename = 'hcore_guess.inp'
 hcore_guess_str = default_str.replace("""
-hl_method hf
+active_method hf
 ""","""
-hl_method hf
+active_method hf
 initguess 1e
 """, 1)
 
 chk_guess_filename = 'chk_guess.inp'
 chk_guess_str = default_str.replace("""
-hl_method hf
+active_method hf
 ""","""
-hl_method hf
+active_method hf
 initguess readchk
 """, 1)
 
 ccsd_filename = "ccsd_test.inp"
-ccsd_str = default_str.replace("hl_method hf", """
-h1_method ccsd""", 1)
+ccsd_str = default_str.replace("active_method hf", """
+active_method ccsd""", 1)
 
 cas_filename = "cas_test.inp"
-cas_str = default_str.replace("hl_method hf", """
-hl_method caspt2[2,2]
+cas_str = default_str.replace("active_method hf", """
+active_method caspt2[2,2]
 cas_settings
  localize_orbitals
  active_orbs [6,7]
@@ -152,15 +152,15 @@ initguess supmol
 
 dft_hl_filename = 'dft_hl.inp'
 dft_hl_str = default_str.replace("""
-hl_method hf
+active_method hf
 ""","""
-hl_method pbe
+active_method pbe
 """, 1)
 dft_hl_xc_fun_filename = 'diff_dft_hl.inp'
 dft_hl_xc_fun_str = default_str.replace("""
-hl_method hf
+active_method hf
 ""","""
-hl_method m06
+active_method m06
 """, 1)
 partial_ghost_filename = 'partial_ghost.inp'
 partial_ghost_str = default_str.replace("""
@@ -235,7 +235,6 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.embed.env_method, 'pbe')
         self.assertEqual(inp.active_method, 'hf')
         self.assertEqual(inp.basis, '3-21g')
-        #self.assertEqual(inp.subsystem[0].atom_list,  
          
     def test_explicit_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -293,6 +292,9 @@ class TestInputReader(unittest.TestCase):
 
         #Check active settings
         self.assertEqual(inp.active_method, 'caspt2[2,2]')
+        self.assertEqual(inp.cas_settings.localize_orbitals, True)
+        self.assertEqual(inp.cas_settings.active_orbs, [4,5])
+
         self.assertEqual(inp.active_settings.unrestricted, True)
         self.assertEqual(inp.active_settings.conv, 1e-10)
         self.assertEqual(inp.active_settings.grad, 1e-11)
@@ -310,16 +312,6 @@ class TestInputReader(unittest.TestCase):
         self.assertTrue(inp.debug)
         self.assertTrue(inp.compare_density)
     
-    
-
-    def test_cas_settings(self):
-        path = os.getcwd() + temp_inp_dir   #Maybe a better way
-        in_obj = inp_reader.InpReader(path + exp_set_filename)
-        inp = in_obj.inp
-
-        self.assertTrue(inp.cas_settings.localize_orbitals)
-        self.assertEqual(inp.cas_settings.active_orbs, [4,5])
-
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):
@@ -385,7 +377,6 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['verbose'], 1)
         self.assertEqual(sup_kwargs['analysis'], True)
         self.assertEqual(sup_kwargs['debug'], True)
-
        
 
     def tearDown(self):
@@ -463,6 +454,7 @@ class TestEnvSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['verbose'], 1)
         self.assertEqual(sub_kwargs['analysis'], True)
         self.assertEqual(sub_kwargs['debug'], True)
+        self.assertEqual(sub_kwargs['unrestricted'], True)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

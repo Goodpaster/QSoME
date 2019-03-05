@@ -1,16 +1,6 @@
-2. Molpro interface
-3. Allow kwargs for nprocessors and pmem
-
-
-
-
-Fix Correction.
-1. Clean up test
-2. Clean up ABCs
-3. Write new tests
-    - Vxc Correction
-    - DIIS methods
-4. Print timing at end
-5. Write Run script
-6. Document
-7. Add Logging
+1. Write Documentation
+2. Write Examples
+3. Test cases that should fail.
+4. Add restricted open shell calculation.
+5. Print timings at the end
+6. Add logging

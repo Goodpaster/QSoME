@@ -27,6 +27,7 @@ from pyscf import gto, lib, scf, dft
 import numpy as np
 
 class TestClusterSuperSystemMethods(unittest.TestCase):
+
     #@unittest.skip
     def test_get_supersystem_energy(self):
 
@@ -592,7 +593,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, save_orbs=True, save_density=True)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -605,9 +606,18 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.basis = '3-21g'
         mol2.build()
         env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, save_orbs=True, save_density=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_save_orbs=True, fs_save_density=True, ft_save_orbs=True, ft_save_density=True)
         supersystem.freeze_and_thaw()
+        supersystem.env_in_env_energy()
+        supersystem.get_supersystem_energy()
+        self.assertTrue(os.path.isfile('temp_1.molden'))
+        self.assertTrue(os.path.isfile('temp_2.molden'))
+        self.assertTrue(os.path.isfile('temp_1.cube'))
+        self.assertTrue(os.path.isfile('temp_2.cube'))
+        self.assertTrue(os.path.isfile('temp_dftindft.cube'))
+        self.assertTrue(os.path.isfile('temp_super.molden'))
+        self.assertTrue(os.path.isfile('temp_super.cube'))
 
         projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
         projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))

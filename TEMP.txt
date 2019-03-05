@@ -1,8 +1,0 @@
-sub_env_in_env = Ecore + Elec + NucE
-
-Sub1 = NucE_1 + Proj_E_1 + EHcore_1_in_total + Elec_1 + Elec_1_in_2
-Sub2 = NucE_2 + Proj_E_2 + EHcore_2_in_total + Elec_2 + Elec_2_in_1
-
-Sub1 + Sub2 = NucE_1 + NucE_2 + Proj_E_1 + Proj_E_2 + EHcore_1_in_total + Ehcore_2_in_total + Elec_1 + Elec_2 + Elec1_in_2 + Elec_2_in_1
-
-Difference = NucE - (NucE_1 + NucE_2) -Proj_E_1 - Proj_E_2 - (Elec?)

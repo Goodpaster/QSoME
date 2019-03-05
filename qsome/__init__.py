@@ -1,1 +1,2 @@
-#THIS IS A LIBRARY
+name = "QSoME"
+

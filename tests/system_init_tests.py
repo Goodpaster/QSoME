@@ -459,8 +459,6 @@ class TestSuperSystem(unittest.TestCase):
         #This isn't working because the save doesn't have mo_coeffs or mo_orbitals to store. Only a density fragment. 
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='readchk')
         self.assertTrue(np.allclose(old_sup_dmat, supersystem.dmat))
-        print (old_sub1_dmat)
-        print (subsys.dmat)
         self.assertTrue(np.allclose(old_sub1_dmat, subsys.dmat))
         self.assertTrue(np.allclose(old_sub2_dmat, subsys2.dmat))
 

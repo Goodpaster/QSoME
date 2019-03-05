@@ -244,8 +244,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if shift is None:
             shift = self.shift
 
-        if (self.pmem and self.nproc):
-            mol.max_memory = (self.pmem * self.nproc)
+        if self.pmem:
+            mol.max_memory = self.pmem
 
         if self.unrestricted:
             if env_method == 'hf':
@@ -803,26 +803,26 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
             if active_method == 'hf':
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
-                          self.writeorbs, scr_dir=self.scr_dir, 
+                          self.active_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
             elif active_method == 'ccsd' or active_method == 'ccsd(t)':
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
-                          self.writeorbs, scr_dir=self.scr_dir, 
+                          self.active_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
             elif re.match(re.compile('cas(pt2)?\[.*\].*'), active_method):
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
-                          self.writeorbs, self.active_orbs, 
+                          self.active_save_orbs, self.active_orbs, 
                           self.localize_orbitals, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
             elif active_method == 'fcidump':
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
-                          self.writeorbs, scr_dir=self.scr_dir, 
+                          self.active_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
             else:

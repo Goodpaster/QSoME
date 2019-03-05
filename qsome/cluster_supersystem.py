@@ -258,7 +258,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.subsystems = subsystems
         self.fs_method = fs_method
         self.fs_unrestricted = fs_unrestricted
-        self.compare_density = compare_density
         self.proj_oper = proj_oper
 
         self.nproc = nproc
@@ -428,8 +427,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         if shift is None:
             shift = self.shift
 
-        if (self.nproc and self.pmem):
-            self.mol.max_memory = (self.nproc * self.pmem)
+        if (self.pmem):
+            self.mol.max_memory = self.pmem
 
         if self.fs_unrestricted:
             if fs_method == 'hf':
@@ -846,7 +845,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print("".center(80,'*'))
             if self.fs_save_density:
                 print('Writing Full System Density'.center(80))
-                if self.fs_unresctricted or self.mol.spin != 0:
+                if self.fs_unrestricted or self.mol.spin != 0:
                     cubename_a = os.path.splitext(self.filename)[0] + '_super_a' + '.cube'
                     dmat = self.dmat[0]
                     cubegen.density(mol, cubename_a, dmat) 
@@ -862,7 +861,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             if self.fs_save_orbs:
                 print('Writing Full System Orbitals'.center(80))
                 from pyscf.tools import molden
-                if self.fs_unresctricted or self.mol.spin != 0:
+                if self.fs_unrestricted or self.mol.spin != 0:
                     moldenname_a = os.path.splitext(self.filename)[0] + '_super_a' + '.molden'
                     moldenname_b = os.path.splitext(self.filename)[0] + '_super_b' + '.molden'
                     with open(moldenname_a, 'w') as fin:
@@ -1175,7 +1174,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.env_energy = self.fs_scf.energy_tot(dm=(dm_env[0] + dm_env[1]))
             if self.ft_save_density:
                 print('Writing DFT-in-DFT Density'.center(80))
-                if self.fs_unresctricted or self.mol.spin != 0:
+                if self.fs_unrestricted or self.mol.spin != 0:
                     cubename_a = os.path.splitext(self.filename)[0] + '_dftindft_a' + '.cube'
                     dmat = dm_env[0]
                     cubegen.density(self.fs_scf.mol, cubename_a, dmat) 
