@@ -843,7 +843,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_scf.energy_elec = lambda *args, **kwargs: (
                         custom_pyscf_methods.uhf_energy_elec(active_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    active_scf.kernel()
+                    active_scf.kernel(dm0=dmat)
 
                 elif (active_method == 'ccsd' or active_method == 'uccsd'
                        or active_method == 'ccsd(t)' 
@@ -860,7 +860,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_scf.energy_elec = lambda *args, **kwargs: (
                         custom_pyscf_methods.uhf_energy_elec(active_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
+                    active_energy = active_scf.kernel(dm0=(dmat))
                     active_cc = cc.UCCSD(active_scf)
                     active_cc.max_cycle = active_cycles
                     active_cc.conv_tol = active_conv

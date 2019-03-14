@@ -795,8 +795,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     subsystem = self.subsystems[i]
                     ft_dmat[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
                     ft_dmat[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
-    
-                scf_obj.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
+                if self.fs_unrestricted or scf_obj.mol.spin != 0:
+                    scf_obj.scf(dm0=ft_dmat)
+                else:
+                    scf_obj.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
             elif readchk:
                 if self.fs_unrestricted or scf_obj.mol.spin != 0:
                     init_guess = scf_obj.make_rdm1(mo_coeff=self.mo_coeff, 
