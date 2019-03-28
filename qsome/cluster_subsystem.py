@@ -851,7 +851,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_scf.energy_elec = lambda *args, **kwargs: (
                         custom_pyscf_methods.uhf_energy_elec(active_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
+                    if active_initguess != 'ft':
+                        dmat = active_scf.get_init_guess(key=active_initguess)
+
                     active_energy = active_scf.kernel(dm0=dmat)
+
                     self.active_scf = active_scf
                     if 'ccsd' in active_method:
                         active_cc = cc.UCCSD(active_scf)
@@ -914,8 +918,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         custom_pyscf_methods.rhf_energy_elec(active_scf, 
                         (emb_pot[0] + emb_pot[1])/2., 
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-
-                    active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
+                    if active_initguess == 'ft':
+                        init_dmat = dmat[0] + dmat[1]
+                    else:
+                        init_dmat = active_scf.get_init_guess(key=active_initguess)
+                    active_energy = active_scf.kernel(dm0=init_dmat)
                     # this slows down execution.
                     #self.active_dmat = self.active_scf.make_rdm1()
                     if 'ccsd' in active_method:
