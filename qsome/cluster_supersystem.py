@@ -159,13 +159,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, fs_method, fs_unrestricted=False, 
                  proj_oper='huz', filename=None, ft_cycles=100, ft_conv=1e-8, 
-                 ft_grad=None, ft_diis=1, ft_setfermi=None, 
+                 ft_grad=None, ft_diis=1, ft_setfermi=None, ft_damp=0.0,
                  ft_initguess='supmol', ft_updatefock=0, ft_writeorbs=False, 
-                 cycles=100, conv=1e-9, grad=None, damp=0, shift=0, 
-                 smearsigma=0, initguess=None, grid_level=4, verbose=3, 
-                 analysis=False, debug=False, rhocutoff=1e-7, nproc=None, 
-                 pmem=None, scr_dir=None, fs_save_orbs=False, fs_save_density=False,
-                 ft_save_orbs=False, ft_save_density=False, compare_density=False):
+                 fs_cycles=100, fs_conv=1e-9, fs_grad=None, fs_damp=0, 
+                 fs_shift=0, fs_smearsigma=0, fs_initguess=None, grid_level=4, 
+                 verbose=3, analysis=False, debug=False, rhocutoff=1e-7, 
+                 nproc=None, pmem=None, scr_dir=None, fs_save_orbs=False, 
+                 fs_save_density=False, ft_save_orbs=False, 
+                 ft_save_density=False, compare_density=False):
         """
         Parameters
         ----------
@@ -272,6 +273,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_cycles = ft_cycles
         self.ft_conv = ft_conv
         self.ft_grad = ft_grad
+        self.ft_damp = ft_damp
 
         self.ft_setfermi = ft_setfermi
         self.ft_initguess = ft_initguess
@@ -280,14 +282,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_save_density = ft_save_density
 
         # full system settings
-        self.cycles = cycles
-        self.conv = conv
-        self.grad = grad
+        self.fs_cycles = fs_cycles
+        self.fs_conv = fs_conv
+        self.fs_grad = fs_grad
         self.rho_cutoff = rhocutoff
-        self.damp = damp
-        self.shift = shift
-        self.smearsigma = smearsigma
-        self.initguess = initguess
+        self.fs_damp = fs_damp
+        self.fs_shift = fs_shift
+        self.fs_smearsigma = fs_smearsigma
+        self.fs_initguess = fs_initguess
         self.fs_save_orbs = fs_save_orbs
         self.fs_save_density = fs_save_density
 
@@ -296,6 +298,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.verbose = verbose
         self.analysis = analysis #provide a more detail at higher cost
         self.debug = debug
+        self.compare_density = compare_density
         
 
         # Densities are stored separately to allow for alpha and beta.
@@ -423,9 +426,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         if verbose is None:
             verbose = self.verbose
         if damp is None:
-            damp = self.damp
+            damp = self.fs_damp
         if shift is None:
-            shift = self.shift
+            shift = self.fs_shift
 
         if (self.pmem):
             self.mol.max_memory = self.pmem
@@ -460,11 +463,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj.small_rho_cutoff = self.rho_cutoff
 
         fs_scf = scf_obj
-        fs_scf.max_cycle = self.cycles
-        fs_scf.conv_tol = self.conv
-        fs_scf.conv_tol_grad = self.grad
-        fs_scf.damp = self.damp
-        fs_scf.level_shift = self.shift
+        fs_scf.max_cycle = self.fs_cycles
+        fs_scf.conv_tol = self.fs_conv
+        fs_scf.conv_tol_grad = self.fs_grad
+        fs_scf.damp = self.fs_damp
+        fs_scf.level_shift = self.fs_shift
         fs_scf.verbose = self.verbose
 
         grids = dft.gen_grid.Grids(mol)
@@ -500,7 +503,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         dmat = [None, None]
         # If supersystem dft should be read from chkfile.
-        super_chk = (self.initguess == 'readchk')
+        super_chk = (self.fs_initguess == 'readchk')
         s2s = self.sub2sup
 
         for i in range(len(subsystems)):
@@ -672,9 +675,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 subsystem.update_density(sub_dmat)
 
         # Initialize supersystem density.
-        if self.initguess == 'supmol':
+        if self.fs_initguess == 'supmol':
             self.get_supersystem_energy(readchk=super_chk)
-        if self.initguess == 'readchk': 
+        if self.fs_initguess == 'readchk': 
             is_chkfile = self.read_chkfile()
             if is_chkfile:
                 if (np.any(self.mo_coeff) and np.any(self.mo_occ)):
@@ -689,8 +692,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         temp_dmat = t_d
                     dmat = temp_dmat
         else:
-            if self.initguess != None:
-                dmat = fs_scf.get_init_guess(key=self.initguess)
+            if self.fs_initguess == "ft":
+                pass
+            elif self.fs_initguess != None:
+                dmat = fs_scf.get_init_guess(key=self.fs_initguess)
             else:
                 dmat = fs_scf.get_init_guess()
 
@@ -1446,8 +1451,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 for k in range(len(sub_list)):
                     subsystem = sub_list[k]
                     new_dm = [None, None]
-                    new_dm[0] = ((1 - self.damp) * subsystem.dmat[0] + (self.damp * sub_old_dms[k][0]))
-                    new_dm[1] = ((1 - self.damp) * subsystem.dmat[1] + (self.damp * sub_old_dms[k][1]))
+                    new_dm[0] = ((1 - self.ft_damp) * subsystem.dmat[0] + (self.ft_damp * sub_old_dms[k][0]))
+                    new_dm[1] = ((1 - self.ft_damp) * subsystem.dmat[1] + (self.ft_damp * sub_old_dms[k][1]))
                     subsystem.update_density(new_dm) 
                     ddm = sp.linalg.norm(subsystem.dmat[0] - sub_old_dms[k][0])
                     ddm += sp.linalg.norm(subsystem.dmat[1] - sub_old_dms[k][1])

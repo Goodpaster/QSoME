@@ -70,7 +70,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol3.build()
         test_scf = dft.RKS(mol3)
         test_scf.xc = 'b3lyp'
-        test_scf.conv_tol = supersystem.conv
+        test_scf.conv_tol = supersystem.fs_conv
         grids = dft.gen_grid.Grids(mol3)
         grids.level = supersystem.grid_level
         grids.build()
@@ -115,7 +115,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol3.build()
         test_scf = dft.UKS(mol3)
         test_scf.xc = 'b3lyp'
-        test_scf.conv_tol = supersystem.conv
+        test_scf.conv_tol = supersystem.fs_conv
         grids = dft.gen_grid.Grids(mol3)
         grids.level = supersystem.grid_level
         grids.build()

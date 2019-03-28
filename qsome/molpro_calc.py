@@ -55,7 +55,7 @@ $METHOD
 put,molden,$FNAME;   !save orbitals in molden format
 ''')
 
-def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orbs=None, localize=False, work_dir=None, scr_dir=None, nproc=None, pmem=None):
+def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orbs=None, avas=None, localize=False, work_dir=None, scr_dir=None, nproc=None, pmem=None):
 
     ## Prepare input files
     if nproc is None:
@@ -93,7 +93,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
         file_mod += 1
 
     write_h0(h0_scr, mol, h0)
-    molpro_input = generate_molpro_input(mol, method, work_dir, input_file, h0_name, output_orbs, active_orbs, localize, pword)
+    molpro_input = generate_molpro_input(mol, method, work_dir, input_file, h0_name, output_orbs, active_orbs, avas, localize, pword)
 
     with open(work_dir + '/' + input_file, 'w') as f:
         f.write(molpro_input)
@@ -143,7 +143,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
 
         if re.match(re.compile('cas(pt2)?\[.*\].*'), method):
             for i in range((len(dat1)-10), len(dat1), 1):
-                if "HF-SCF" in dat1[i]:
+                if (avas is None and "HF-SCF" in dat1[i]) or ("RHFT" in dat1[i]):
                     elec_e = dat1[i+1].split()
 
         else:
@@ -169,7 +169,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
     return energy
     
 
-def generate_molpro_input(mol, method, work_dir, input_file, h0_filename, output_orbs, active_orbs, localize, pword):
+def generate_molpro_input(mol, method, work_dir, input_file, h0_filename, output_orbs, active_orbs, avas, localize, pword):
     
     if (method == 'hf') or (method == 'hartree fock') or (method == 'hartree-fock'):
         method_string = '{hf;noenest}'
@@ -179,7 +179,10 @@ def generate_molpro_input(mol, method, work_dir, input_file, h0_filename, output
         num_elec = mol.tot_electrons()
         num_closed = int((num_elec - cas_space[0]) / 2)
         num_occ = num_closed + cas_space[1]
-        method_string = '{hf;noenest}\n'
+        if avas is None:
+            method_string = '{hf;noenest}\n'
+        else:
+            method_string = '{rhft;avas;' + ';'.join(avas) + '}\n'
         if localize:
             method_string += 'locali\n'
 

@@ -662,9 +662,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, active_method, 
                  active_unrestricted=False, localize_orbitals=False,
-                 active_orbs=None, active_conv=1e-9, active_grad=None, 
+                 active_orbs=None, avas=None, active_conv=1e-9, active_grad=None, 
                  active_cycles=100, use_molpro=False, active_damp=0, 
-                 active_shift=0, active_save_orbs=False, 
+                 active_shift=0, active_initguess='ft', active_save_orbs=False,
                  active_save_density=False, **kwargs):
         """
         Parameters
@@ -701,11 +701,13 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         self.active_unrestricted = active_unrestricted
         self.localize_orbitals = localize_orbitals
         self.active_orbs = active_orbs
+        self.avas = avas
         self.active_conv = active_conv
         self.active_grad = active_grad
         self.active_cycles = active_cycles
         self.active_damp = active_damp
         self.active_shift = active_shift
+        self.active_initguess = active_initguess
         self.use_molpro = use_molpro
         self.active_save_orbs = active_save_orbs
         self.active_save_density = active_save_density
@@ -736,7 +738,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                              proj_pot=None, active_method=None, 
                              active_conv=None, active_grad=None, 
                              active_shift=None, active_damp=None, 
-                             active_cycles=None):
+                             active_cycles=None, active_initguess=None):
         """Returns the active subsystem energy as embedded in the full system.
 
         Parameters
@@ -792,6 +794,8 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
             active_damp = self.active_damp
         if active_cycles is None:
             active_cycles = self.active_cycles
+        if active_initguess is None:
+            active_initguess = self.active_initguess
 
         active_energy = 0.0
         if self.use_molpro:
@@ -815,7 +819,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
             elif re.match(re.compile('cas(pt2)?\[.*\].*'), active_method):
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
-                          self.active_save_orbs, self.active_orbs, 
+                          self.active_save_orbs, self.active_orbs, self.avas,
                           self.localize_orbitals, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
@@ -830,7 +834,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
         else:
             if self.active_unrestricted: 
-                if active_method == 'hf':
+                if (active_method == 'hf' or active_method == 'ccsd' or 
+                    active_method == 'uccsd' or active_method == 'ccsd(t)' or 
+                    active_method == 'uccsd(t)' or 
+                    re.match(re.compile('cas(pt2)?\[.*\].*'), 
+                                           active_method[1:])):
                     active_scf = scf.UHF(mol)
                     active_scf.conv_tol = active_conv
                     active_scf.conv_tol_grad = active_grad
@@ -843,36 +851,20 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_scf.energy_elec = lambda *args, **kwargs: (
                         custom_pyscf_methods.uhf_energy_elec(active_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    active_scf.kernel(dm0=dmat)
-
-                elif (active_method == 'ccsd' or active_method == 'uccsd'
-                       or active_method == 'ccsd(t)' 
-                       or active_method == 'uccsd(t)'):
-                    active_scf = scf.UHF(mol)
-                    active_scf.conv_tol = active_conv
-                    active_scf.conv_tol_grad = active_grad
-                    active_scf.max_cycle = active_cycles
-                    active_scf.level_shift = active_shift
-                    active_scf.damp = active_damp
-                    active_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_get_fock(active_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-                    active_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_energy_elec(active_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-                    active_energy = active_scf.kernel(dm0=(dmat))
-                    active_cc = cc.UCCSD(active_scf)
-                    active_cc.max_cycle = active_cycles
-                    active_cc.conv_tol = active_conv
-                    #active_cc.conv_tol_normt = 1e-6
-                    ecc, t1, t2 = active_cc.kernel()
-                    active_energy += ecc
+                    active_energy = active_scf.kernel(dm0=dmat)
                     self.active_scf = active_scf
-                    if (active_method == 'ccsd(t)' 
-                        or active_method == 'uccsd(t)'):
-                        eris = active_cc.ao2mo(active_scf.mo_coeff)
-                        ecc_t = uccsd_t.kernel(active_cc, eris)
-                        active_energy += ecc_t
+                    if 'ccsd' in active_method:
+                        active_cc = cc.UCCSD(active_scf)
+                        active_cc.max_cycle = active_cycles
+                        active_cc.conv_tol = active_conv
+                        #active_cc.conv_tol_normt = 1e-6
+                        ecc, t1, t2 = active_cc.kernel()
+                        active_energy += ecc
+                        if (active_method == 'ccsd(t)' 
+                            or active_method == 'uccsd(t)'):
+                            eris = active_cc.ao2mo(active_scf.mo_coeff)
+                            ecc_t = uccsd_t.kernel(active_cc, eris)
+                            active_energy += ecc_t
                 elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
                                          active_method[1:]):
                     pass
@@ -904,7 +896,10 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
             else: 
                 if active_method[0] == 'r':
                     active_method = active_method[1:]
-                if active_method == 'hf':
+                if (active_method == 'hf' or active_method == 'ccsd' or 
+                    active_method == 'ccsd(t)' or  
+                    re.match(re.compile('cas(pt2)?\[.*\].*'), 
+                                           active_method[1:])):
                     active_scf = scf.RHF(mol)
                     active_scf.conv_tol = active_conv
                     active_scf.conv_tol_grad = active_grad
@@ -923,52 +918,34 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
                     # this slows down execution.
                     #self.active_dmat = self.active_scf.make_rdm1()
+                    if 'ccsd' in active_method:
+                        active_cc = cc.CCSD(active_scf)
+                        active_cc.max_cycle = active_cycles
+                        active_cc.conv_tol = active_conv
+                        #active_cc.conv_tol_normt = 1e-6
+                        ecc, t1, t2 = active_cc.kernel()
+                        eris = active_cc.ao2mo()
+                        active_energy += ecc
+                        self.active_scf = active_scf
+                        if active_method == 'ccsd(t)':
+                            ecc_t = ccsd_t.kernel(active_cc, eris)
+                            active_energy += ecc_t
+                            #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
+                            # this slows down execution.
+                            #self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
+                        else:
+                            pass
+                            # this slows down execution.
+                            #self.active_dmat = self.active_cc.make_rdm1()
 
-                elif active_method == 'ccsd' or active_method == 'ccsd(t)':
-                    active_scf = scf.RHF(mol)
-                    active_scf.conv_tol = active_conv
-                    active_scf.conv_tol_grad = active_grad
-                    active_scf.max_cycle = active_cycles
-                    active_scf.level_shift = active_shift
-                    active_scf.damp = active_damp
-                    #active_scf.get_hcore = lambda *args, **kwargs: env_hcore
-                    active_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_get_fock(active_scf, 
-                        (emb_pot[0] + emb_pot[1])/2.,
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    active_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_energy_elec(active_scf, 
-                        (emb_pot[0] + emb_pot[1])/2., 
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
-                    
-                    active_cc = cc.CCSD(active_scf)
-                    active_cc.max_cycle = active_cycles
-                    active_cc.conv_tol = active_conv
-                    #active_cc.conv_tol_normt = 1e-6
-                    ecc, t1, t2 = active_cc.kernel()
-                    eris = active_cc.ao2mo()
-                    active_energy += ecc
-                    self.active_scf = active_scf
-                    if active_method == 'ccsd(t)':
-                        ecc_t = ccsd_t.kernel(active_cc, eris)
-                        active_energy += ecc_t
-                        #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
-                        # this slows down execution.
-                        #self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
-                    else:
-                        pass
-                        # this slows down execution.
-                        #self.active_dmat = self.active_cc.make_rdm1()
-
-                    # Convert to AO form
-                    #temp_dmat = copy(self.active_dmat)
-                    #ao_dmat = reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T)))
-                    #print ("DMATS")
-                    #print (self.active_dmat)
-                    #print (ao_dmat)
-                    #print (self.dmat[0] + self.dmat[1])
-                    #self.active_dmat = ao_dmat
+                        # Convert to AO form
+                        #temp_dmat = copy(self.active_dmat)
+                        #ao_dmat = reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T)))
+                        #print ("DMATS")
+                        #print (self.active_dmat)
+                        #print (ao_dmat)
+                        #print (self.dmat[0] + self.dmat[1])
+                        #self.active_dmat = ao_dmat
 
                 else: #DFT
                     active_scf = scf.RKS(mol)

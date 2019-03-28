@@ -71,6 +71,7 @@ embed
  setfermi -4
  save_orbs
  save_density
+ damp 0.1
 end
 
 basis 3-21g
@@ -102,6 +103,7 @@ active_settings
  shift 0.2
  save_orbs
  save_density
+ initguess atom
 end
 
 rhocutoff 1e-4
@@ -276,6 +278,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.embed.setfermi, -4.0)
         self.assertEqual(inp.embed.save_orbs, True)
         self.assertEqual(inp.embed.save_density, True)
+        self.assertEqual(inp.embed.damp, 0.1)
 
         #Check FS settings
         self.assertEqual(inp.basis, '3-21g')
@@ -303,6 +306,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.active_settings.shift, 0.2)
         self.assertEqual(inp.active_settings.save_orbs, True)
         self.assertEqual(inp.active_settings.save_density, True)
+        self.assertEqual(inp.active_settings.initguess, 'atom')
 
         #Check system settings
         self.assertEqual(inp.grid, 5)
@@ -363,12 +367,12 @@ class TestSuperSystemKwargs(unittest.TestCase):
         self.assertEqual(sup_kwargs['fs_unrestricted'], True)
         self.assertEqual(sup_kwargs['fs_save_orbs'],True)
         self.assertEqual(sup_kwargs['fs_save_density'],True)
-        self.assertEqual(sup_kwargs['cycles'], 300)
-        self.assertEqual(sup_kwargs['conv'], 1e-3)
-        self.assertEqual(sup_kwargs['grad'], 1e-2)
-        self.assertEqual(sup_kwargs['damp'], 0.1)
-        self.assertEqual(sup_kwargs['shift'], 0.3)
-        self.assertEqual(sup_kwargs['initguess'], '1e')
+        self.assertEqual(sup_kwargs['fs_cycles'], 300)
+        self.assertEqual(sup_kwargs['fs_conv'], 1e-3)
+        self.assertEqual(sup_kwargs['fs_grad'], 1e-2)
+        self.assertEqual(sup_kwargs['fs_damp'], 0.1)
+        self.assertEqual(sup_kwargs['fs_shift'], 0.3)
+        self.assertEqual(sup_kwargs['fs_initguess'], '1e')
 
         #System settings
         self.assertEqual(sup_kwargs['filename'], path + exp_set_filename)
@@ -500,6 +504,7 @@ class TestActiveSubSystemKwargs(unittest.TestCase):
         self.assertEqual(sub_kwargs['active_shift'], 0.2)
         self.assertEqual(sub_kwargs['active_save_orbs'], True)
         self.assertEqual(sub_kwargs['active_save_density'], True)
+        self.assertEqual(sub_kwargs['active_initguess'], 'atom')
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

@@ -104,6 +104,7 @@ class InpReader:
         embed.add_line_key('cycles', type=int) 
         embed.add_line_key('conv', type=float)
         embed.add_line_key('grad', type=float)
+        embed.add_line_key('damp', type=float)
         embed.add_line_key('env_method', type=str) #low-level method
         embed.add_line_key('diis', type=int) # Use DIIS for fock. (0 for off)
         # Supersystem fock update frequency. 
@@ -144,7 +145,7 @@ class InpReader:
         fs_settings.add_line_key('shift', type=float)
         fs_settings.add_line_key('smearsigma', type=float)
         fs_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-                                                    'readchk', 'supmol'))
+                                                    'readchk', 'ft', 'supmol'))
 
         # High level subsystem settings.
         reader.add_line_key('active_method', type=str, required=True)
@@ -159,12 +160,15 @@ class InpReader:
         active_settings.add_boolean_key('molpro')
         active_settings.add_boolean_key('save_orbs')
         active_settings.add_boolean_key('save_density')
+        active_settings.add_line_key('initguess', type=('minao', 'atom', '1e',
+                                                        'readchk', 'ft'))
 
         cas_settings = reader.add_block_key('cas_settings')
         # Localize HF orbitals prior to CAS
         cas_settings.add_boolean_key('localize_orbitals')
         #A list to specity active orbitals by number. Ex. [5,6]
         cas_settings.add_line_key('active_orbs', type=str, default='') 
+        cas_settings.add_line_key('avas', type=str, default='') 
 
         reader.add_line_key('grid', type=int)
         reader.add_line_key('rhocutoff', type=float)
@@ -188,6 +192,8 @@ class InpReader:
         # This could be done better.
         if inp.cas_settings and inp.cas_settings.active_orbs:
             inp.cas_settings.active_orbs = eval(inp.cas_settings.active_orbs)
+        if inp.cas_settings and inp.cas_settings.avas:
+            inp.cas_settings.avas = eval(inp.cas_settings.avas)
 
         print("".center(80, '*'))
         print("Input File".center(80))
@@ -227,6 +233,8 @@ class InpReader:
                 supersystem_kwargs['ft_conv'] = inp.embed.conv
             if inp.embed.grad:
                 supersystem_kwargs['ft_grad'] = inp.embed.grad
+            if inp.embed.damp:
+                supersystem_kwargs['ft_damp'] = inp.embed.damp
             if not inp.embed.diis is None:
                 supersystem_kwargs['ft_diis'] = inp.embed.diis
             if inp.embed.setfermi:
@@ -258,20 +266,20 @@ class InpReader:
                 supersystem_kwargs['fs_save_density'] = (
                     inp.fullsys_settings.save_density)
             if inp.fullsys_settings.cycles:
-                supersystem_kwargs['cycles'] = inp.fullsys_settings.cycles
+                supersystem_kwargs['fs_cycles'] = inp.fullsys_settings.cycles
             if inp.fullsys_settings.conv:
-                supersystem_kwargs['conv'] = inp.fullsys_settings.conv
+                supersystem_kwargs['fs_conv'] = inp.fullsys_settings.conv
             if inp.fullsys_settings.grad:
-                supersystem_kwargs['grad'] = inp.fullsys_settings.grad
+                supersystem_kwargs['fs_grad'] = inp.fullsys_settings.grad
             if inp.fullsys_settings.damp:
-                supersystem_kwargs['damp'] = inp.fullsys_settings.damp
+                supersystem_kwargs['fs_damp'] = inp.fullsys_settings.damp
             if inp.fullsys_settings.shift:
-                supersystem_kwargs['shift'] = inp.fullsys_settings.shift
+                supersystem_kwargs['fs_shift'] = inp.fullsys_settings.shift
             if inp.fullsys_settings.smearsigma:
-                supersystem_kwargs['smearsigma'] = (
+                supersystem_kwargs['fs_smearsigma'] = (
                     inp.fullsys_settings.smearsigma)
             if inp.fullsys_settings.initguess:
-                supersystem_kwargs['initguess'] = (
+                supersystem_kwargs['fs_initguess'] = (
                     inp.fullsys_settings.initguess)
 
         if inp.grid:
@@ -372,6 +380,10 @@ class InpReader:
                 active_subsystem_kwargs['active_orbs'] = (
                     inp.cas_settings.active_orbs)
 
+            if inp.cas_settings.avas:
+                active_subsystem_kwargs['avas'] = (
+                    inp.cas_settings.avas)
+
         if inp.active_settings:
             if inp.active_settings.unrestricted:
                 active_subsystem_kwargs['active_unrestricted'] = (
@@ -382,6 +394,9 @@ class InpReader:
             if inp.active_settings.save_density:
                 active_subsystem_kwargs['active_save_density'] = (
                     inp.active_settings.save_density)
+            if inp.active_settings.initguess:
+                active_subsystem_kwargs['active_initguess'] = (
+                    inp.active_settings.initguess)
             if inp.active_settings.conv:
                 active_subsystem_kwargs['active_conv'] = (
                     inp.active_settings.conv)
