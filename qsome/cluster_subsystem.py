@@ -923,6 +923,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     else:
                         init_dmat = active_scf.get_init_guess(key=active_initguess)
                     active_energy = active_scf.kernel(dm0=init_dmat)
+                    self.active_scf = active_scf
                     # this slows down execution.
                     #self.active_dmat = self.active_scf.make_rdm1()
                     if 'ccsd' in active_method:
@@ -933,7 +934,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         ecc, t1, t2 = active_cc.kernel()
                         eris = active_cc.ao2mo()
                         active_energy += ecc
-                        self.active_scf = active_scf
+                        self.active_scf = active_cc
                         if active_method == 'ccsd(t)':
                             ecc_t = ccsd_t.kernel(active_cc, eris)
                             active_energy += ecc_t

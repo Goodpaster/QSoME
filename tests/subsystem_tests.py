@@ -433,3 +433,34 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         test_active_e = cc_calc.kernel()[0]
         self.assertAlmostEqual(subsys_active_e, hf + test_active_e, delta=1e-5)
 
+    def test_active_init_guess(self):
+        # Closed Shell
+        # Yet to test including embedding or projection potentials.
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        O 0.0 0.0 0.0
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857'''
+        mol.basis = 'cc-pVDZ'
+        mol.build()
+        env_method = 'm06'
+        active_method  = 'hf'
+        conv_param = 1e-10
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, active_conv=conv_param, active_cycles=0, active_initguess="1e")
+        subsys_active_e = subsys.active_in_env_energy()
+        test_scf = scf.RHF(mol)
+        correct_dmat = test_scf.get_init_guess(key="1e")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        #from pyscf import cc
+        #cc_calc = cc.CCSD(test_scf)
+        #cc_calc.conv_tol = 1e-10
+        #cc_calc.max_cycle = 0
+        #test_active_e = cc_calc.kernel()[0]
+        #correct_dmat = cc_calc.make_rdm1()
+       
+        print (np.subtract(correct_dmat, subsys.active_scf.make_rdm1())) 
+        self.assertTrue(np.allclose(correct_dmat, subsys.active_scf.make_rdm1()))
+
