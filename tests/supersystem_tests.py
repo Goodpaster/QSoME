@@ -796,11 +796,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         test_dmat = mf.make_rdm1()
         test_e = mf.energy_tot()
         sup_e = supersystem.env_in_env_energy()
-        #WTF SOMETHING IS WRONG HERE
-        #print (supersystem.dmat)
-        #print (test_dmat)
-        #print (np.subtract(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1])))
-        #self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
+        self.assertTrue(np.allclose(test_dmat, (supersystem.dftindft_dmat[0] + supersystem.dftindft_dmat[1]), atol=1e-6))
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
         #Long distance test.
