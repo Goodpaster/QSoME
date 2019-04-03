@@ -304,6 +304,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # Densities are stored separately to allow for alpha and beta.
         self.is_ft_conv = False
         self.mol = self.concat_mols()
+        if ((np.count_nonzero(
+          [subsystem.mol.spin for subsystem in self.subsystems]) > 1) and
+          self.mol.spin != 0):
+            self.fs_unrestricted = True
         self.sub2sup = self.gen_sub2sup()
         self.fs_scf, self.os_scf = self.init_scf()
 

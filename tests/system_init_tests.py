@@ -78,7 +78,7 @@ class TestEnvSubsystem(unittest.TestCase):
         init_dmat = scf.uhf.get_init_guess(mol)
         self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
-    def test_closed_subsystem(self):
+    def test_restrictedos_subsystem(self):
         mol = gto.Mole()
         mol.verbose = 3
         mol.atom = '''

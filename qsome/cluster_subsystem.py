@@ -347,13 +347,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if dmat is None:
             dmat = self.dmat
         if fock is None:
-            if self.unrestricted:
+            if self.unrestricted or self.mol.spin != 0:
                 self.fock = (self.env_scf.get_hcore() 
                              + self.env_scf.get_veff(dm=dmat))
                 fock = self.fock
-            elif self.mol.spin != 0:
-                #RO Pass
-                pass
             else:
                 self.fock = (self.env_scf.get_hcore() 
                              + self.env_scf.get_veff(dm=(dmat[0] + dmat[1])))
@@ -366,12 +363,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
-                if self.unrestricted:
+                if self.unrestricted or self.mol.spin != 0:
                     emb_pot = [self.emb_fock[0] - fock[0], 
                                self.emb_fock[1] - fock[1]]
-                elif self.mol.spin != 0:
-                    #RO
-                    pass
                 else:
                     emb_pot = [self.emb_fock[0] - fock, 
                                self.emb_fock[1] - fock]
@@ -379,15 +373,12 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         e_emb = 0.0
         #subsys_e = np.einsum('ij,ji', env_hcore, (dmat[0] + dmat[1])).real
-        if self.unrestricted:
+        if self.unrestricted or self.mol.spin != 0:
             e_proj = (np.einsum('ij,ji', proj_pot[0], dmat[0]) + 
                       np.einsum('ij,ji', proj_pot[1], dmat[1])).real
             e_emb = (np.einsum('ij,ji', emb_pot[0], dmat[0]) + 
                      np.einsum('ij,ji', emb_pot[1], dmat[1])).real
             subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
-        elif self.mol.spin != 0:
-            #RO 
-            pass
         else:
             e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2., 
                                 (dmat[0] + dmat[1])).real)
@@ -437,12 +428,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if dmat is None:
             dmat = self.dmat
 
-        if self.unrestricted:
+        if self.unrestricted or self.mol.spin != 0:
             e_proj = (np.einsum('ij,ji', proj_pot[0], dmat[0]) + 
                       np.einsum('ij,ji', proj_pot[1], dmat[1])).real
-        elif self.mol.spin != 0:
-            #RO
-            pass
         else:
             e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2., 
                       (dmat[0] + dmat[1])).real)
@@ -529,13 +517,11 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if self.unrestricted:
                 emb_proj_fock = [None, None]
                 emb_proj_fock[0] = fock[0] + proj_pot[0]
-                #This is the costly part. I think.
-                E_a, C_a = sp.linalg.eigh(emb_proj_fock[0], scf.get_ovlp())
                 emb_proj_fock[1] = fock[1] + proj_pot[1]
                 #This is the costly part. I think.
-                E_b, C_b = sp.linalg.eigh(emb_proj_fock[1], scf.get_ovlp())
-                env_mo_energy = [E_a, E_b]
-                env_mo_coeff = [C_a, C_b]
+                E, C = scf.eig(emb_proj_fock, scf.get_ovlp())
+                env_mo_energy = [E[0], E[1]]
+                env_mo_coeff = [C[0], C[1]]
             elif mol.spin != 0:
                 #Do ROKS Diagonalize
                 pass
@@ -560,7 +546,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                         vhf = scf.get_veff(dm=(self.dmat[0] + self.dmat[1]))
                         emb_fock = diis.update(s1e, dm, f, mf, h1e, vhf)
 
-                E, C = sp.linalg.eigh(emb_proj_fock, scf.get_ovlp())
+                E, C = scf.eig(emb_proj_fock, scf.get_ovlp())
                 env_mo_energy = [E, E]
                 env_mo_coeff = [C, C]
         
