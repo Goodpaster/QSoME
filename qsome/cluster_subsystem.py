@@ -482,13 +482,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             env_method = self.env_method
         if dmat is None:
             dmat = self.dmat
+        if proj_pot is None:
+            proj_pot = self.proj_pot
         if fock is None:
             if self.emb_fock is None:
                 if self.unrestricted:
                     fock = scf.get_fock(dm=dmat)
                 elif scf.mol.spin != 0:
-                    #RO case
-                    pass
+                    fock = dft.uhf.get_fock(scf, dm=dmat)
                 else:
                     single_fock = scf.get_fock(dm=(dmat[0] + dmat[1]))
                     fock = [single_fock, single_fock]
@@ -496,8 +497,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 fock = self.emb_fock
         if env_hcore is None:
             env_hcore = self.env_hcore
-        if proj_pot is None:
-            proj_pot = self.proj_pot
         if diis is None:
             diis = self.diis
 
@@ -523,8 +522,36 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 env_mo_energy = [E[0], E[1]]
                 env_mo_coeff = [C[0], C[1]]
             elif mol.spin != 0:
-                #Do ROKS Diagonalize
-                pass
+                emb_proj_fock = [None, None]
+                emb_proj_fock[0] = fock[0] + proj_pot[0]
+                emb_proj_fock[1] = fock[1] + proj_pot[1]
+                if mol.spin < 0:
+                    temp_fock = copy(emb_proj_fock)
+                    emb_proj_fock[0] = temp_fock[1] 
+                    emb_proj_fock[1] = temp_fock[0] 
+                    temp_dmat = copy(dmat)
+                    dmat[0] = temp_dmat[1]
+                    dmat[1] = temp_dmat[0]
+                new_fock = scf.roks.get_roothaan_fock(emb_proj_fock, dmat, scf.get_ovlp())
+                env_mo_energy, env_mo_coeff = scf.eig(new_fock, scf.get_ovlp())
+                env_mo_occ = scf.get_occ(env_mo_energy, env_mo_coeff)
+                dmat = scf.make_rdm1(env_mo_coeff, env_mo_occ) 
+                if mol.spin < 0:
+                    temp_dm = [dmat[1], dmat[0]]
+                    dmat = temp_dm
+                    temp_env_mo_energy = [env_mo_energy[1], env_mo_energy[0]]
+                    env_mo_energy = temp_env_mo_energy
+                    temp_env_mo_coeff = [env_mo_coeff[1], env_mo_coeff[0]]
+                    env_mo_coeff = temp_env_mo_coeff
+                    temp_env_mo_occ = [env_mo_occ[1], env_mo_occ[0]]
+                    env_mo_occ = temp_env_mo_occ
+                    
+                self.env_mo_energy = env_mo_energy
+                self.env_mo_coeff = env_mo_coeff
+                self.env_mo_occ = env_mo_occ
+                self.dmat = dmat
+                return dmat
+
             else:
                 emb_proj_fock = fock[0] + proj_pot[0]
                 emb_proj_fock += fock[1] + proj_pot[1]
