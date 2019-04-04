@@ -1433,6 +1433,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
             multi_cycle = (len(self.subsystems) - self.ft_updatefock)
             for i in range(0, len(self.subsystems), multi_cycle):
+                
                 self.update_fock(diis=True)
                 sub_list = [sub for sub in self.subsystems[i:i+multi_cycle] if not sub.freeze]
                 #this will slow down calculation. 

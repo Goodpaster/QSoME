@@ -179,6 +179,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.filename = filename
         self.fermi = [0., 0.]
 
+        self.flip_ros = False
         self.env_scf = self.init_env_scf()
         self.dmat = self.init_density()
         self.env_hcore = self.env_scf.get_hcore()
@@ -256,6 +257,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 scf_obj.small_rho_cutoff = rho_cutoff
 
         elif mol.spin != 0:
+            if mol.spin < 0:
+                self.flip_ros = True
+                mol.spin *= -1
+                mol.build()
             if env_method == 'hf':
                 scf_obj = scf.ROHF(mol) 
             else:
@@ -448,7 +453,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def save_orbitals(self):
         pass
 
-    def diagonalize(self, scf=None, subcycles=None, env_method=None,
+    def diagonalize(self, scf_obj=None, subcycles=None, env_method=None,
                      fock=None, env_hcore=None, emb_pot=None, proj_pot=None, 
                      dmat=None, diis=None):
         """Diagonalizes the subsystem fock matrix and returns updated density.
@@ -474,8 +479,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             Passing a negative value turns of DIIS (default is None).
         """
 
-        if scf is None:
-            scf = self.env_scf
+        if scf_obj is None:
+            scf_obj = self.env_scf
         if subcycles is None:
             subcycles = self.subcycles
         if env_method is None:
@@ -487,11 +492,11 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if fock is None:
             if self.emb_fock is None:
                 if self.unrestricted:
-                    fock = scf.get_fock(dm=dmat)
-                elif scf.mol.spin != 0:
-                    fock = dft.uhf.get_fock(scf, dm=dmat)
+                    fock = scf_obj.get_fock(dm=dmat)
+                elif scf_obj.mol.spin != 0:
+                    fock = dft.uhf.get_fock(scf_obj, dm=dmat)
                 else:
-                    single_fock = scf.get_fock(dm=(dmat[0] + dmat[1]))
+                    single_fock = scf_obj.get_fock(dm=(dmat[0] + dmat[1]))
                     fock = [single_fock, single_fock]
             else:
                 fock = self.emb_fock
@@ -500,7 +505,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if diis is None:
             diis = self.diis
 
-        mol = scf.mol
+        mol = scf_obj.mol
 
         nA_a = fock[0].shape[0]
         nA_b = fock[1].shape[0]
@@ -518,25 +523,25 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 emb_proj_fock[0] = fock[0] + proj_pot[0]
                 emb_proj_fock[1] = fock[1] + proj_pot[1]
                 #This is the costly part. I think.
-                E, C = scf.eig(emb_proj_fock, scf.get_ovlp())
+                E, C = scf_obj.eig(emb_proj_fock, scf_obj.get_ovlp())
                 env_mo_energy = [E[0], E[1]]
                 env_mo_coeff = [C[0], C[1]]
             elif mol.spin != 0:
                 emb_proj_fock = [None, None]
                 emb_proj_fock[0] = fock[0] + proj_pot[0]
                 emb_proj_fock[1] = fock[1] + proj_pot[1]
-                if mol.spin < 0:
+                if self.flip_ros:
                     temp_fock = copy(emb_proj_fock)
                     emb_proj_fock[0] = temp_fock[1] 
                     emb_proj_fock[1] = temp_fock[0] 
                     temp_dmat = copy(dmat)
                     dmat[0] = temp_dmat[1]
                     dmat[1] = temp_dmat[0]
-                new_fock = scf.roks.get_roothaan_fock(emb_proj_fock, dmat, scf.get_ovlp())
-                env_mo_energy, env_mo_coeff = scf.eig(new_fock, scf.get_ovlp())
-                env_mo_occ = scf.get_occ(env_mo_energy, env_mo_coeff)
-                dmat = scf.make_rdm1(env_mo_coeff, env_mo_occ) 
-                if mol.spin < 0:
+                new_fock = scf.rohf.get_roothaan_fock(emb_proj_fock, dmat, scf_obj.get_ovlp())
+                env_mo_energy, env_mo_coeff = scf_obj.eig(new_fock, scf_obj.get_ovlp())
+                env_mo_occ = scf_obj.get_occ(env_mo_energy, env_mo_coeff)
+                dmat = scf_obj.make_rdm1(env_mo_coeff, env_mo_occ) 
+                if self.flip_ros:
                     temp_dm = [dmat[1], dmat[0]]
                     dmat = temp_dm
                     temp_env_mo_energy = [env_mo_energy[1], env_mo_energy[0]]
@@ -563,17 +568,17 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     if self.diis_num == 1:
                         emb_fock = diis.update(emb_proj_fock)
                     else:
-                        s1e = scf.get_ovlp()
+                        s1e = scf_obj.get_ovlp()
                         dm = dmat[0] + dmat[1]
                         f = emb_fock
-                        mf = scf
+                        mf = scf_obj
                         h1e = (env_hcore
                                + (emb_pot[0] + emb_pot[1])/2
                                + (proj_pot[0] + proj_pot[1])/2.)
-                        vhf = scf.get_veff(dm=(self.dmat[0] + self.dmat[1]))
+                        vhf = scf_obj.get_veff(dm=(self.dmat[0] + self.dmat[1]))
                         emb_fock = diis.update(s1e, dm, f, mf, h1e, vhf)
 
-                E, C = scf.eig(emb_proj_fock, scf.get_ovlp())
+                E, C = scf_obj.eig(emb_proj_fock, scf_obj.get_ovlp())
                 env_mo_energy = [E, E]
                 env_mo_coeff = [C, C]
         
