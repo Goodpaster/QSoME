@@ -323,6 +323,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 else:
                     t_dmat = scf_obj.get_init_guess()
                 dmat = [t_dmat/2., t_dmat/2.]
+            if self.flip_ros:
+                temp_dmat = copy(dmat)
+                dmat[0] = temp_dmat[1]
+                dmat[1] = temp_dmat[0]
 
             return dmat
 
@@ -538,9 +542,19 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     dmat[0] = temp_dmat[1]
                     dmat[1] = temp_dmat[0]
                 new_fock = scf.rohf.get_roothaan_fock(emb_proj_fock, dmat, scf_obj.get_ovlp())
-                env_mo_energy, env_mo_coeff = scf_obj.eig(new_fock, scf_obj.get_ovlp())
-                env_mo_occ = scf_obj.get_occ(env_mo_energy, env_mo_coeff)
-                dmat = scf_obj.make_rdm1(env_mo_coeff, env_mo_occ) 
+                E, C = scf_obj.eig(new_fock, scf_obj.get_ovlp())
+                occ = scf_obj.get_occ(E, C)
+                dmat = scf_obj.make_rdm1(C, occ) 
+                env_mo_energy = [E, E]
+                env_mo_coeff = [C, C]
+                alpha_occ = np.zeros_like(occ)
+                beta_occ = np.zeros_like(occ)
+                for k in range(len(occ)):
+                    if occ[k] > 0:
+                        alpha_occ[k] = 1.
+                    if occ[k] > 1:
+                        beta_occ[k] = 1.
+                env_mo_occ = [alpha_occ, beta_occ]
                 if self.flip_ros:
                     temp_dm = [dmat[1], dmat[0]]
                     dmat = temp_dm

@@ -917,7 +917,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_cycles=500)
         supersystem.freeze_and_thaw()
 
         projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))

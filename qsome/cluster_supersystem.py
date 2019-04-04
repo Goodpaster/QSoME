@@ -527,8 +527,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
                 num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
                 num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
+                if subsystem.flip_ros:
+                    sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
+                    sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
+                else:
+                    sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                    sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                 subsystem.update_density(sub_dmat)
             elif sub_guess == 'localsup': # Localize supermolecular density.
                 # Incomplete.
@@ -591,8 +595,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     temp_dm[1] = np.outer(temp_co[1], temp_co[1])
                     local_occ[0][j] = np.trace(np.dot(temp_dm[0], subsystem.env_scf.get_ovlp()))
                     local_occ[1][j] = np.trace(np.dot(temp_dm[1], subsystem.env_scf.get_ovlp()))
-                occ_order[0] = np.argsort(local_occ[0])[-1*int(subsystem.mol.nelec[0]):]
-                occ_order[1] = np.argsort(local_occ[1])[-1*int(subsystem.mol.nelec[1]):]
+                if subsystem.flip_ros:
+                    occ_order[0] = np.argsort(local_occ[0])[-1*int(subsystem.mol.nelec[1]):]
+                    occ_order[1] = np.argsort(local_occ[1])[-1*int(subsystem.mol.nelec[0]):]
+                else:
+                    occ_order[0] = np.argsort(local_occ[0])[-1*int(subsystem.mol.nelec[0]):]
+                    occ_order[1] = np.argsort(local_occ[1])[-1*int(subsystem.mol.nelec[1]):]
                 local_occ = [np.zeros(len(local_coeff[0])), np.zeros(len(local_coeff[1]))]
                 local_occ[0][occ_order[0]] = 1
                 local_occ[1][occ_order[1]] = 1
@@ -636,8 +644,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
                         num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
                         num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                        sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                        sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
+                        if subsystem.flip_ros:
+                            sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
+                            sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
+                        else:
+                            sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                            sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                         subsystem.update_density(sub_dmat)
                     else: #default to super
                         self.get_supersystem_energy(readchk=super_chk)
@@ -648,8 +660,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
                         num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
                         num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                        sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                        sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
+                        if subsystem.flip_ros:
+                            sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
+                            sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
+                        else:
+                            sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                            sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                         subsystem.update_density(sub_dmat)
                 else: # default to super.
                     self.get_supersystem_energy(readchk=super_chk)
@@ -659,8 +675,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
                     num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
                     num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                    sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                    sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
+                    if subsystem.flip_ros:
+                        sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
+                        sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
+                    else:
+                        sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                        sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                     subsystem.update_density(sub_dmat)
             elif sub_guess == 'submol':
                 subsystem.env_scf.kernel()
@@ -668,14 +688,20 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
                     t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
                     temp_dmat = t_d
-                sub_dmat = temp_dmat
+                if subsystem.flip_ros:
+                    sub_dmat = [temp_dmat[1], temp_dmat[0]]
+                else:
+                    sub_dmat = temp_dmat
                 subsystem.update_density(sub_dmat)
             elif sub_guess in ['atom', '1e', 'minao']:
                 temp_dmat = subsystem.env_scf.get_init_guess(key=sub_guess)
                 if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
                     t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
                     temp_dmat = t_d
-                sub_dmat = temp_dmat
+                if subsystem.flip_ros:
+                    sub_dmat = [temp_dmat[1], temp_dmat[0]]
+                else:
+                    sub_dmat = temp_dmat
                 subsystem.update_density(sub_dmat)
 
         # Initialize supersystem density.
@@ -726,8 +752,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print ("Cannot concatenate less than 2 mol objects")
             return False
         mol1 = gto.mole.copy(subsys_list[0].mol)
+        if subsys_list[0].flip_ros:
+            mol1.spin *= -1
+            mol1.build()
         for n in range(1, len(subsys_list)):
             mol2 = gto.mole.copy(subsys_list[n].mol)
+            if subsys_list[n].flip_ros:
+                mol2.spin *= -1
+                mol2.build()
             for j in range(mol2.natm):
                 old_name = mol2.atom_symbol(j)
                 new_name = mol2.atom_symbol(j) + ':' + str(n)
@@ -1358,6 +1390,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # current plan is to save mo_coefficients, occupation vector, and energies.
         # becasue of how h5py works we need to check if none and save as the correct filetype (f)
         #Need to make more robust. Handle errors and such.
+
+        #print ("CHKFILE DATA TO SAVE")
+        #print ("FS COEFF")
+        #print (self.mo_coeff)
+        #print ("FS OCC")
+        #print (self.mo_occ)
+        #print ("FS EN")
+        #print (self.mo_energy)
+        #for k in range(len(self.subsystems)):
+        #    print (f"SUBSYSTEM {k}")
+        #    print ("COEFF")
+        #    print (self.subsystems[k].env_mo_coeff)
+        #    print ("OCC")
+        #    print (self.subsystems[k].env_mo_occ)
+        #    print ("En")
+        #    print (self.subsystems[k].env_mo_energy)
         
         # check if file exists. 
         if os.path.isfile(self.chk_filename):
