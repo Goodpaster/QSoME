@@ -434,7 +434,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         if shift is None:
             shift = self.fs_shift
 
-        if (self.pmem):
+        if self.pmem:
             self.mol.max_memory = self.pmem
 
         if self.fs_unrestricted:

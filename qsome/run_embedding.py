@@ -25,9 +25,10 @@ def main():
             mol = in_obj.subsys_mols[i]
             env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
             env_kwargs = in_obj.env_subsystem_kwargs[i]
-            env_kwargs['nproc'] = nproc
-            env_kwargs['pmem'] = pmem
-            env_kwargs['scr_dir'] = scr_dir
+            if not "pmem" in env_kwargs.keys():
+                env_kwargs['pmem'] = pmem
+            if not "scr_dir" in env_kwargs.keys():
+                env_kwargs['scr_dir'] = scr_dir
             active_method = in_obj.active_subsystem_kwargs.pop('active_method')
             active_kwargs = in_obj.active_subsystem_kwargs
             active_kwargs.update(env_kwargs)
@@ -42,9 +43,10 @@ def main():
 
     fs_method = in_obj.supersystem_kwargs.pop('fs_method')
     supersystem_kwargs = in_obj.supersystem_kwargs
-    supersystem_kwargs['nproc'] = nproc
-    supersystem_kwargs['pmem'] = pmem
-    supersystem_kwargs['scr_dir'] = scr_dir
+    if not "pmem" in supersystem_kwargs.keys():
+        supersystem_kwargs['pmem'] = pmem
+    if not "scr_dir" in supersystem_kwargs.keys():
+        supersystem_kwargs['scr_dir'] = scr_dir
     supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
         fs_method, **supersystem_kwargs)
     supersystem.freeze_and_thaw()

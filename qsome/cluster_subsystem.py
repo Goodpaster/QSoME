@@ -697,7 +697,10 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                  active_orbs=None, avas=None, active_conv=1e-9, active_grad=None, 
                  active_cycles=100, use_molpro=False, active_damp=0, 
                  active_shift=0, active_initguess='ft', active_save_orbs=False,
-                 active_save_density=False, **kwargs):
+                 active_save_density=False, compress_approx=False, 
+                 shci_mpi_prefix='', shci_stochastic=True, shci_nPTiter=0, 
+                 shci_sweep_iter=None, shci_DoRDM=True, shci_sweep_epsilon=None,
+                 dmrg_maxM=100, dmrg_memory=None, dmrg_num_thrds=1,  **kwargs):
         """
         Parameters
         ----------
@@ -743,6 +746,18 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         self.use_molpro = use_molpro
         self.active_save_orbs = active_save_orbs
         self.active_save_density = active_save_density
+        self.compress_approx = compress_approx
+
+        self.shci_mpi_prefix = shci_mpi_prefix
+        self.shci_stochastic = shci_stochastic
+        self.shci_nPTiter = shci_nPTiter
+        self.shci_sweep_iter = shci_sweep_iter
+        self.shci_DoRDM = shci_DoRDM
+        self.shci_sweep_epsilon = shci_sweep_epsilon
+
+        self.dmrg_maxM = dmrg_maxM
+        self.dmrg_memory = dmrg_memory
+        self.dmrg_num_thrds = dmrg_num_thrds
 
         self.active_mo_coeff = None
         self.active_mo_occ = None
@@ -870,7 +885,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_method == 'uccsd' or active_method == 'ccsd(t)' or 
                     active_method == 'uccsd(t)' or 
                     re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                           active_method[1:])):
+                                           active_method) or
+                    re.match(re.compile('shci(scf)?\[.*\].*'), 
+                                           active_method) or
+                    re.match(re.compile('dmrg\[.*\].*'), 
+                                           active_method)):
                     active_scf = scf.UHF(mol)
                     active_scf.conv_tol = active_conv
                     active_scf.conv_tol_grad = active_grad
@@ -901,9 +920,55 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                             eris = active_cc.ao2mo(active_scf.mo_coeff)
                             ecc_t = uccsd_t.kernel(active_cc, eris)
                             active_energy += ecc_t
-                elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                         active_method[1:]):
-                    pass
+
+                    #For the following two not sure how to include the separate potential for alpha and beta.
+                    elif re.match(re.compile('shci(scf)?\[.*\].*'), 
+                                               active_method):
+                        from pyscf.future.shciscf import shci
+                        mod_hcore = ((self.env_scf.get_hcore() 
+                                 + (emb_pot[0] + emb_pot[1])/2. 
+                                 + (proj_pot[0] + proj_pot[1])/2.))
+                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
+                        active_shci = shci.SHCISCF(active_scf, active_space[0], active_space[1])
+                        active_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
+                        active_shci.fcisolver.stochastic = self.shci_stochastic
+                        active_shci.fcisolver.nPTiter = self.shci_nPTiter
+                        active_shci.fcisolver.sweep_iter = self.shci_sweep_iter
+                        active_shci.fcisolver.DoRDM = self.shci_DoRDM
+                        active_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
+                        ecc = active_shci.mc1step()[0]
+
+                    elif re.match(re.compile('dmrg\[.*\].*'), 
+                                               active_method):
+                        from pyscf import dmrgscf
+                        mod_hcore = ((self.env_scf.get_hcore() 
+                                 + (emb_pot[0] + emb_pot[1])/2. 
+                                 + (proj_pot[0] + proj_pot[1])/2.))
+                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
+                        active_dmrg = dmrgscf.DMRGSCF(active_scf, active_space[0], active_space[1])
+                        if self.dmrg_memory is None:
+                            dmrg_mem = self.pmem 
+                        else: 
+                            dmrg_mem = self.dmrg_memory 
+                        if dmrg_memory is not None:
+                            dmrg_memory *= 1e3 #DMRG Input memory is in GB for some reason.
+                        active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
+                        active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
+                        active_dmrg.fcisolver.scratchDirectory = self.scr_dir
+                        edmrg = active_dmrg.kernel()
+                        if "nevpt" in active_method:
+                            from pyscf import mrpt
+                            if self.compress_approx:
+                                enevpt = mrpt.NEVPT(active_dmrg).compress_approx().kernel()
+                            else:
+                                enevpt = mrpt.NEVPT(active_dmrg).kernel()
+                        
+
+                    elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
+                                             active_method):
+                        active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
                 elif active_method[1:] == 'fci':
                     pass
                 else: 
@@ -913,7 +978,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 pass
             elif active_method == 'fcidump':
                 active_scf = scf.RHF(mol)
-                active_scf.conv_tol = active_conv
+                active_scf.conv_toldmrg_conv
                 active_scf.conv_tol_grad = active_grad
                 active_scf.max_cycle = active_cycles
                 active_scf.level_shift = active_shift
@@ -921,7 +986,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 mod_hcore = ((self.env_scf.get_hcore() 
                              + (emb_pot[0] + emb_pot[1])/2. 
                              + (proj_pot[0] + proj_pot[1])/2.))
-                #active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                 active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
                 fcidump_filename = (os.path.splitext(self.filename)[0] 
                                     + '.fcidump')
@@ -935,7 +1000,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 if (active_method == 'hf' or active_method == 'ccsd' or 
                     active_method == 'ccsd(t)' or  
                     re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                           active_method[1:])):
+                                           active_method) or
+                    re.match(re.compile('shci(scf)?\[.*\].*'), 
+                                           active_method) or
+                    re.match(re.compile('dmrg\[.*\].*'), 
+                                           active_method)):
                     active_scf = scf.RHF(mol)
                     active_scf.conv_tol = active_conv
                     active_scf.conv_tol_grad = active_grad
@@ -986,6 +1055,51 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         #print (ao_dmat)
                         #print (self.dmat[0] + self.dmat[1])
                         #self.active_dmat = ao_dmat
+
+                    elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
+                                             active_method):
+                        pass
+                    elif re.match(re.compile('shci(scf)?\[.*\].*'), 
+                                                       active_method):
+                        from pyscf.future.shciscf import shci
+                        mod_hcore = (self.env_scf.get_hcore() 
+                             + ((emb_pot[0] + emb_pot[1])/2.
+                             + (proj_pot[0] + proj_pot[1])/2.))
+                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
+                        active_shci = shci.SHCISCF(active_scf, active_space[0], active_space[1])
+                        active_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
+                        active_shci.fcisolver.stochastic = self.shci_stochastic
+                        active_shci.fcisolver.nPTiter = self.shci_nPTiter
+                        active_shci.fcisolver.sweep_iter = self.shci_sweep_iter
+                        active_shci.fcisolver.DoRDM = self.shci_DoRDM
+                        active_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
+                        ecc = active_shci.mc1step()[0]
+
+                    elif re.match(re.compile('dmrg\[.*\].*'), 
+                                                       active_method):
+                        from pyscf import dmrgscf
+                        mod_hcore = (self.env_scf.get_hcore() 
+                             + ((emb_pot[0] + emb_pot[1])/2.
+                             + (proj_pot[0] + proj_pot[1])/2.))
+                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
+                        active_dmrg = dmrgscf.DMRGSCF(active_scf, active_space[0], active_space[1])
+                        if self.dmrg_memory is None:
+                            dmrg_mem = self.pmem
+                        else: 
+                            dmrg_mem = self.dmrg_memory
+                        if dmrg_memory is not None:
+                            dmrg_memory *= 1e3 #DMRG Input memory is in GB for some reason.
+                        active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
+                        active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
+                        active_dmrg.fcisolver.scratchDirectory = self.scr_dir
+                        edmrg = active_dmrg.kernel()
+                        if "nevpt" in active_method:
+                            from pyscf import mrpt
+                            if self.compress_approx:
+                                enevpt = mrpt.NEVPT(active_dmrg).compress_approx().kernel()
+                            else:
+                                enevpt = mrpt.NEVPT(active_dmrg).kernel()
 
                 else: #DFT
                     active_scf = scf.RKS(mol)

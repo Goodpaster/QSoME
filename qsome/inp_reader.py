@@ -7,6 +7,7 @@ from __future__ import print_function, division
 import input_reader
 import sys
 import re
+import pwd, os
 
 from pyscf import gto
 
@@ -128,7 +129,8 @@ class InpReader:
         operator.add_boolean_key('huzfermi', action='huzfermi')
         embed.add_line_key('setfermi', type=float)
 
-        reader.add_line_key('memory', type=(int, float)) # MB
+        reader.add_line_key('ppmem', type=(int, float)) # MB
+        reader.add_line_key('scrdir', type=str)
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         reader.add_line_key('basis')
 
@@ -160,6 +162,7 @@ class InpReader:
         active_settings.add_boolean_key('molpro')
         active_settings.add_boolean_key('save_orbs')
         active_settings.add_boolean_key('save_density')
+        active_settings.add_boolean_key('compress_approx')
         active_settings.add_line_key('initguess', type=('minao', 'atom', '1e',
                                                         'readchk', 'ft'))
 
@@ -169,6 +172,19 @@ class InpReader:
         #A list to specity active orbitals by number. Ex. [5,6]
         cas_settings.add_line_key('active_orbs', type=str, default='') 
         cas_settings.add_line_key('avas', type=str, default='') 
+
+        shci_settings = reader.add_block_key('shci_settings')
+        shci_settings.add_line_key('mpi_prefix', type=str, default='')
+        shci_settings.add_boolean_key('no_stochastic')
+        shci_settings.add_line_key('nPTiter', type=int, default=0)
+        shci_settings.add_line_key('sweep_iter', type=str, default='')
+        shci_settings.add_boolean_key('NoRDM')
+        shci_settings.add_line_key('sweep_epsilon', type=str, default='')
+
+        dmrg_settings = reader.add_block_key('dmrg_settings')
+        dmrg_settings.add_line_key('maxM', type=int, default=1000)
+        dmrg_settings.add_line_key('memory', type=int)
+        dmrg_settings.add_line_key('num_thrds', type=int, default=1)
 
         reader.add_line_key('grid', type=int)
         reader.add_line_key('rhocutoff', type=float)
@@ -189,11 +205,31 @@ class InpReader:
                              for i in (cas_str[cas_str.find("[") + 1:
                                                cas_str.find("]")]).split(',')]
 
+
+        #Convert scratch keyword to actual scratch directory path.
+
+        scr_prefix = {"global":"/scratch.global/", "local":"/scratch.local/", 
+                     "ssd":"/scratch.ssd/", "ramdisk":"/dev/shm/"}
+        if inp.scrdir:
+            if inp.scrdir.lower() in scr_prefix.keys():
+                scr_path = scr_prefix[inp.scrdir.lower()]
+                username = pwd.getpwuid(os.getuid()).pw_name
+                scr_path += username
+                file_path = os.path.splitext(inp.filename)[0]
+                file_path = file_path.split(username)[1]
+                scr_path += file_path
+                inp.scrdir = scr_path
+                
         # This could be done better.
         if inp.cas_settings and inp.cas_settings.active_orbs:
             inp.cas_settings.active_orbs = eval(inp.cas_settings.active_orbs)
         if inp.cas_settings and inp.cas_settings.avas:
             inp.cas_settings.avas = eval(inp.cas_settings.avas)
+        if inp.shci_settings and inp.shci_settings.sweep_iter:
+            inp.shci_settings.sweep_iter = eval(inp.shci_settings.sweep_iter)
+        if inp.shci_settings and inp.shci_settings.sweep_epsilon:
+            inp.shci_settings.sweep_epsilon = eval(
+                inp.shci_settings.sweep_epsilon)
 
         print("".center(80, '*'))
         print("Input File".center(80))
@@ -223,6 +259,10 @@ class InpReader:
         supersystem_kwargs['filename'] = inp.filename
         if inp.compare_density:
             supersystem_kwargs['compare_density'] = inp.compare_density
+        if inp.scrdir is not None:
+            supersystem_kwargs['scr_dir'] = inp.scrdir
+        if inp.ppmem:
+            supersystem_kwargs['pmem'] = inp.ppmem
 
         #The following are optional arguments.
         # There is also a better way to do this than conditional statements
@@ -324,6 +364,11 @@ class InpReader:
             universal_subsys_settings['analysis'] = inp.analysis
         if inp.debug:
             universal_subsys_settings['debug'] = inp.debug
+
+        if inp.ppmem:
+            universal_subsys_settings['pmem'] = inp.ppmem
+        if inp.scrdir:
+            universal_subsys_settings['scr_dir'] = inp.scrdir
         
         env_subsystem_kwargs = []
         for subsystem in inp.subsystem:
@@ -384,6 +429,32 @@ class InpReader:
                 active_subsystem_kwargs['avas'] = (
                     inp.cas_settings.avas)
 
+        if inp.shci_settings:
+            if inp.shci_settings.mpi_prefix:
+                active_subsystem_kwargs['shci_mpi_prefix'] = (
+                    inp.shci_settings.mpi_prefix)
+            if inp.shci_settings.no_stochastic:
+                active_subsystem_kwargs['shci_stochastic'] = False
+            active_subsystem_kwargs['shci_nPTiter'] = (
+                inp.shci_settings.nPTiter)
+            if inp.shci_settings.sweep_iter:
+                active_subsystem_kwargs['shci_sweep_iter'] = (
+                    inp.shci_settings.sweep_iter)
+            if inp.shci_settings.NoRDM:
+                active_subsystem_kwargs['shci_DoRDM'] = False
+            if inp.shci_settings.sweep_epsilon:
+                active_subsystem_kwargs['shci_sweep_epsilon'] = (
+                    inp.shci_settings.sweep_epsilon)
+
+        if inp.dmrg_settings:
+            active_subsystem_kwargs['dmrg_maxM'] = (
+                inp.dmrg_settings.maxM)
+            if inp.dmrg_settings.memory:
+                active_subsystem_kwargs['dmrg_memory'] = (
+                    inp.dmrg_settings.memory)
+            active_subsystem_kwargs['dmrg_num_thrds'] = (
+                inp.dmrg_settings.num_thrds)
+
         if inp.active_settings:
             if inp.active_settings.unrestricted:
                 active_subsystem_kwargs['active_unrestricted'] = (
@@ -415,6 +486,9 @@ class InpReader:
 
             active_subsystem_kwargs['use_molpro'] = (
                 inp.active_settings.molpro)
+            if inp.active_settings.compress_approx:
+                active_subsystem_kwargs['compress_approx'] = (
+                    inp.active_settings.compress_approx)
 
         return active_subsystem_kwargs
 

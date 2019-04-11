@@ -899,7 +899,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         Li 0. 0. 0.
         ghost:Li 2.67 0.0 0.0
         '''
-        mol.basis = 'cc-pVDZ'
+        mol.basis = '3-21g'
         mol.spin = 1
         mol.build()
         env_method = 'm06'
@@ -912,12 +912,12 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         Li 2.67 0.0 0.0
         ghost:Li 0. 0. 0.
         '''
-        mol2.basis = 'cc-pVDZ'
+        mol2.basis = '3-21g'
         mol2.spin = -1
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_cycles=500)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_cycles=25)
         supersystem.freeze_and_thaw()
 
         projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
@@ -930,7 +930,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol3.verbose = 3
         mol3.atom ='''
         Li 0. 0. 0.
-        H 1.595 0.0 0.0
+        Li 2.67 0.0 0.0
         '''
         mol3.basis = 'cc-pVDZ'
         mol3.build()
@@ -947,94 +947,94 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
-        ##Long distance test.
-        #mol = gto.Mole()
-        #mol.verbose = 3
-        #mol.atom = '''
-        #Li 0. 0. 0.
-        #'''
-        #mol.basis = '3-21g'
-        #mol.spin = 1
-        #mol.build()
-        #nv_method = 'm06'
-        #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        #Long distance test.
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        Li 0. 0. 0.
+        '''
+        mol.basis = '3-21g'
+        mol.spin = 1
+        mol.build()
+        env_method = 'm06'
+        active_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #H 12.22 0.0 0.0
-        #'''
-        #mol2.basis = '3-21g'
-        #mol2.spin = -1
-        #mol2.build()
-        #env_method = 'm06'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
-        #supersystem.freeze_and_thaw()
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        Li 32.22 0.0 0.0
+        '''
+        mol2.basis = '3-21g'
+        mol2.spin = -1
+        mol2.build()
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True)
+        supersystem.freeze_and_thaw()
 
-        #projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
-        #projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
-        #projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
-        #projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
-        #self.assertAlmostEqual(0.0, projector_energy, delta=1e-14)
+        projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
+        projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
+        projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
+        projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
+        self.assertAlmostEqual(0.0, projector_energy, delta=1e-14)
 
-        #mol3 = gto.Mole()
-        #mol3.verbose = 3
-        #mol3.atom ='''
-        #Li 0. 0. 0.
-        #H 12.22 0.0 0.0
-        #'''
-        #mol3.basis = '3-21g'
-        #mol3.build()
-        #mf = dft.UKS(mol3)
-        #mf.xc = 'm06'
-        #grids = dft.gen_grid.Grids(mol3)
-        #grids.level = supersystem.grid_level
-        #grids.build()
-        #mf.grids = grids
-        #mf.kernel()
-        #test_dmat = mf.make_rdm1()
-        #test_e = mf.energy_tot()
-        #sup_e = supersystem.env_in_env_energy()
-        ##self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
-        ##self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
+        mol3 = gto.Mole()
+        mol3.verbose = 3
+        mol3.atom ='''
+        Li 0. 0. 0.
+        Li 12.22 0.0 0.0
+        '''
+        mol3.basis = '3-21g'
+        mol3.build()
+        mf = dft.UKS(mol3)
+        mf.xc = 'm06'
+        grids = dft.gen_grid.Grids(mol3)
+        grids.level = supersystem.grid_level
+        grids.build()
+        mf.grids = grids
+        mf.kernel()
+        test_dmat = mf.make_rdm1()
+        test_e = mf.energy_tot()
+        sup_e = supersystem.env_in_env_energy()
+        #self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
+        #self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
-        ##Projection energy
-        #mol = gto.Mole()
-        #mol.verbose = 3
-        #mol.atom = '''
-        #Li 0. 0. 0.
-        #'''
-        #mol.basis = '3-21g'
-        #mol.spin = 1
-        #mol.build()
-        #env_method = 'm06'
-        #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        #Projection energy
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        Li 0. 0. 0.
+        '''
+        mol.basis = '3-21g'
+        mol.spin = 1
+        mol.build()
+        env_method = 'm06'
+        active_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #H 1.595 0.0 0.0
-        #'''
-        #mol2.basis = '3-21g'
-        #mol2.spin = -1
-        #mol2.build()
-        #env_method = 'm06'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='supmol')
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        Li 1.595 0.0 0.0
+        '''
+        mol2.basis = '3-21g'
+        mol2.spin = -1
+        mol2.build()
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='supmol', fs_unrestricted=True, ft_cycles=10)
 
-        #initial_projector_energy = 0.0
-        #initial_projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
-        #initial_projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
-        #initial_projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
-        #initial_projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
+        initial_projector_energy = 0.0
+        initial_projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
+        initial_projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
+        initial_projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
+        initial_projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
 
-        #supersystem.freeze_and_thaw()
+        supersystem.freeze_and_thaw()
 
-        #projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
-        #projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
-        #projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
-        #projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
-        #self.assertGreaterEqual(0.0, projector_energy-initial_projector_energy)
+        projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
+        projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
+        projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
+        projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
+        self.assertGreaterEqual(0.0, projector_energy-initial_projector_energy)
