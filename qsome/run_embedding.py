@@ -94,8 +94,6 @@ class arguments():
         self.inp_file = args.input_file[0]
         self.scf_dir = args.scr
 
-
-
 if __name__=='__main__':
     main()
 

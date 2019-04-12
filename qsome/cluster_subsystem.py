@@ -953,7 +953,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         else: 
                             dmrg_mem = self.dmrg_memory 
                         if dmrg_memory is not None:
-                            dmrg_memory *= 1e3 #DMRG Input memory is in GB for some reason.
+                            dmrg_memory = float(dmrg_memory) / 1e3 #DMRG Input memory is in GB for some reason.
                         active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
                         active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
                         active_dmrg.fcisolver.scratchDirectory = self.scr_dir
@@ -1089,7 +1089,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         else: 
                             dmrg_mem = self.dmrg_memory
                         if dmrg_memory is not None:
-                            dmrg_memory *= 1e3 #DMRG Input memory is in GB for some reason.
+                            dmrg_memory = float(dmrg_memory) / 1e3 #DMRG Input memory is in GB for some reason.
                         active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
                         active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
                         active_dmrg.fcisolver.scratchDirectory = self.scr_dir
