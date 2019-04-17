@@ -978,7 +978,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 pass
             elif active_method == 'fcidump':
                 active_scf = scf.RHF(mol)
-                active_scf.conv_toldmrg_conv
+                active_scf.conv_tol = active_conv
                 active_scf.conv_tol_grad = active_grad
                 active_scf.max_cycle = active_cycles
                 active_scf.level_shift = active_shift

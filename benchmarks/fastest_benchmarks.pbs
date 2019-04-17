@@ -5,7 +5,7 @@
 #PBS -l pmem=2500mb
 #PBS -e /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/fastest_benchmarks.err
 #PBS -o /panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/benchmarks/fastest_benchmarks.log
-#PBS -q mesabi
+#PBS -q batch
 
 module load python
 # create scratch directory
