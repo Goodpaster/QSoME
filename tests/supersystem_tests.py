@@ -126,8 +126,116 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_dmat[0], supersystem.dmat[0]))
         self.assertTrue(np.allclose(test_dmat[1], supersystem.dmat[1]))
 
+    @unittest.skip
+    def test_get_supersystem_nuc_grad(self):
+        #Closed Shell
+        mol = gto.Mole()
+        #mol.verbose = 4
+        mol.atom = '''
+        H 0.758602  0.000000  0.504284
+        H 0.758602  0.000000  -0.504284 
+        '''
+        mol.basis = '3-21g'
+        mol.build()
+        env_method = 'b3lyp'
+        active_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+
+        mol2 = gto.Mole()
+        #mol2.verbose = 4
+        mol2.atom = '''
+        O 0.0 0.0 0.0'''
+        mol2.basis = '3-21g'
+        mol2.build()
+        env_method = 'b3lyp'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supsystem_e = supersystem.get_supersystem_energy()
+        supsystem_grad = supersystem.get_supersystem_nuc_grad()
+
+        mol3 = gto.Mole()
+        #mol3.verbose = 4
+        mol3.atom = '''
+        H 0.758602  0.000000  0.504284
+        H 0.758602  0.000000  -0.504284 
+        O 0.0 0.0 0.0
+        '''
+        mol3.basis = '3-21g'
+        mol3.build()
+        test_scf = dft.RKS(mol3)
+        test_scf.xc = 'b3lyp'
+        test_scf.conv_tol = supersystem.fs_conv
+        grids = dft.gen_grid.Grids(mol3)
+        grids.level = supersystem.grid_level
+        grids.build()
+        test_scf.grids = grids
+        test_e = test_scf.kernel()
+        test_grad = test_scf.nuc_grad_method()
+        test_grad.kernel()
+        #self.assertAlmostEqual(test_grad.grad(), supsystem_grad.grad())
+
+    #@unittest.skip
+    def test_get_subsystem_nuc_grad(self):
+        #Closed Shell
+        mol = gto.Mole()
+        #mol.verbose = 4
+        mol.atom = '''
+        H 0.758602  0.000000  0.504284
+        H 0.758602  0.000000  -0.504284 
+        O 0.0 0.0 0.0
+        '''
+        mol.basis = '3-21g'
+        mol.build()
+        env_method = 'b3lyp'
+        active_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+
+        mol2 = gto.Mole()
+        #mol2.verbose = 4
+        mol2.atom = '''
+        H 0.758602  3.000000  0.504284
+        H 0.758602  3.000000  -0.504284 
+        O 0.0 30.0 0.0
+        '''
+        mol2.basis = '3-21g'
+        mol2.build()
+        env_method = 'b3lyp'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', ft_cycles=20)
+        supsystem_e = supersystem.get_supersystem_energy()
+        supersystem.freeze_and_thaw()
+        subsystem_grad = subsys.get_env_nuc_grad()
+        print (subsystem_grad)
+        supersystem_grad = supersystem.get_emb_subsys_nuc_grad()
+
+        mol3 = gto.Mole()
+        #mol3.verbose = 4
+        mol3.atom = '''
+        H 0.758602  0.000000  0.504284
+        H 0.758602  0.000000  -0.504284 
+        O 0.0 0.0 0.0
+        H 0.758602  30.000000  0.504284
+        H 0.758602  30.000000  -0.504284 
+        O 0.0 30.0 0.0
+        '''
+        mol3.basis = '3-21g'
+        mol3.build()
+        test_scf = dft.RKS(mol3)
+        test_scf.xc = 'b3lyp'
+        test_scf.conv_tol = supersystem.fs_conv
+        grids = dft.gen_grid.Grids(mol3)
+        grids.level = supersystem.grid_level
+        grids.build()
+        test_scf.grids = grids
+        test_e = test_scf.kernel()
+        test_grad = test_scf.nuc_grad_method()
+        elec_grad = test_grad.grad_elec(test_scf.mo_energy, test_scf.mo_coeff, test_scf.mo_occ)
+        print (elec_grad)
+        #self.assertAlmostEqual(test_grad.grad(), supsystem_grad.grad())
+
     def test_get_emb_subsys_elec_energy(self):
         pass 
+
     @unittest.skip
     def test_get_emb_subsys_elec_energy(self):
 
@@ -577,7 +685,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         self.assertTrue(os.path.isfile('temp.hdf5'))
 
-    #@unittest.skip
+    @unittest.skip
     def test_freeze_and_thaw(self):
 
         ##Restricted closed shell
@@ -1038,3 +1146,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         projector_energy += np.trace(np.dot(subsys2.dmat[0], supersystem.proj_pot[1][0]))
         projector_energy += np.trace(np.dot(subsys2.dmat[1], supersystem.proj_pot[1][1]))
         self.assertGreaterEqual(0.0, projector_energy-initial_projector_energy)
+
+if __name__ == "__main__":
+    unittest.main()
+

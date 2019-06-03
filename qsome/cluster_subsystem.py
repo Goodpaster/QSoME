@@ -195,6 +195,13 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                            np.zeros_like(self.env_hcore[0])]
         self.env_mo_energy = self.env_mo_occ.copy()
         self.env_energy = 0.0
+
+        self.env_sub_nuc_grad = None
+        self.env_sub_emb_nuc_grad = None
+        self.env_sub_proj_nuc_grad = None
+        self.env_hcore_deriv = None
+        self.env_vhf_derif = None
+
         self.diis_num = diis
         if diis == 1:
             #Use subtractive diis. Most simple
@@ -410,11 +417,59 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_energy = self.get_env_elec_energy() + mol.energy_nuc()
         return self.env_energy
 
+    def get_env_nuc_grad(self, mol=None, scf_obj=None):
+        """Return the gradient of just the subsystem in isolation. 
+           Must occur after a diagonalization."""
+
+        if mol is None:
+            mol = self.mol
+        if scf_obj is None:
+            scf_obj = self.env_scf
+
+        if self.unrestricted or self.mol.spin != 0:
+            total_grad = None
+        else:
+            grad_obj = scf_obj.nuc_grad_method()
+            mo_e = self.env_mo_energy[0]
+            mo_coeff = self.env_mo_coeff[0]
+            mo_occ = self.env_mo_occ[0] * 2.
+            hcore_deriv = grad_obj.hcore_generator(mol)
+            self.env_hcore_deriv = hcore_deriv
+            s1 = grad_obj.get_ovlp(mol)
+            dm0 = self.dmat[0] + self.dmat[1]
+
+            vhf = grad_obj.get_veff(mol, dm0)
+            self.env_vhf_deriv = np.copy(vhf)
+            dme0 = grad_obj.make_rdm1e(mo_e, mo_coeff, mo_occ)
+
+            atmlst = range(mol.natm)
+            aoslices = mol.aoslice_by_atom()
+            de = np.zeros((len(atmlst),3))
+            for k, ia in enumerate(atmlst):
+                p0, p1 = aoslices [ia,2:]
+                h1ao = hcore_deriv(ia)
+                de[k] += np.einsum('xij,ij->x', h1ao, dm0)
+# na        bla was applied on bra in vhf, *2 for the contributions of nabla|ket>
+                de[k] += np.einsum('xij,ij->x', vhf[:,p0:p1], dm0[p0:p1]) * 2
+                de[k] -= np.einsum('xij,ij->x', s1[:,p0:p1], dme0[p0:p1]) * 2
+
+                #de[k] += grad_obj.extra_force(ia, locals())
+
+            total_grad = de
+
+        return total_grad
+    
     def update_emb_pot(self, new_emb_pot):
         self.emb_pot = new_emb_pot 
 
     def update_proj_pot(self, new_POp):
         self.proj_pot = new_POp
+
+    def update_emb_nuc_grad(self, new_emb_grad):
+        self.env_sub_emb_grad = new_emb_grad
+
+    def update_proj_nuc_grad(self, new_proj_grad):
+        self.env_sub_proj_grad = new_proj_grad
 
     def get_env_proj_e(self, env_method=None, proj_pot=None, dmat=None):
         """Gets the projection operator energy
@@ -651,6 +706,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
             return self.dmat
 
+
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
     """
     Extends ClusterEnvSubSystem to calculate higher level methods.
@@ -695,7 +751,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
     def __init__(self, mol, env_method, active_method, 
                  active_unrestricted=False, localize_orbitals=False,
                  active_orbs=None, avas=None, active_conv=1e-9, active_grad=None, 
-                 active_cycles=100, use_molpro=False, active_damp=0, 
+                 active_cycles=100, use_molpro=False, active_damp=0, active_frozen=None,
                  active_shift=0, active_initguess='ft', active_save_orbs=False,
                  active_save_density=False, compress_approx=False, 
                  shci_mpi_prefix='', shci_stochastic=True, shci_nPTiter=0, 
@@ -741,6 +797,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         self.active_grad = active_grad
         self.active_cycles = active_cycles
         self.active_damp = active_damp
+        self.active_frozen = active_frozen
         self.active_shift = active_shift
         self.active_initguess = active_initguess
         self.use_molpro = use_molpro
@@ -762,6 +819,11 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         self.active_mo_coeff = None
         self.active_mo_occ = None
         self.active_mo_energy = None
+
+        self.active_dmat = None
+        self.active_sub_nuc_grad = None
+        self.active_sub_emb_nuc_grad = None
+        self.active_sub_proj_nuc_grad = None
  
 
     def active_proj_energy(self, dmat=None, proj_pot=None):
@@ -785,7 +847,8 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                              proj_pot=None, active_method=None, 
                              active_conv=None, active_grad=None, 
                              active_shift=None, active_damp=None, 
-                             active_cycles=None, active_initguess=None):
+                             active_cycles=None, active_initguess=None,
+                             active_frozen=None):
         """Returns the active subsystem energy as embedded in the full system.
 
         Parameters
@@ -843,6 +906,8 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
             active_cycles = self.active_cycles
         if active_initguess is None:
             active_initguess = self.active_initguess
+        if active_frozen is None:
+            active_frozen = self.active_frozen
 
         active_energy = 0.0
         if self.use_molpro:
@@ -909,7 +974,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
                     self.active_scf = active_scf
                     if 'ccsd' in active_method:
-                        active_cc = cc.UCCSD(active_scf)
+                        active_cc = cc.UCCSD(active_scf, frozen=active_frozen)
                         active_cc.max_cycle = active_cycles
                         active_cc.conv_tol = active_conv
                         #active_cc.conv_tol_normt = 1e-6
@@ -1026,9 +1091,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     active_energy = active_scf.kernel(dm0=init_dmat)
                     self.active_scf = active_scf
                     # this slows down execution.
-                    #self.active_dmat = self.active_scf.make_rdm1()
+                    self.active_dmat = self.active_scf.make_rdm1()
                     if 'ccsd' in active_method:
-                        active_cc = cc.CCSD(active_scf)
+                        active_cc = cc.CCSD(active_scf, frozen=active_frozen)
                         active_cc.max_cycle = active_cycles
                         active_cc.conv_tol = active_conv
                         #active_cc.conv_tol_normt = 1e-6
@@ -1036,12 +1101,14 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         eris = active_cc.ao2mo()
                         active_energy += ecc
                         self.active_scf = active_cc
+                        # this slows down execution.
+                        self.active_dmat = self.active_scf.make_rdm1()
                         if active_method == 'ccsd(t)':
                             ecc_t = ccsd_t.kernel(active_cc, eris)
                             active_energy += ecc_t
                             #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
                             # this slows down execution.
-                            #self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
+                            self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
                         else:
                             pass
                             # this slows down execution.
@@ -1122,10 +1189,10 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
                     active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
                     #Slows down execution
-                    #self.active_dmat = self.active_scf.make_rdm1()
+                    self.active_dmat = self.active_scf.make_rdm1()
 
-                #temp_dmat = copy(self.active_dmat)
-                #self.active_dmat = [temp_dmat/2., temp_dmat/2.]
+                temp_dmat = copy(self.active_dmat)
+                self.active_dmat = [temp_dmat/2., temp_dmat/2.]
         self.active_energy = active_energy 
 
         if self.active_save_density:

@@ -62,7 +62,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
         nproc = 1
     if pmem is None:
         pmem = 2000
-    pmem = pmem - 10
+    pmem = pmem - 100
     pword = pmem / 8.0
     username = getpass.getuser()
     if scr_dir is None:

@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N /home/goodpast/graha682/code/python/QSoME/qsome/run_embeddin
+#PBS -l nodes=1:ppn=8
+#PBS -l walltime=90:00:00
+#PBS -l pmem=3000mb
+#PBS -e /home/goodpast/graha682/code/python/QSoME/qsome/run_embedding.err
+#PBS -o /home/goodpast/graha682/code/python/QSoME/qsome/run_embedding.log
+#PBS -q mesabi
+
+module load python
+module load molpro
+
+# create scratch directory
+scratch=/scratch.global/graha682//home/goodpast/graha682/code/python/QSoME/qsome/run_embedding
+if [[ -d $scratch ]]; then
+    i=0
+    while [[ -d $scratch-$i ]]; do
+        let i++
+    done
+    scratch=$scratch-$i
+fi
+rm -rf $scratch 2> /dev/null
+mkdir -p $scratch
+cd $scratch
+
+python  -p 8 -m 3000 /home/goodpast/graha682/code/python/QSoME/qsome/run_embedding.py > /home/goodpast/graha682/code/python/QSoME/qsome/run_embedding.out
+
+cd ${PBS_O_WORKDIR}
+rm -rf $scratch 2> /dev/null

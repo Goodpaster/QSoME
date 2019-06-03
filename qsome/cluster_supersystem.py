@@ -322,6 +322,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.hcore = self.fs_scf.get_hcore()
         self.proj_pot = [[0.0, 0.0] for i in range(len(self.subsystems))]
         self.fs_energy = None
+        self.fs_nuc_grad = None
 
         self.dmat = self.init_density()
         self.dftindft_dmat = [None, None]
@@ -762,10 +763,14 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 mol2.build()
             for j in range(mol2.natm):
                 old_name = mol2.atom_symbol(j)
-                new_name = mol2.atom_symbol(j) + ':' + str(n)
+                new_name = mol2.atom_symbol(j) + '-' + str(n)
                 mol2._atom[j] = (new_name, mol2._atom[j][1])
                 if old_name in mol2._basis.keys():
                     mol2._basis[new_name] = mol2._basis.pop(old_name)
+                if old_name in mol2.ecp.keys():
+                    mol2.ecp[new_name] = mol2.ecp.pop(old_name)
+                    mol2._ecp[new_name] = mol2._ecp.pop(old_name)
+                    mol2._atm, mol2._ecpbas, mol2._env = mol2.make_ecp_env(mol2._atm, mol2._ecp, mol2._env)
             mol1 = gto.mole.conc_mol(mol1, mol2)
 
         #Remove overlapping ghost atoms.
@@ -942,6 +947,23 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         return self.fs_energy
 
+    @time_method("Supersystem Nuclear Gradient")
+    def get_supersystem_nuc_grad(self, scf_obj=None, readchk=False):
+
+        if self.fs_nuc_grad is None:
+            if self.fs_energy is None:
+                print ("Calculate Full system energy first")
+                self.get_supersystem_energy()
+            if scf_obj is None:
+                scf_obj = self.fs_scf
+            nuc_grad = scf_obj.nuc_grad_method()
+            nuc_grad.kernel()
+            self.fs_nuc_grad = nuc_grad
+        else:
+            nuc_grad = self.fs_nuc_grad
+
+        return nuc_grad
+
     @time_method("Subsystem Energies")
     def get_emb_subsys_elec_energy(self):
         """Calculates subsystem energy
@@ -962,6 +984,69 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             subsystem.get_env_energy()
             print (f"Uncorrected Energy:{subsystem.env_energy:>61.8f}")
         #self.correct_env_energy()
+
+    @time_method("Subsystem Nuclear Gradients")
+    def get_emb_subsys_nuc_grad(self):
+        # Update subsystem embedding gradient. 
+        # Assumes closed shell for now.
+        s2s = self.sub2sup
+        nS = self.mol.nao_nr()
+        atms_completed = 0
+        full_sys_grad = self.fs_scf.nuc_grad_method()
+        hcore_deriv = full_sys_grad.hcore_generator(self.fs_scf.mol)
+        s1 = full_sys_grad.get_ovlp(self.fs_scf.mol)
+        full_fock = self.fock
+        full_fock_cs = (full_fock[0] + full_fock[1])/2.
+        prev_p1 = 0
+
+        full_dmat = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        for j in range(len(self.subsystems)):
+            sub_temp = self.subsystems[j]
+            full_dmat[0][np.ix_(s2s[j], s2s[j])] += sub_temp.dmat[0]
+            full_dmat[1][np.ix_(s2s[j], s2s[j])] += sub_temp.dmat[1]
+
+        vhf = full_sys_grad.get_veff(self.fs_scf.mol, full_dmat[0] + full_dmat[1])
+        for i in range(len(self.subsystems)):
+            dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            subsystem = self.subsystems[i]
+            dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
+            dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
+
+
+            env_dm = np.copy(full_dmat)
+            env_dm[0][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[0]
+            env_dm[1][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[1]
+
+            dm_cs = dm[0] + dm[1]
+            env_dm_cs = env_dm[0] + env_dm[1]
+            atmlist = range(atms_completed, subsystem.mol.natm + atms_completed)
+            atms_completed = subsystem.mol.natm
+
+            aoslices = subsystem.mol.aoslice_by_atom() 
+            de = np.zeros((len(atmlist), 3))
+            de_proj = np.zeros((len(atmlist), 3))
+            for k, ia in enumerate(atmlist):
+                p0, p1 = aoslices [k,2:]
+                p0 += prev_p1
+                p1 += prev_p1
+                h1ao = hcore_deriv(ia)
+                de[k] += np.einsum('xij,ij->x', h1ao,  dm_cs)
+
+                de[k] += np.einsum('xij,ij->x', vhf[:,p0:p1], dm_cs[p0:p1]) * 2
+                fock_deriv = h1ao + (vhf * 2.)
+                proj_pot = np.dot(np.dot(fock_deriv, env_dm_cs), self.smat)
+                proj_pot += np.dot(np.dot(s1, env_dm_cs), full_fock_cs)
+            #    print (proj_pot)
+                de_proj[k] = np.einsum('xij,ij->x', proj_pot[:,p0:p1], dm_cs[p0:p1])
+
+            prev_p1 = p1
+            print ("DE")
+            print (de)
+            print ("DE_PROJ")
+            print (de_proj)
+            # Subtract individual gardient to be left with embedding gradient. 
+            # Also calculate the embedding and projection with the high level density.
+            
 
 
     @time_method("Environment XC Correction")

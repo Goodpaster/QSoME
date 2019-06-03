@@ -80,13 +80,12 @@ class InpReader:
         # May be shortened by using repeating regex.
         subsys.add_regex_line(
          'atoms',
-         '\s*([A-Za-z.]+)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
+         '\s*([A-Za-z.:\d]+)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
          repeat=True)
         subsys.add_line_key('charge', type=int)     
         subsys.add_line_key('spin', type=int)      
         # All methods default to restricted unless specified
         subsys.add_boolean_key('unrestricted')
-        subsys.add_line_key('basis')              
         subsys.add_line_key('smearsigma', type=float)   # fermi smearing sigma
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         subsys.add_boolean_key('freeze')
@@ -99,6 +98,13 @@ class InpReader:
         subsys.add_line_key('subcycles', type=int) # num subsys diag. cycles
         subsys.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
         subsys.add_boolean_key('addlinkbasis') # Add link H basis functions
+        sub_basis = subsys.add_block_key('basis')              
+        sub_basis.add_regex_line('basis_def', '\s*([A-Za-z.:\d]+)\s+.+', 
+            repeat=True)
+
+        sub_ecp = subsys.add_block_key('ecp')              
+        sub_ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:\d]+)\s+.+', 
+            repeat=True)
 
         # Freeze and thaw settings
         embed = reader.add_block_key('embed', required=True)
@@ -132,7 +138,10 @@ class InpReader:
         reader.add_line_key('ppmem', type=(int, float)) # MB
         reader.add_line_key('scrdir', type=str)
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
-        reader.add_line_key('basis')
+        basis = reader.add_block_key('basis')
+        basis.add_regex_line('basis_def', '\s*([A-Za-z.:\d]+)\s+.+', repeat=True)
+        ecp = reader.add_block_key('ecp')
+        ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:\d]+)\s+.+', repeat=True)
 
         # Supersystem calculation settings
         fs_settings = reader.add_block_key('fullsys_settings')
@@ -514,11 +523,6 @@ class InpReader:
             mol.ghosts = []
             nghost = 0
 
-            if subsystem.basis:
-                basis = subsystem.basis
-            else:
-                basis = inp.basis
-
             for atom in atom_list:
                 if ('ghost.' in atom.group(1).lower() 
                     or 'gh.' in atom.group(1).lower()):
@@ -541,50 +545,83 @@ class InpReader:
                 mol.unit = subsystem.unit
             if inp.verbose:
                 mol.verbose = inp.verbose
-            mol.basis = basis
+
+            described_basis = {}
+            if subsystem.basis is not None:
+                for basis in subsystem.basis.basis_def:
+                    basis_str = basis.group(0)
+                    split_basis = basis_str.split()
+                    described_basis[split_basis[0]] = split_basis[1]
+                    
+            if inp.basis is not None:
+                for basis in inp.basis.basis_def:
+                    basis_str = basis.group(0)
+                    split_basis = basis_str.split()
+                    if not split_basis[0] in described_basis.keys():
+                        described_basis[split_basis[0]] = split_basis[1]
+            if len(described_basis.keys()) == 0:
+                print ("YOU HAVE NOT DEFINED A BASIS. USING 3-21g BY DEFAULT") 
+                described_basis['default'] = '3-21g'
+
+            described_ecp = {}
+            if subsystem.ecp is not None:
+                for ecp in subsystem.ecp.ecp_def:
+                    ecp_str = ecp.group(0)
+                    split_ecp = ecp_str.split()
+                    described_ecp[split_ecp[0]] = split_ecp[1]
+                    
+            if inp.ecp is not None:
+                for ecp in inp.ecp.ecp_def:
+                    ecp_str = ecp.group(0)
+                    split_ecp = ecp_str.split()
+                    if not split_ecp[0] in described_ecp.keys():
+                        described_ecp[split_ecp[0]] = split_ecp[1]
+
+            mol.basis = described_basis
+            mol.ecp = described_ecp
             mol.build(dump_input=False)
             subsys_mols.append(mol) 
             subsys_ghost.append(nghost)
 
         #Add ghost link atoms Assumes angstroms.
-        max_bond_dist = 1.76
+        #max_bond_dist = 1.76
         for i in range(len(inp.subsystem)):
             subsystem = inp.subsystem[i]
-            ghAtms = []
-            ghost_link = 'H'
-            if subsystem.addlinkbasis:
-                mol1 = subsys_mols[i]
-                for j in range(i + 1, len(inp.subsystem)):
-                    mol2 = subsys_mols[j]
-                    link_atoms = []
-                    link_basis = {}
-                    for k in range(len(mol1.atom)):
-                        atom1_coord = mol1.atom[k][1]
-                        for m in range(len(mol2.atom)):
-                            atom2_coord = mol2.atom[m][1]
-                            atom_dist = bond_dist(atom1_coord, atom2_coord) 
-                            if atom_dist <= max_bond_dist:
-                                ghost_num = subsys_ghost[i] + 1
-                                if subsystem.basis:
-                                    new_atom, new_basis = gen_link_basis(
-                                                              mol1.atom[k], 
-                                                              mol2.atom[m], 
-                                                              subsystem.basis)
-                                else:
-                                    new_atom, new_basis = gen_link_basis(
-                                                              mol1.atom[k], 
-                                                              mol2.atom[m], 
-                                                              inp.basis)
-                                subsys_ghost[i] = ghost_num
-                                ghAtms.append(ghost_link)
-                                link_atoms.append(new_atom)
-                                link_basis.update(new_basis)
+        #    ghAtms = []
+        #    ghost_link = 'H'
+        #    if subsystem.addlinkbasis:
+        #        mol1 = subsys_mols[i]
+        #        for j in range(i + 1, len(inp.subsystem)):
+        #            mol2 = subsys_mols[j]
+        #            link_atoms = []
+        #            link_basis = {}
+        #            for k in range(len(mol1.atom)):
+        #                atom1_coord = mol1.atom[k][1]
+        #                for m in range(len(mol2.atom)):
+        #                    atom2_coord = mol2.atom[m][1]
+        #                    atom_dist = bond_dist(atom1_coord, atom2_coord) 
+        #                    if atom_dist <= max_bond_dist:
+        #                        ghost_num = subsys_ghost[i] + 1
+        #                        if subsystem.basis:
+        #                            new_atom, new_basis = gen_link_basis(
+        #                                                      mol1.atom[k], 
+        #                                                      mol2.atom[m], 
+        #                                                      subsystem.basis)
+        #                        else:
+        #                            new_atom, new_basis = gen_link_basis(
+        #                                                      mol1.atom[k], 
+        #                                                      mol2.atom[m], 
+        #                                                      inp.basis)
+        #                        subsys_ghost[i] = ghost_num
+        #                        ghAtms.append(ghost_link)
+        #                        link_atoms.append(new_atom)
+        #                        link_basis.update(new_basis)
 
-                    # Will not work if link atoms are explicitly defined.
-                    subsys_mols[i].atom = (subsys_mols[i].atom 
-                                           + link_atoms)
-                    subsys_mols[i].ghosts += ghAtms
-                    subsys_mols[i]._basis.update(link_basis)
+        #            # Will not work if link atoms are explicitly defined.
+        #            subsys_mols[i].atom = (subsys_mols[i].atom 
+        #                                   + link_atoms)
+        #            subsys_mols[i].ghosts += ghAtms
+        #            subsys_mols[i]._basis.update(link_basis)
             subsys_mols[i].build(dump_input=False)
 
         return subsys_mols
