@@ -2,7 +2,7 @@
 # Daniel Graham
 
 import os
-from qsome import supersystem, custom_pyscf_methods
+from qsome import supersystem, custom_pyscf_methods, cluster_subsystem
 from pyscf import gto, scf, dft, lib, lo
 
 from pyscf.tools import cubegen, molden
@@ -1007,45 +1007,86 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         vhf = full_sys_grad.get_veff(self.fs_scf.mol, full_dmat[0] + full_dmat[1])
         for i in range(len(self.subsystems)):
-            dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
             subsystem = self.subsystems[i]
-            dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
-            dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
+            if isinstance(subsystem, cluster_subsystem.ClusterActiveSubSystem):
+                dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
+                dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
 
 
-            env_dm = np.copy(full_dmat)
-            env_dm[0][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[0]
-            env_dm[1][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[1]
+                env_dm = np.copy(full_dmat)
+                env_dm[0][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[0]
+                env_dm[1][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[1]
 
-            dm_cs = dm[0] + dm[1]
-            env_dm_cs = env_dm[0] + env_dm[1]
-            atmlist = range(atms_completed, subsystem.mol.natm + atms_completed)
-            atms_completed = subsystem.mol.natm
+                dm_cs = dm[0] + dm[1]
+                env_dm_cs = env_dm[0] + env_dm[1]
 
-            aoslices = subsystem.mol.aoslice_by_atom() 
-            de = np.zeros((len(atmlist), 3))
-            de_proj = np.zeros((len(atmlist), 3))
-            for k, ia in enumerate(atmlist):
-                p0, p1 = aoslices [k,2:]
-                p0 += prev_p1
-                p1 += prev_p1
-                h1ao = hcore_deriv(ia)
-                de[k] += np.einsum('xij,ij->x', h1ao,  dm_cs)
+                active_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+                active_dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.active_dmat[0]
+                active_dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.active_dmat[1]
 
-                de[k] += np.einsum('xij,ij->x', vhf[:,p0:p1], dm_cs[p0:p1]) * 2
-                fock_deriv = h1ao + (vhf * 2.)
-                proj_pot = np.dot(np.dot(fock_deriv, env_dm_cs), self.smat)
-                proj_pot += np.dot(np.dot(s1, env_dm_cs), full_fock_cs)
-            #    print (proj_pot)
-                de_proj[k] = np.einsum('xij,ij->x', proj_pot[:,p0:p1], dm_cs[p0:p1])
+                active_dm_cs = active_dm[0] + active_dm[1]
+                    
+                atmlist = range(atms_completed, subsystem.mol.natm + atms_completed)
+                atms_completed = subsystem.mol.natm
 
-            prev_p1 = p1
-            print ("DE")
-            print (de)
-            print ("DE_PROJ")
-            print (de_proj)
-            # Subtract individual gardient to be left with embedding gradient. 
-            # Also calculate the embedding and projection with the high level density.
+                aoslices = subsystem.mol.aoslice_by_atom() 
+                env_emb_de = np.zeros((len(atmlist), 3))
+                active_emb_de = np.zeros((len(atmlist), 3))
+                env_proj_de = np.zeros((len(atmlist), 3))
+                active_proj_de = np.zeros((len(atmlist), 3))
+                for k, ia in enumerate(atmlist):
+                    p0, p1 = aoslices [k,2:]
+                    p0_full = p0 + prev_p1
+                    p1_full = p1 + prev_p1
+                    h1ao_full = hcore_deriv(ia)
+                    h1ao_sub = subsystem.env_hcore_deriv(k)
+                    h1ao_env = np.zeros_like(h1ao_full)
+                    h1ao_env[0][np.ix_(s2s[i], s2s[i])] += h1ao_sub[0]
+                    h1ao_env[1][np.ix_(s2s[i], s2s[i])] += h1ao_sub[1]
+                    h1ao_env[2][np.ix_(s2s[i], s2s[i])] += h1ao_sub[2]
+                    h1ao_emb = h1ao_full - h1ao_env
+                    env_emb_de[k] += np.einsum('xij,ij->x', h1ao_emb,  dm_cs)
+                    active_emb_de[k] += np.einsum('xij,ij->x', h1ao_emb,  active_dm_cs)
+
+                    vhf_sub = subsystem.env_vhf_deriv
+                    vhf_env = np.zeros_like(vhf)
+                    vhf_env[0][np.ix_(s2s[i], s2s[i])] += vhf_sub[0]
+                    vhf_env[1][np.ix_(s2s[i], s2s[i])] += vhf_sub[1]
+                    vhf_env[2][np.ix_(s2s[i], s2s[i])] += vhf_sub[2]
+                    vhf_emb = vhf[:,p0_full:p1_full] - vhf_env[:,p0_full:p1_full]
+                    env_emb_de[k] += np.einsum('xij,ij->x', vhf_emb, dm_cs[p0:p1]) * 2
+                    active_emb_de[k] += np.einsum('xij,ij->x', vhf_emb, active_dm_cs[p0:p1]) * 2
+
+                    #Get the projection gradient.
+                    fock_deriv = h1ao_full + (vhf * 2.)
+                    proj_pot = np.zeros_like(fock_deriv)
+                    proj_pot[0] += np.dot(np.dot(fock_deriv[0], env_dm_cs), self.smat)
+                    proj_pot[1] += np.dot(np.dot(fock_deriv[1], env_dm_cs), self.smat)
+                    proj_pot[2] += np.dot(np.dot(fock_deriv[2], env_dm_cs), self.smat)
+
+                    proj_pot[0] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[0])
+                    proj_pot[1] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[1])
+                    proj_pot[2] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[2])
+
+                    proj_pot[0] += proj_pot[0].transpose()
+                    proj_pot[1] += proj_pot[1].transpose()
+                    proj_pot[2] += proj_pot[2].transpose()
+
+                    proj_pot = proj_pot * -0.5
+
+                    env_proj_de[k] = np.einsum('xij,ij->x', proj_pot[:,p0_full:p1_full], dm_cs[p0:p1])
+                    active_proj_de[k] = np.einsum('xij,ij->x', proj_pot[:,p0_full:p1_full], active_dm_cs[p0:p1])
+
+                prev_p1 = p1_full
+                subsystem.env_sub_emb_nuc_grad = env_emb_de
+                subsystem.env_sub_proj_nuc_grad = env_proj_de
+                subsystem.active_sub_emb_nuc_grad = active_emb_de
+                subsystem.active_sub_proj_nuc_grad = active_proj_de
+                #print ("DE_PROJ")
+                #print (de_proj)
+                # Subtract individual gardient to be left with embedding gradient. 
+                # Also calculate the embedding and projection with the high level density.
             
 
 
@@ -1697,5 +1738,26 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                      + 0.5 * np.trace(self.dmat[1] - self.dftindft_dmat[1]))
 
         print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}") 
+
+    def get_embedding_nuc_gradients(self):
+        sup_nuc_grad = self.get_supersystem_nuc_grad().grad()
+        self.get_emb_subsys_nuc_grad()
+        subsystem_grad = np.zeros_like(sup_nuc_grad)
+        s2s = self.sub2sup
+        num_atoms_done = 0
+        for i in range(len(self.subsystems)):
+            subsystem = self.subsystems[i]
+            if isinstance(subsystem, cluster_subsystem.ClusterActiveSubSystem):
+                subsystem.get_env_nuc_grad()
+                subsystem.get_active_nuc_grad()
+                for a in range(subsystem.mol.natm):
+                    curr_atom = a + num_atoms_done
+                    subsystem_grad[curr_atom] -= subsystem.env_sub_nuc_grad[a] + subsystem.env_sub_emb_nuc_grad[a] + subsystem.env_sub_proj_nuc_grad[a]
+                    subsystem_grad[curr_atom] += subsystem.active_sub_nuc_grad[a] + subsystem.active_sub_emb_nuc_grad[a] + subsystem.active_sub_proj_nuc_grad[a]
+                num_atoms_done += subsystem.mol.natm
+
+        total_grad = sup_nuc_grad - subsystem_grad
+        print ("TOTAL GRADIENT")
+        print (total_grad)
  
        

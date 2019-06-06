@@ -3,7 +3,7 @@
 
 import re
 from qsome import subsystem, custom_pyscf_methods, molpro_calc, comb_diis
-from pyscf import gto, scf, dft, cc, tools
+from pyscf import gto, scf, dft, cc, mcscf, tools
 from pyscf.cc import ccsd_t, uccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
@@ -200,7 +200,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_sub_emb_nuc_grad = None
         self.env_sub_proj_nuc_grad = None
         self.env_hcore_deriv = None
-        self.env_vhf_derif = None
+        self.env_vhf_deriv = None
 
         self.diis_num = diis
         if diis == 1:
@@ -457,6 +457,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
             total_grad = de
 
+        self.env_sub_nuc_grad = total_grad
         return total_grad
     
     def update_emb_pot(self, new_emb_pot):
@@ -508,9 +509,18 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.dmat = new_den
         return self.dmat
 
-    #TODO
-    def save_orbitals(self):
-        pass
+    
+    def save_orbitals(self, scf_obj=None, mo_occ=None):
+        from pyscf.tools import molden
+        if scf_obj is None:
+            scf_obj = self.env_scf
+        if mo_occ is None:
+            mo_occ = scf_obj.mo_occ
+        molden_fn = os.path.splitext(self.filename)[0] + '.molden'
+        with open(molden_fn, 'w') as fin:
+            molden.header(scf_obj.mol, fin)
+            molden.orbital_coeff(scf_obj.mol, fin, scf_obj.mo_coeff, ene=scf_obj.mo_energy, occ=mo_occ)
+        molden.from_mo(scf_obj.mol, molden_fn, scf_obj.mo_coeff)
 
     def diagonalize(self, scf_obj=None, subcycles=None, env_method=None,
                      fock=None, env_hcore=None, emb_pot=None, proj_pot=None, 
@@ -1090,8 +1100,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         init_dmat = active_scf.get_init_guess(key=active_initguess)
                     active_energy = active_scf.kernel(dm0=init_dmat)
                     self.active_scf = active_scf
-                    # this slows down execution.
-                    self.active_dmat = self.active_scf.make_rdm1()
+                    if active_method == 'hf':
+                        # this slows down execution.
+                        self.active_dmat = self.active_scf.make_rdm1()
                     if 'ccsd' in active_method:
                         active_cc = cc.CCSD(active_scf, frozen=active_frozen)
                         active_cc.max_cycle = active_cycles
@@ -1101,8 +1112,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         eris = active_cc.ao2mo()
                         active_energy += ecc
                         self.active_scf = active_cc
-                        # this slows down execution.
-                        self.active_dmat = self.active_scf.make_rdm1()
+                        if active_method == 'ccsd':
+                            # this slows down execution.
+                            self.active_dmat = self.active_scf.make_rdm1()
                         if active_method == 'ccsd(t)':
                             ecc_t = ccsd_t.kernel(active_cc, eris)
                             active_energy += ecc_t
@@ -1125,7 +1137,12 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
 
                     elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
                                              active_method):
-                        pass
+                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
+                        active_cc_scf = mcscf.CASSCF(active_scf, active_space[0], active_space[1])
+                        active_cc_scf.kernel()
+                        if self.active_save_orbs:
+                            self.save_orbitals(active_cc_scf, active_scf.mo_occ)
+
                     elif re.match(re.compile('shci(scf)?\[.*\].*'), 
                                                        active_method):
                         from pyscf.future.shciscf import shci
@@ -1200,6 +1217,18 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         if self.active_save_orbs:
             pass
         return self.active_energy
+
+    def get_active_nuc_grad(self, mol=None, scf_obj=None):
+        if mol is None:
+            mol = self.mol
+        if scf_obj is None:
+            scf_obj = self.active_scf
+
+        grad_obj = scf_obj.nuc_grad_method() 
+        self.active_sub_nuc_grad = grad_obj.grad_elec(scf_obj.mo_energy, scf_obj.mo_coeff, scf_obj.mo_occ)
+        return self.active_sub_nuc_grad
+         
+
  
 class ClusterExcitedSubSystem(ClusterActiveSubSystem):
 

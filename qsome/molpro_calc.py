@@ -18,7 +18,7 @@ from pyscf.tools import fcidump
 from shutil import copyfile, move
 
 import multiprocessing
-import psutil
+#import psutil
 
 molpro_template=Template('''
 !leave this line blank

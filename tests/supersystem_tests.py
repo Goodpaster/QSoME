@@ -180,33 +180,30 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol = gto.Mole()
         #mol.verbose = 4
         mol.atom = '''
-        H 0.758602  0.000000  0.504284
-        H 0.758602  0.000000  -0.504284 
         O 0.0 0.0 0.0
         '''
         mol.basis = '3-21g'
         mol.build()
         env_method = 'b3lyp'
-        active_method = 'ccsd'
+        active_method = 'rhf'
         subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         #mol2.verbose = 4
         mol2.atom = '''
-        H 0.758602  3.000000  0.504284
-        H 0.758602  3.000000  -0.504284 
-        O 0.0 30.0 0.0
+        O 1.208 0.0 0.0
         '''
         mol2.basis = '3-21g'
         mol2.build()
         env_method = 'b3lyp'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', ft_cycles=20)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', ft_cycles=50)
         supsystem_e = supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
         subsystem_grad = subsys.get_env_nuc_grad()
-        print (subsystem_grad)
-        supersystem_grad = supersystem.get_emb_subsys_nuc_grad()
+        subsys.active_in_env_energy()
+        subsys.get_active_nuc_grad()
+        supersystem_grad = supersystem.get_embedding_nuc_gradients()
 
         mol3 = gto.Mole()
         #mol3.verbose = 4
@@ -230,7 +227,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         test_e = test_scf.kernel()
         test_grad = test_scf.nuc_grad_method()
         elec_grad = test_grad.grad_elec(test_scf.mo_energy, test_scf.mo_coeff, test_scf.mo_occ)
-        print (elec_grad)
+        #print (elec_grad)
         #self.assertAlmostEqual(test_grad.grad(), supsystem_grad.grad())
 
     def test_get_emb_subsys_elec_energy(self):
