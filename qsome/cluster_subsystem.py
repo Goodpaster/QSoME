@@ -449,7 +449,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 p0, p1 = aoslices [ia,2:]
                 h1ao = hcore_deriv(ia)
                 de[k] += np.einsum('xij,ij->x', h1ao, dm0)
-# na        bla was applied on bra in vhf, *2 for the contributions of nabla|ket>
+                # nabla was applied on bra in vhf, *2 for the contributions of nabla|ket>
                 de[k] += np.einsum('xij,ij->x', vhf[:,p0:p1], dm0[p0:p1]) * 2
                 de[k] -= np.einsum('xij,ij->x', s1[:,p0:p1], dme0[p0:p1]) * 2
 

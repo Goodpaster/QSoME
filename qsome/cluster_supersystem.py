@@ -1008,6 +1008,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         vhf = full_sys_grad.get_veff(self.fs_scf.mol, full_dmat[0] + full_dmat[1])
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
+            subsystem.get_env_nuc_grad()
             if isinstance(subsystem, cluster_subsystem.ClusterActiveSubSystem):
                 dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
                 dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
@@ -1739,7 +1740,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}") 
 
-    def get_embedding_nuc_gradients(self):
+    def get_embedding_nuc_grad(self):
         sup_nuc_grad = self.get_supersystem_nuc_grad().grad()
         self.get_emb_subsys_nuc_grad()
         subsystem_grad = np.zeros_like(sup_nuc_grad)
@@ -1757,7 +1758,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 num_atoms_done += subsystem.mol.natm
 
         total_grad = sup_nuc_grad - subsystem_grad
-        print ("TOTAL GRADIENT")
-        print (total_grad)
+        return total_grad
  
        
