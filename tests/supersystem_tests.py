@@ -203,7 +203,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsystem_grad = subsys.get_env_nuc_grad()
         subsys.active_in_env_energy()
         subsys.get_active_nuc_grad()
-        supersystem_grad = supersystem.get_embedding_nuc_gradients()
+        supersystem_grad = supersystem.get_embedding_nuc_grad()
 
         mol3 = gto.Mole()
         #mol3.verbose = 4

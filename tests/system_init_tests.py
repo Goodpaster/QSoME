@@ -595,7 +595,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertAlmostEqual(supersystem.mol.atom_coords()[3][1], 37.79452249, delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[3][2], 0.0, delta=1e-8)
         self.assertEqual(len(supersystem.mol.atom_coords()), 6)
-        self.assertEqual(supersystem.mol._basis['ghost:He:1'], supersystem.mol._basis['He:1'])
+        self.assertEqual(supersystem.mol._basis['ghost:He-1'], supersystem.mol._basis['He-1'])
 
         
     def test_ovlpghost_supersystem(self):

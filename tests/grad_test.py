@@ -37,7 +37,7 @@ supersystem.freeze_and_thaw()
 subsystem_grad = subsys.get_env_nuc_grad()
 subsys.active_in_env_energy()
 subsys.get_active_nuc_grad()
-supersystem_grad = supersystem.get_embedding_nuc_gradients()
+supersystem_grad = supersystem.get_embedding_nuc_grad()
 total_energy = supsystem_e - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
 print (total_energy)
 
