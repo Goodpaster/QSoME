@@ -1,5 +1,6 @@
 # A method to define a cluster supersystem
 # Daniel Graham
+# Dhabih V. Chulhai
 
 import os
 from qsome import supersystem, custom_pyscf_methods, cluster_subsystem
@@ -40,7 +41,7 @@ def time_method(function_name=None):
             else:
                 name = function_name
             elapsed_t = (te - ts)
-            print( f'{name} {elapsed_t:>50.4f}s')
+            print( f'TIMING: {name}'.ljust(40) + f'{elapsed_t:>39.4f}s')
             return result
         return wrapper_time_method 
     return real_decorator
@@ -1398,7 +1399,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             #RO
             pass
         else:
-            V_a = self.fs_scf.get_veff(mol=self.mol, dm=(dm[0] + dm[1]))
+            V_a = self.fs_scf.get_veff(mol=self.mol, dm=(dm[0] + dm[1])) / 2.0
             V_b = V_a
 
         self.fock[0] += V_a

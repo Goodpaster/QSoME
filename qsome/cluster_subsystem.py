@@ -1,5 +1,6 @@
 # A method to define all cluster supsystem objects
 # Daniel Graham
+# Dhabih V. Chulhai
 
 import re
 from qsome import subsystem, custom_pyscf_methods, molpro_calc, comb_diis
@@ -376,7 +377,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if proj_pot is None:
             proj_pot = self.proj_pot
         if emb_pot is None:
-            if self.emb_fock is None:
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
+            elif self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted or self.mol.spin != 0:
@@ -396,11 +399,12 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                      np.einsum('ij,ji', emb_pot[1], dmat[1])).real
             subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
         else:
-            e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2., 
+            e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2.,
                                 (dmat[0] + dmat[1])).real)
-            e_emb = (np.einsum('ij,ji', (emb_pot[0] + emb_pot[1])/2., 
+            e_emb = (np.einsum('ij,ji', (emb_pot[0] + emb_pot[1])/2.,
                      (dmat[0] + dmat[1])).real)
             subsys_e = self.env_scf.energy_elec(dm=(dmat[0] + dmat[1]))[0]
+
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None):
@@ -566,7 +570,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     fock = dft.uhf.get_fock(scf_obj, dm=dmat)
                 else:
                     single_fock = scf_obj.get_fock(dm=(dmat[0] + dmat[1]))
-                    fock = [single_fock, single_fock]
+                    fock = [single_fock/2., single_fock/2.]
             else:
                 fock = self.emb_fock
         if env_hcore is None:
@@ -652,7 +656,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                         f = emb_fock
                         mf = scf_obj
                         h1e = (env_hcore
-                               + (emb_pot[0] + emb_pot[1])/2
+                               + (emb_pot[0] + emb_pot[1])/2.
                                + (proj_pot[0] + proj_pot[1])/2.)
                         vhf = scf_obj.get_veff(dm=(self.dmat[0] + self.dmat[1]))
                         emb_fock = diis.update(s1e, dm, f, mf, h1e, vhf)
@@ -715,6 +719,78 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                                    env_mo_coeff[1].transpose().conjugate())
 
             return self.dmat
+
+
+    def get_useable_dmat(self, mat=None):
+        """Return a useable density matrix for use with PySCF.
+        This is because we always store the density matrix as a
+        (2 x nao x nao) matrix."""
+
+        if self.unrestricted:
+            return mat 
+        if self.cell.spin != 0:
+            return mat 
+        else:
+            return mat[0] + mat[1]
+
+
+    def update_stored_dmat(self, mat=None):
+        """Store the density matrix as a (2 x nao x nao) matrix."""
+
+        import numpy as np
+
+        if mat.ndim == 3:
+            return mat 
+        else:
+            out = np.zeros((2, mat.shape[0], mat.shape[1]), dtype=mat.dtype)
+            out[0] = mat / 2.0 
+            out[1] = mat / 2.0 
+            return out 
+
+
+    def get_useable_pot(self, mat=None):
+        """Return a useable potential for use with PySCF.
+        This is because we always store the potentials as a
+        (2 x nao x nao) matrix."""
+
+        if mat.ndim == 2:
+            return mat
+        if self.unrestricted:
+            return mat  
+        if self.cell.spin != 0:
+            return mat  
+        else:
+            return (mat[0] + mat[1])/2.
+
+
+    def update_stored_pot(self, mat=None):
+        """Store the potential matrix as a (2 x nao x nao) matrix."""
+
+        import numpy as np
+
+        if mat.ndim == 3:
+            return mat  
+        else:
+            out = np.zeros((2, mat.shape[0], mat.shape[1]), dtype=mat.dtype)
+            out[0] = mat
+            out[1] = mat
+            return out
+
+
+    def print_coordinates(self):
+        """Prints the Mole coordinates."""
+        bohr_2_angstrom = 0.52917720859
+        print (" Atom Coordinates (Angstrom) ".center(80,"-"))
+        if hasattr(self, 'cell'):
+            mol = self.cell
+        else:
+            mol = self.mol
+        for i in range(mol.natm):
+            a = mol.atom_symbol(i)
+            c = mol.atom_coord(i) * bohr_2_angstrom
+            st = "{0:<10} {1:10.4f} {2:10.4f} {3:10.4f}".format(
+                 a, c[0], c[1], c[2])
+            print (st)
 
 
 class ClusterActiveSubSystem(ClusterEnvSubSystem):
@@ -882,7 +958,9 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         if dmat is None:
             dmat = self.dmat
         if emb_pot is None:
-            if self.emb_fock is None:
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
+            elif self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted:
@@ -1001,7 +1079,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                                                active_method):
                         from pyscf.future.shciscf import shci
                         mod_hcore = ((self.env_scf.get_hcore() 
-                                 + (emb_pot[0] + emb_pot[1])/2. 
+                                 + (emb_pot[0] + emb_pot[1]) /2.
                                  + (proj_pot[0] + proj_pot[1])/2.))
                         active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                         active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
@@ -1018,7 +1096,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                                                active_method):
                         from pyscf import dmrgscf
                         mod_hcore = ((self.env_scf.get_hcore() 
-                                 + (emb_pot[0] + emb_pot[1])/2. 
+                                 + (emb_pot[0] + emb_pot[1])/2.
                                  + (proj_pot[0] + proj_pot[1])/2.))
                         active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                         active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
@@ -1059,7 +1137,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                 active_scf.level_shift = active_shift
                 active_scf.damp = active_damp
                 mod_hcore = ((self.env_scf.get_hcore() 
-                             + (emb_pot[0] + emb_pot[1])/2. 
+                             + (emb_pot[0] + emb_pot[1])/2.
                              + (proj_pot[0] + proj_pot[1])/2.))
                 active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                 active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
@@ -1206,6 +1284,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
                     active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
                     #Slows down execution
+                    self.active_scf = active_scf
                     self.active_dmat = self.active_scf.make_rdm1()
 
                 temp_dmat = copy(self.active_dmat)

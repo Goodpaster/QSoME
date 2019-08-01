@@ -5,7 +5,8 @@ from pyscf.scf import hf,rohf,uhf
 from pyscf.scf import jk
 from pyscf.dft import rks, roks, uks
 
-from pyscf.dft import libxc, numint
+#from pyscf.dft import libxc, numint
+from pyscf.dft import numint
 
 import numpy as np
 import scipy as sp

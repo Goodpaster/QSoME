@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # A module to define the input reader object
 # Daniel Graham
+# Dhabih V. Chulhai
 
 from __future__ import print_function, division
 
@@ -9,7 +10,7 @@ import sys
 import re
 import pwd, os
 
-from pyscf import gto
+from pyscf import gto, pbc
 
 
 class InpReader:
@@ -62,7 +63,14 @@ class InpReader:
         self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
         self.active_subsystem_kwargs = self.get_active_subsystem_kwargs()
+        self.cell_kwargs, self.kpoints_kwargs, self.periodic_kwargs \
+            = self.get_periodic_kwargs()
+        if self.periodic_kwargs is not None:
+            self.periodic = True
+        else:
+            self.periodic = False
         self.subsys_mols = self.gen_mols()
+
 
     def read_input(self, filename):
         """Reads a formatted input file, generates an InputReader object.
@@ -194,6 +202,37 @@ class InpReader:
         dmrg_settings.add_line_key('maxM', type=int, default=1000)
         dmrg_settings.add_line_key('memory', type=int)
         dmrg_settings.add_line_key('num_thrds', type=int, default=1)
+
+        # settings unique to periodic calculations
+        periodic_settings = reader.add_block_key('periodic_settings', required=False)
+        # lattice vectors
+        lattice = periodic_settings.add_block_key('lattice_vectors', required=True)
+        lattice.add_regex_line('vector', '\s*(\-?\d+.?\d*)\s+(\-?\d+.?\d*)\s+(\-?\d+.?\d*)',
+            repeat=True)
+        # k-points by grid or num of points
+        kgroup = periodic_settings.add_mutually_exclusive_group(dest='kgroup', required=True)
+        kgroup.add_line_key('kpoints', type=[int, int, int])
+        kscaled = kgroup.add_block_key('kgrid')
+        kscaled.add_regex_line('kpoints', '\s*(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
+                                repeat=True)
+        # grid/mesh points
+        mesh = periodic_settings.add_mutually_exclusive_group(dest='mgroup', required=False)
+        mesh.add_line_key('gspacing', type=float)
+        mesh.add_line_key('gs', type=[int, int, int])
+        mesh.add_line_key('mesh', type=[int, int, int])
+        # dimensions
+        periodic_settings.add_line_key('dimensions', type=(0,1,2,3), required=True)
+        # line keys with good defaults (shouldn't need to change these)
+        periodic_settings.add_line_key('auxbasis', type=str, case=True)
+        periodic_settings.add_line_key('density_fit',
+            type=('df', 'mdf', 'pwdf', 'fftdf', 'gdf', 'aftdf'))
+        periodic_settings.add_line_key('exxdiv', type=('vcut_sph', 'ewald', 'vcut_ws'))
+        periodic_settings.add_line_key('precision', type=float)
+        periodic_settings.add_line_key('ke_cutoff', type=float)
+        periodic_settings.add_line_key('rcut', type=float)
+        periodic_settings.add_line_key('exp_to_discard', type=float)
+        periodic_settings.add_line_key('low_dim_ft_type', type=str)
+        periodic_settings.add_boolean_key('fractional_coordinates') # fractional input coordinates
 
         reader.add_line_key('grid', type=int)
         reader.add_line_key('rhocutoff', type=float)
@@ -501,9 +540,93 @@ class InpReader:
 
         return active_subsystem_kwargs
 
+    def get_periodic_kwargs(self, inp=None):
+        """Generates a kwarg dictionary to create PeriodicSupersystem, 
+        PeriodicEnvSubsystem, and PeriodicEnvSubsystem objects.
+
+        Parameters
+        ----------
+        inp : InputReader, optional
+            InputReader object to extract supersystem settings from.
+            (default is None)
+
+        Returns
+        -------
+        cell_kwargs : dict
+            Keywords necessary for generating a PySCF cell object
+        kpoints_kwargs : dict
+            Keywords necessary for generating k-points
+        periodic_kwrags : dict
+            Other periodic keywords
+        """
+
+        import numpy as np
+
+        if inp is None:
+            inp = self.inp
+        if inp.periodic_settings is None:
+            return None, None, None
+        dimensions = inp.periodic_settings.dimensions
+
+        cell_kwargs = {}
+        kpoints_kwargs = {}
+        periodic_kwargs = {}
+
+        # cell kwargs
+        cell_keys = {
+                    'dimensions'        :           'dimension',
+                    'auxbasis'          :           'auxbasis',
+                    'exxdiv'            :           'exxdiv',
+                    'precision'         :           'precision',
+                    'ke_cutoff'         :           'ke_cutoff',
+                    'rcut'              :           'rcut',
+                    'low_dim_ft_type'   :           'low_dim_ft_type',
+                    }
+
+        # other periodic kwargs
+        periodic_keys = {
+                        'density_fit'       :       'density_fit',
+                        'exp_to_discard'    :       'exp_to_discard',
+                        }
+
+
+        # get k-points arguments
+        kpoints_kwargs = {}
+        if inp.periodic_settings.kgroup.__class__ is tuple:
+            kpoints_kwargs['kpoints'] = np.array(inp.periodic_settings.kgroup)
+        else:
+            kabs = np.array([r.group(0).split() for r in inp.periodic_settings.kgroup],
+                dtype=float)
+            kpoints_kwargs['kgroup'] = kabs
+
+        # lattice vectors
+        lattice = []
+        for r in inp.periodic_settings.lattice_vectors.vector:
+            lattice.append(np.array([r.group(1), r.group(2), r.group(3)], dtype=float))
+        cell_kwargs['a'] = np.array(lattice)
+        if len(cell_kwargs['a']) < 3:
+            raise Exception("LATTICE_VECTORS must be a 3x3 array!")
+
+        # read from all cell_keys to create cell_kwargs
+        for key in cell_keys:
+            value = getattr(inp.periodic_settings, key)
+            if value is not None:
+                cell_kwargs[cell_keys[key]] = value
+
+        # read from all other keys to create periodic_kwargs
+        for key in periodic_keys:
+            value = getattr(inp.periodic_settings, key)
+            if value is not None:
+                periodic_kwargs[periodic_keys[key]] = value
+        if inp.grid:
+            periodic_kwargs['grid_level'] = inp.grid
+
+        return cell_kwargs, kpoints_kwargs, periodic_kwargs
+
+
     #Add link basis functions when mol objects are generated.
     def gen_mols(self, inp=None):
-        """Generates the mol objects specified in inp..
+        """Generates the mol or cell objects specified in inp..
 
         Parameters
         ----------
@@ -514,11 +637,15 @@ class InpReader:
 
         if inp is None:
             inp = self.inp
+
         subsys_mols = []
         subsys_ghost = []
         for subsystem in inp.subsystem:
             atom_list = subsystem.atoms
-            mol = gto.Mole()
+            if self.periodic_kwargs is None:
+                mol = gto.Mole()
+            else:
+                mol = pbc.gto.Cell()
             mol.atom = []
             mol.ghosts = []
             nghost = 0
@@ -579,7 +706,18 @@ class InpReader:
 
             mol.basis = described_basis
             mol.ecp = described_ecp
-            mol.build(dump_input=False)
+
+            if self.periodic_kwargs is None:
+                mol.build(dump_input=False)
+
+            # other options unique to periodic systems
+            else:
+                if inp.periodic_settings.exp_to_discard is not None:
+                    mol.exp_to_discard = inp.periodic_settings.exp_to_discard
+                if inp.periodic_settings.precision is not None:
+                    mol.precision = inp.periodic_settings.precision
+                mol.build(dump_input=False, **self.cell_kwargs)
+
             subsys_mols.append(mol) 
             subsys_ghost.append(nghost)
 
