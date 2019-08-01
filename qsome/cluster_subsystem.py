@@ -570,7 +570,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     fock = dft.uhf.get_fock(scf_obj, dm=dmat)
                 else:
                     single_fock = scf_obj.get_fock(dm=(dmat[0] + dmat[1]))
-                    fock = [single_fock/2., single_fock/2.]
+                    fock = [single_fock, single_fock]
             else:
                 fock = self.emb_fock
         if env_hcore is None:

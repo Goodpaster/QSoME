@@ -1399,7 +1399,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             #RO
             pass
         else:
-            V_a = self.fs_scf.get_veff(mol=self.mol, dm=(dm[0] + dm[1])) / 2.0
+            V_a = self.fs_scf.get_veff(mol=self.mol, dm=(dm[0] + dm[1]))
             V_b = V_a
 
         self.fock[0] += V_a

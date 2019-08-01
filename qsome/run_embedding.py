@@ -40,11 +40,10 @@ def main():
             active_kwargs.update(env_kwargs)
             subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method,  **active_kwargs)
 
-            # DEBUG: PERIODIC EMBEDDING
-            kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-            subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                        **in_obj.periodic_kwargs)
-            # END DEBUG
+            if in_obj.periodic:
+                kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
+                subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
+                            **in_obj.periodic_kwargs)
 
             subsystems.append(subsys)
 
@@ -54,11 +53,10 @@ def main():
             env_kwargs = in_obj.env_subsystem_kwargs[i]
             subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
 
-            # DEBUG: PERIODIC DEBUGGING STARTS HERE
-#            kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-            subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                                                             **in_obj.periodic_kwargs)
-            # END DEBUG
+            if in_obj.periodic:
+                #kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
+                subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
+                                                                 **in_obj.periodic_kwargs)
 
             subsystems.append(subsys)
 
@@ -73,7 +71,6 @@ def main():
         supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
             fs_method, **supersystem_kwargs)
 
-    # DEBUG: PERIODIC EMEBEDDING
     else:
         from periodic_supersystem import PeriodicSuperSystem
         if 'grid_level' in in_obj.periodic_kwargs:
@@ -84,20 +81,18 @@ def main():
                   **in_obj.supersystem_kwargs)
 
         super_energy = supersystem.get_supersystem_energy()
-#        sys.exit('<<<SYSTEM: end periodic debugging>>>')
-    # END DEBUG
 
     supersystem.freeze_and_thaw()
     supersystem.env_in_env_energy()
 
-    if in_obj.periodic: # DEBUG PERIODIC EMBEDDING
+    if in_obj.periodic:
         supersystem.periodic_to_cluster(active_method, **active_kwargs)
 
     supersystem.get_active_energy()
     #supersystem.get_env_energy()
     super_energy = supersystem.get_supersystem_energy()
 
-    if not in_obj.periodic: # does not work for periodic embedding
+    if not in_obj.periodic: # TODO: does not work for periodic embedding
         supersystem.get_dft_diff_parameters()
 
     total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
