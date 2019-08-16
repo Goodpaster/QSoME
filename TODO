@@ -3,6 +3,9 @@ Todo For 1.0 Release
 
     1. Finalize Code
         a. Optimize algorithms and remove redundancy
+            - Ensure proper polymorphism with periodic systems and open shell matrices.
+            - Ensure follows SOLID design principles.
+            - Potentially implement the following OOP Design patterns: Adapter (interface for 3rd party packages), Command (Supersystem to subsystem), Strategy (For polymorphism), Template(for running an overall embedding calculation).
         b. Ensure proper variable names
         c. Ensure proper OO principles (https://javarevisited.blogspot.com/2018/07/10-object-oriented-design-principles.html).
         d. Decide on module structure and class names.
