@@ -1,6 +1,36 @@
-1. Write Documentation
-2. Write Examples
-3. Test cases that should fail.
-4. Add restricted open shell calculation.
-5. Print timings at the end
-6. Add logging
+Todo For 1.0 Release
+    1.0 Release is for closed-shell only.
+
+    1. Finalize Code
+        a. Optimize algorithms and remove redundancy
+        b. Ensure proper variable names
+        c. Ensure proper OO principles (https://javarevisited.blogspot.com/2018/07/10-object-oriented-design-principles.html).
+        d. Decide on module structure and class names.
+        e. Squish bugs
+        f. Finish timing decorator method
+        
+
+    2. Write Documentation -- Following Google Docstrings format (https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html)
+        a. Document all modules and classes properly.
+        b. Add quick guide on how to use the software.
+        c. Write several examples.
+        d. Use Sphinx?
+
+    3. Write Tests -- Tests using unittest module.
+        a. Ensure all methods and variations are tested.
+        b. Write some tests designed to fail.
+        c. Write automatic test runner method. Code should be able to be called using: qsome.verify() or something along those lines.
+
+    4. Package for release.
+        a. Update the Pypy packager (specify prerequisites)
+        b. Write installation instructions and trouble shooting.
+        c. Release on GitHub
+        d. Decide on License
+        e. Add CHANGELOG
+
+
+Stretch Goals
+
+    1. Add unrestricted open shell calculation.
+    2. Add restricted open shell calculation.
+    3. Interface with other codes (Bagel, OpenMolcas, Molpro, etc.)
