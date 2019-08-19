@@ -104,7 +104,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     """
 
 
-    def __init__(self, mol, env_method, unrestricted=False, filename=None, 
+    def __init__(self, mol, env_method, env_order=1, unrestricted=False, filename=None, 
                  smearsigma=0., damp=0., shift=0., subcycles=1, diis=0, 
                  freeze=False, initguess=None, grid_level=4, rhocutoff=1e-7, 
                  verbose=3, analysis=False, debug=False, nproc=None, pmem=None,
@@ -155,6 +155,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         self.mol = mol
         self.env_method = env_method
+        self.env_order = env_order
         self.unrestricted = unrestricted
 
         self.initguess = initguess

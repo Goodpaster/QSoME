@@ -1,7 +1,7 @@
 
 
 
-class InteractionMediator
+class InteractionMediator:
 
     def __init__(self, subsystems, env_emb_settings, filename=None, verbose=3, 
                  analysis=False, nproc=None, pmem=None, scr_dir=None):
@@ -87,6 +87,16 @@ class InteractionMediator
 
         return fs_mols
                 
-    def init_fs_scf(self, mol_list=None, setting_list=None):
-        pass
+    def init_fs_scf(self, fs_mol_list=None, fs_setting_list=None):
+        
+        if fs_mol_list is None:
+            fs_mol_list = self.fs_mol_list
+        if fs_setting_list is None:
+            fs_setting_list = self.fs_setting_list
+
+        for m in range(len(fs_mol_list)):
+            if self.pmem is not None:
+               fs_mol_list[m].max_memory = self.pmem
+            
+        
 
