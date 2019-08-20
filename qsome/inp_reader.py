@@ -636,8 +636,6 @@ class InpReader:
                 mol.spin = subsystem.spin
             if subsystem.unit:
                 mol.unit = subsystem.unit
-            if inp.verbose:
-                mol.verbose = inp.verbose
 
             described_basis = {}
             if subsystem.basis is not None:
