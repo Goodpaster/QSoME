@@ -102,8 +102,8 @@ class InpReader:
         sub_ecp = subsys.add_block_key('ecp')              
         sub_ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:\d]+)\s+.+', 
             repeat=True)
-        subsys.add_line_key('env_method', type=int)
-        subsys.add_line_key('hl_method', type=int)
+        subsys.add_line_key('env_method_num', type=int)
+        subsys.add_line_key('hl_method_num', type=int)
         # Override default environment settings
         sub_env_settings = subsys.add_block_key('env_method_settings')
         sub_env_settings.add_line_key('smearsigma', type=float)   # fermi smearing sigma
@@ -177,7 +177,7 @@ class InpReader:
         env_settings.add_boolean_key('save_density')
         
         # Freeze and thaw settings
-        embed = env_settings.add_block_key('embed_settings', required=True)
+        embed = env_settings.add_block_key('embed_settings')
         embed.add_line_key('cycles', type=int) 
         embed.add_line_key('subcycles', type=int) 
         embed.add_line_key('conv', type=float)
