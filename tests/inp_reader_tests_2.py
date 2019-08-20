@@ -8,7 +8,7 @@ import shutil
 import re
 
 from qsome import inp_reader
-from pyscf import gto
+#from pyscf import gto
 
 
 def_filename = "default.inp"
@@ -27,7 +27,7 @@ env_method_settings
 end
 
 hl_method_settings
- hl_num 1
+ hl_order 1
  hl_method rhf
 end
 
@@ -70,6 +70,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(inp.env_method_settings[0].env_method, 'pbe')
         self.assertEqual(inp.hl_method_settings[0].hl_method, 'rhf')
         self.assertEqual(inp.basis.basis_def[0].group(0), 'default 3-21g')
+        self.assertTrue(False)
          
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
