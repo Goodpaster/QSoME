@@ -36,6 +36,7 @@ basis
 end
 
 """
+temp_inp_dir = "/temp_input/"
 
 class TestInputReader(unittest.TestCase):
 
@@ -66,10 +67,9 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(float(inp.subsystem[1].atoms[0].group(4)), 0.0)
 
         #Check operator and methods
-        #self.assertEqual(inp.embed.operator, None)
-        #self.assertEqual(inp.embed.env_method, 'pbe')
-        #self.assertEqual(inp.active_method, 'hf')
-        #self.assertEqual(inp.basis.basis_def[0].group(0), 'default 3-21g')
+        self.assertEqual(inp.env_method_settings[0].env_method, 'pbe')
+        self.assertEqual(inp.hl_method_settings[0].hl_method, 'rhf')
+        self.assertEqual(inp.basis.basis_def[0].group(0), 'default 3-21g')
          
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

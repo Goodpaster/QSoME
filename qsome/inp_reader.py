@@ -60,16 +60,16 @@ class InpReader:
         """
 
         self.inp = self.read_input(filename)
-        self.interaction_mediator_kwargs = self.get_interaction_mediator_kwargs()
-        self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
-        self.active_subsystem_kwargs = self.get_active_subsystem_kwargs()
-        self.cell_kwargs, self.kpoints_kwargs, self.periodic_kwargs \
-            = self.get_periodic_kwargs()
-        if self.periodic_kwargs is not None:
-            self.periodic = True
-        else:
-            self.periodic = False
-        self.subsys_mols = self.gen_mols()
+        #self.interaction_mediator_kwargs = self.get_interaction_mediator_kwargs()
+        #self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
+        #self.active_subsystem_kwargs = self.get_active_subsystem_kwargs()
+        #self.cell_kwargs, self.kpoints_kwargs, self.periodic_kwargs \
+        #    = self.get_periodic_kwargs()
+        #if self.periodic_kwargs is not None:
+        #    self.periodic = True
+        #else:
+        #    self.periodic = False
+        #self.subsys_mols = self.gen_mols()
 
 
     def read_input(self, filename):
@@ -236,7 +236,7 @@ class InpReader:
         periodic_settings.add_line_key('low_dim_ft_type', type=str)
         periodic_settings.add_boolean_key('fractional_coordinates') # fractional input coordinates
 
-        hl_settings = reader.add_block_key('hl_method_settings')
+        hl_settings = reader.add_block_key('hl_method_settings', repeat=True, required=True)
         hl_settings.add_line_key('hl_num', type=int)
         hl_settings.add_line_key('hl_method', type=str)
         hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
