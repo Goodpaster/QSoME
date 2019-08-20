@@ -158,16 +158,17 @@ class ClusterSuperSystem(supersystem.SuperSystem):
     """
 
 
-    def __init__(self, subsystems, fs_method, fs_unrestricted=False, 
-                 proj_oper='huz', filename=None, ft_cycles=100, ft_conv=1e-8, 
-                 ft_grad=None, ft_diis=1, ft_setfermi=None, ft_damp=0.0,
-                 ft_initguess='supmol', ft_updatefock=0, ft_writeorbs=False, 
-                 fs_cycles=100, fs_conv=1e-9, fs_grad=None, fs_damp=0, 
-                 fs_shift=0, fs_smearsigma=0, fs_initguess=None, grid_level=4, 
-                 verbose=3, analysis=False, debug=False, rhocutoff=1e-7, 
-                 nproc=None, pmem=None, scr_dir=None, fs_save_orbs=False, 
-                 fs_save_density=False, ft_save_orbs=False, 
-                 ft_save_density=False, compare_density=False):
+    def __init__(self, subsystems, fs_method, fs_smearsigma=0.,
+                 fs_initguess=None, fs_conv=1e-9, fs_grad=None, 
+                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=4, 
+                 fs_rhocutoff=1e-7, fs_verbose=3, fs_unrestricted=False, 
+                 fs_density_fitting=False, fs_compare_density=False, 
+                 fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
+                 ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, 
+                 ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
+                 ft_save_orbs=False, ft_save_density=False, ft_proj_oper='huz',
+                 filename=None, scr_dir=None, nproc=None, pmem=None):
+
         """
         Parameters
         ----------
@@ -749,10 +750,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         if subsys_list is None:
             subsys_list = self.subsystems
-        if len(subsys_list) < 2:
-            # Raise not large enough subsystems.
-            print ("Cannot concatenate less than 2 mol objects")
-            return False
+        assert (len(subsys_list) < 2),"Must have more than 1 subsystem"
+
         mol1 = gto.mole.copy(subsys_list[0].mol)
         if subsys_list[0].flip_ros:
             mol1.spin *= -1

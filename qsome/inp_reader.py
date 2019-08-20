@@ -123,6 +123,7 @@ class InpReader:
         sub_hl_settings = subsys.add_block_key('hl_method_settings')
         sub_hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
             'readchk', 'supmol', 'submol'))
+        sub_hl_settings.add_line_key('spin', type=int)       
         sub_hl_settings.add_line_key('conv', type=float)       
         sub_hl_settings.add_line_key('grad', type=float)       
         sub_hl_settings.add_line_key('cycles', type=int)       
@@ -130,6 +131,9 @@ class InpReader:
         sub_hl_settings.add_line_key('shift', type=float)
         sub_hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
             'molcas', 'openmolcas'))
+        sub_hl_settings.add_boolean_key('unrestricted')
+        sub_hl_settings.add_boolean_key('compress_approx')
+        sub_hl_settings.add_boolean_key('density_fitting')
 
         sub_cas_settings = sub_hl_settings.add_block_key('cas_settings')
         sub_cas_settings.add_boolean_key('loc_orbs')
@@ -147,7 +151,6 @@ class InpReader:
 
         sub_dmrg_settings = sub_hl_settings.add_block_key('dmrg_settings')
         sub_dmrg_settings.add_line_key('maxM', type=int)
-        sub_dmrg_settings.add_line_key('memory', type=int)
         sub_dmrg_settings.add_line_key('num_thirds', type=int)
 
         # Define the environment settings and embedding ops
@@ -168,6 +171,7 @@ class InpReader:
         env_settings.add_line_key('rhocutoff', type=float)
         env_settings.add_line_key('verbose', type=int)
         env_settings.add_boolean_key('unrestricted')
+        env_settings.add_boolean_key('density_fitting')
         env_settings.add_boolean_key('compare_density')
         env_settings.add_boolean_key('save_orbs')
         env_settings.add_boolean_key('save_density')
@@ -187,7 +191,6 @@ class InpReader:
         embed.add_line_key('initguess', type=(
             'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
         embed.add_boolean_key('unrestricted')
-        embed.add_boolean_key('freeze') 
         # Output subsystem orbitals after F&T cycles
         embed.add_boolean_key('save_orbs') 
         embed.add_boolean_key('save_density') 
@@ -203,40 +206,7 @@ class InpReader:
         operator.add_boolean_key('huzfermi', action='huzfermi')
         embed.add_line_key('setfermi', type=float)
 
-        hl_settings = reader.add_block_key('hl_method_settings')
-        hl_settings.add_line_key('hl_num', type=int)
-        hl_settings.add_line_key('hl_method', type=str)
-        hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-            'readchk', 'supmol', 'submol'))
-        hl_settings.add_line_key('conv', type=float)       
-        hl_settings.add_line_key('grad', type=float)       
-        hl_settings.add_line_key('cycles', type=int)       
-        hl_settings.add_line_key('damp', type=float)
-        hl_settings.add_line_key('shift', type=float)
-        hl_settings.add_boolean_key('compress_approx')
-        hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
-            'molcas', 'openmolcas'))
-
-        cas_settings = hl_settings.add_block_key('cas_settings')
-        cas_settings.add_boolean_key('loc_orbs')
-        cas_settings.add_line_key('initguess', type=str) 
-        cas_settings.add_line_key('active_orbs', type=str) #Could I use a tuple?
-        cas_settings.add_line_key('avas', type=str) #Could I use a tuple?
-
-        shci_settings = hl_settings.add_block_key('shci_settings')
-        shci_settings.add_line_key('mpi_prefix', type=str)
-        shci_settings.add_line_key('sweep_iter', type=str)
-        shci_settings.add_line_key('sweep_epsilon', type=str)
-        shci_settings.add_line_key('nPTiter', type=int, default=0)
-        shci_settings.add_boolean_key('no_stochastic')
-        shci_settings.add_boolean_key('NoRDM')
-
-        dmrg_settings = hl_settings.add_block_key('dmrg_settings')
-        dmrg_settings.add_line_key('maxM', type=int)
-
-        #This may move depending on changes to the periodic code.
-        # settings unique to periodic calculations
-        periodic_settings = reader.add_block_key('periodic_settings', required=False)
+        periodic_settings = env_settings.add_block_key('periodic_settings', required=False)
         # lattice vectors
         lattice = periodic_settings.add_block_key('lattice_vectors', required=True)
         lattice.add_regex_line('vector', '\s*(\-?\d+.?\d*)\s+(\-?\d+.?\d*)\s+(\-?\d+.?\d*)',
@@ -265,6 +235,40 @@ class InpReader:
         periodic_settings.add_line_key('exp_to_discard', type=float)
         periodic_settings.add_line_key('low_dim_ft_type', type=str)
         periodic_settings.add_boolean_key('fractional_coordinates') # fractional input coordinates
+
+        hl_settings = reader.add_block_key('hl_method_settings')
+        hl_settings.add_line_key('hl_num', type=int)
+        hl_settings.add_line_key('hl_method', type=str)
+        hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
+            'readchk', 'supmol', 'submol'))
+        hl_settings.add_line_key('spin', type=int)
+        hl_settings.add_line_key('conv', type=float)       
+        hl_settings.add_line_key('grad', type=float)       
+        hl_settings.add_line_key('cycles', type=int)       
+        hl_settings.add_line_key('damp', type=float)
+        hl_settings.add_line_key('shift', type=float)
+        hl_settings.add_boolean_key('compress_approx')
+        hl_settings.add_boolean_key('unrestricted')
+        hl_settings.add_boolean_key('density_fitting')
+        hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
+            'molcas', 'openmolcas'))
+
+        cas_settings = hl_settings.add_block_key('cas_settings')
+        cas_settings.add_boolean_key('loc_orbs')
+        cas_settings.add_line_key('initguess', type=str) 
+        cas_settings.add_line_key('active_orbs', type=str) #Could I use a tuple?
+        cas_settings.add_line_key('avas', type=str) #Could I use a tuple?
+
+        shci_settings = hl_settings.add_block_key('shci_settings')
+        shci_settings.add_line_key('mpi_prefix', type=str)
+        shci_settings.add_line_key('sweep_iter', type=str)
+        shci_settings.add_line_key('sweep_epsilon', type=str)
+        shci_settings.add_line_key('nPTiter', type=int, default=0)
+        shci_settings.add_boolean_key('no_stochastic')
+        shci_settings.add_boolean_key('NoRDM')
+
+        dmrg_settings = hl_settings.add_block_key('dmrg_settings')
+        dmrg_settings.add_line_key('maxM', type=int)
 
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         basis = reader.add_block_key('basis')

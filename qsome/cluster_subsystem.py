@@ -104,11 +104,11 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     """
 
 
-    def __init__(self, mol, env_method, env_order=1, unrestricted=False, filename=None, 
-                 smearsigma=0., damp=0., shift=0., subcycles=1, diis=0, 
-                 freeze=False, initguess=None, grid_level=4, rhocutoff=1e-7, 
-                 verbose=3, analysis=False, debug=False, nproc=None, pmem=None,
-                 scr_dir=None, save_orbs=False, save_density=False):
+    def __init__(self, mol, env_method, env_order=1, smearsigma=0,
+                 initguess=None, conv=1e-8, damp=0., shift=0., subcycles=1, 
+                 diis=0, unrestricted=False, freeze=False, save_orbs=False,
+                 save_density=False, grid_level=4, rhocutoff=1e-7, verbose=3, 
+                 filename=None, nproc=None, pmem=None, scr_dir=None):
         """
         Parameters
         ----------
@@ -156,31 +156,49 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.mol = mol
         self.env_method = env_method
         self.env_order = env_order
-        self.unrestricted = unrestricted
 
-        self.initguess = initguess
         self.smearsigma = smearsigma
-        self.rho_cutoff = rhocutoff
-        self.grid_level = grid_level
-        self.damp = damp
-        self.shift = shift
+        self.initguess = initguess
+        self.env_conv = conv
+        self.env_damp = damp
+        self.env_shift = shift
 
+        self.env_subcycles = subcycles
+        self.diis_num = diis
+        if diis == 1:
+            #Use subtractive diis. Most simple
+            self.diis = lib_diis.DIIS()
+        elif diis == 2:
+            self.diis = scf_diis.CDIIS(self.env_scf)
+        elif diis == 3:
+            self.diis = scf_diis.EDIIS()
+        elif diis == 4:
+            self.diis = scf.diis.ADIIS()
+        elif diis == 5:
+            self.diis = comb_diis.EDIIS_DIIS(self.env_scf)
+        elif diis == 6:
+            self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
+        else:
+            self.diis = None 
+
+        self.unrestricted = unrestricted
         self.freeze = freeze
-        self.subcycles = subcycles 
+        self.save_orbs = save_orbs
+        self.save_density = save_density
+
+        self.grid_level = grid_level
+        self.rho_cutoff = rhocutoff
 
         self.verbose = verbose
-        self.analysis = analysis
-        self.debug = debug
+        self.filename = filename
         self.nproc = nproc
         self.pmem = pmem
         self.scr_dir = scr_dir
-        self.save_orbs = save_orbs
-        self.save_density = save_density
         if filename == None:
             filename = os.getcwd() + '/temp.inp'
-        self.filename = filename
-        self.fermi = [0., 0.]
 
+
+        self.fermi = [0., 0.]
         self.flip_ros = False
         self.env_scf = self.init_env_scf()
         self.dmat = self.init_density()
@@ -204,25 +222,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_hcore_deriv = None
         self.env_vhf_deriv = None
 
-        self.diis_num = diis
-        if diis == 1:
-            #Use subtractive diis. Most simple
-            self.diis = lib_diis.DIIS()
-        elif diis == 2:
-            self.diis = scf_diis.CDIIS(self.env_scf)
-        elif diis == 3:
-            self.diis = scf_diis.EDIIS()
-        elif diis == 4:
-            self.diis = scf.diis.ADIIS()
-        elif diis == 5:
-            self.diis = comb_diis.EDIIS_DIIS(self.env_scf)
-        elif diis == 6:
-            self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
-        else:
-            self.diis = None 
 
-    def init_env_scf(self, mol=None, env_method=None, rho_cutoff=None, 
-                     verbose=None, damp=None, shift=None):
+    def init_env_scf(self, mol=None, env_method=None, grid_level=None, 
+                     rho_cutoff=None, verbose=None, damp=None, shift=None):
         """Initializes the environment pyscf scf object.
         
         Parameters
@@ -245,14 +247,16 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             mol = self.mol
         if env_method is None:
             env_method = self.env_method
+        if grid_level is None:
+            grid_level = self.grid_level
         if rho_cutoff is None:
             rho_cutoff = self.rho_cutoff
         if verbose is None:
             verbose = self.verbose
         if damp is None:
-            damp = self.damp
+            damp = self.env_damp
         if shift is None:
-            shift = self.shift
+            shift = self.env_shift
 
         if self.pmem:
             mol.max_memory = self.pmem
@@ -794,7 +798,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             print (st)
 
 
-class ClusterActiveSubSystem(ClusterEnvSubSystem):
+class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
     Extends ClusterEnvSubSystem to calculate higher level methods.
 
@@ -835,15 +839,14 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
         Get the high level energy embedded into the total system.
     """ 
 
-    def __init__(self, mol, env_method, active_method, 
-                 active_unrestricted=False, localize_orbitals=False,
-                 active_orbs=None, avas=None, active_conv=1e-9, active_grad=None, 
-                 active_cycles=100, use_molpro=False, active_damp=0, active_frozen=None,
-                 active_shift=0, active_initguess='ft', active_save_orbs=False,
-                 active_save_density=False, compress_approx=False, 
-                 shci_mpi_prefix='', shci_stochastic=True, shci_nPTiter=0, 
-                 shci_sweep_iter=None, shci_DoRDM=True, shci_sweep_epsilon=None,
-                 dmrg_maxM=100, dmrg_memory=None, dmrg_num_thrds=1,  **kwargs):
+    def __init__(self, mol, env_method, hl_method, init_guess=None,
+                 hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
+                 hl_damp=0., hl_shift=0., hl_ext=None, hl_unrestricted=False, 
+                 cas_loc_orbs=False, cas_init_guess=None, cas_active_orbs=None,
+                 cas_avas=None, shci_mpi_prefix=None, shci_sweep_iter=None, 
+                 shci_sweep_epsilon=None, shci_nPTiter=None, 
+                 shci_no_stochastic=False, shci_noRDM=False, dmrg_maxM=100, 
+                 dmrg_num_thrds=1 **kwargs):
         """
         Parameters
         ----------
