@@ -41,6 +41,17 @@ def concat_mols(subsys_list):
     assert (len(subsys_list) > 1),"Must have more than 1 subsystem"
 
     mol1 = gto.mole.copy(subsys_list[0].mol)
+    for j in range(mol1.natm):
+        old_name = mol1.atom_symbol(j)
+        new_name = mol1.atom_symbol(j) + '-0'
+        mol1._atom[j] = (new_name, mol1._atom[j][1])
+        if old_name in mol1._basis.keys():
+            mol1._basis[new_name] = mol1._basis.pop(old_name)
+        if old_name in mol1.ecp.keys():
+            mol1.ecp[new_name] = mol1.ecp.pop(old_name)
+            mol1._ecp[new_name] = mol1._ecp.pop(old_name)
+            mol1._atm, mol1._ecpbas, mol1._env = mol1.make_ecp_env(mol1._atm, mol1._ecp, mol1._env)
+
     if subsys_list[0].flip_ros:
         mol1.spin *= -1
         mol1.build()
@@ -453,8 +464,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             sub2sup[i] = np.zeros(nao[i], dtype=int)
             for a in range(subsystems[i].mol.natm):
                 match = False
+                c1 = subsystems[i].mol.atom_coord(a)
                 for b in range(mAB.natm):
-                    c1 = subsystems[i].mol.atom_coord(a)
                     c2 = mAB.atom_coord(b)
                     d = np.dot(c1 - c2, c1 - c2)
                     if d < 0.0001:

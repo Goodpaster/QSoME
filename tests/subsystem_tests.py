@@ -336,7 +336,9 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         test_scf.xc = env_method
         test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(test_dmat, (subsys.dmat)))
+        print (test_dmat)
+        print (subsys.dmat)
+        self.assertTrue(np.allclose(test_dmat, subsys.dmat))
 
         # Unrestricted Open Shell
         # Unsure how to test this with embedding potential or projection pot.
@@ -360,7 +362,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_dmat[0], subsys.dmat[0]))
         self.assertTrue(np.allclose(test_dmat[1], subsys.dmat[1]))
          
-class TestActiveSubsystemMethods(unittest.TestCase):
+class TestHLSubsystemMethods(unittest.TestCase):
 
     def test_active_proj_energy(self):
         pass
@@ -385,7 +387,7 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         #proj_e = subsys.active_proj_energy()
         #self.assertEqual(test_proj_e, proj_e)
 
-    def test_active_in_env_energy(self):
+    def test_hl_in_env_energy(self):
         # Closed Shell
         # Yet to test including embedding or projection potentials.
         mol = gto.Mole()
@@ -397,19 +399,19 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         mol.basis = 'cc-pVDZ'
         mol.build()
         env_method = 'm06'
-        active_method  = 'ccsd'
+        hl_method  = 'ccsd'
         conv_param = 1e-10
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, active_conv=conv_param)
-        subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat[0] + subsys.dmat[1]))
-        subsys_active_e = subsys.active_in_env_energy()
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_conv=conv_param)
+        subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat))
+        subsys_hl_e = subsys.hl_in_env_energy()
         test_scf = scf.RHF(mol)
         hf = test_scf.kernel()
         from pyscf import cc
         cc_calc = cc.CCSD(test_scf)
         cc_calc.conv_tol = 1e-10
         cc_calc.conv_tol_normt = 1e-6
-        test_active_e = cc_calc.kernel()[0]
-        self.assertAlmostEqual(subsys_active_e, hf + test_active_e, delta=1e-5)
+        test_hl_e = cc_calc.kernel()[0]
+        self.assertAlmostEqual(subsys_hl_e, hf + test_hl_e, delta=1e-5)
 
         #Unrestricted Open Shell
         mol = gto.Mole()
@@ -421,19 +423,19 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         mol.spin = 1
         mol.build()
         env_method = 'm06'
-        active_method  = 'uccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, active_unrestricted=True, unrestricted=True, active_conv=conv_param)
+        hl_method  = 'uccsd'
+        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, hl_method, hl_unrestricted=True, unrestricted=True, hl_conv=conv_param)
         subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat[0] + subsys.dmat[1]))
-        subsys_active_e = subsys.active_in_env_energy()
+        subsys_hl_e = subsys.hl_in_env_energy()
         test_scf = scf.UHF(mol)
         hf = test_scf.kernel()
         from pyscf import cc
         cc_calc = cc.UCCSD(test_scf)
         cc_calc.conv_tol = 1e-10
-        test_active_e = cc_calc.kernel()[0]
-        self.assertAlmostEqual(subsys_active_e, hf + test_active_e, delta=1e-5)
+        test_hl_e = cc_calc.kernel()[0]
+        self.assertAlmostEqual(subsys_hl_e, hf + test_hl_e, delta=1e-5)
 
-    def test_active_init_guess(self):
+    def test_hl_init_guess(self):
         # Closed Shell
         # Yet to test including embedding or projection potentials.
         mol = gto.Mole()
@@ -445,10 +447,10 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         mol.basis = 'cc-pVDZ'
         mol.build()
         env_method = 'm06'
-        active_method  = 'hf'
+        hl_method  = 'hf'
         conv_param = 1e-10
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, active_conv=conv_param, active_cycles=0, active_initguess="1e")
-        subsys_active_e = subsys.active_in_env_energy()
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="1e")
+        subsys_hl_e = subsys.hl_in_env_energy()
         test_scf = scf.RHF(mol)
         correct_dmat = test_scf.get_init_guess(key="1e")
         test_scf.max_cycle = 0
@@ -458,9 +460,9 @@ class TestActiveSubsystemMethods(unittest.TestCase):
         #cc_calc = cc.CCSD(test_scf)
         #cc_calc.conv_tol = 1e-10
         #cc_calc.max_cycle = 0
-        #test_active_e = cc_calc.kernel()[0]
+        #test_hl_e = cc_calc.kernel()[0]
         #correct_dmat = cc_calc.make_rdm1()
        
-        print (np.subtract(correct_dmat, subsys.active_scf.make_rdm1())) 
-        self.assertTrue(np.allclose(correct_dmat, subsys.active_scf.make_rdm1()))
+        print (np.subtract(correct_dmat, subsys.hl_scf.make_rdm1())) 
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_scf.make_rdm1()))
 

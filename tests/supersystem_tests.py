@@ -3,8 +3,8 @@
 #get_supersystem_energy
 #get_emb_subsys_elec_energy
 #correct_env_energy
-#get_active_energy
-#correct_active_energy
+#get_hl_energy
+#correct_hl_energy
 #env_in_env_energy
 #update_fock
 #update_proj_pot
@@ -42,8 +42,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -90,8 +90,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.spin = 1
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, active_unrestricted=True, unrestricted=True)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_unrestricted=True, unrestricted=True)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -138,8 +138,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'b3lyp'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         #mol2.verbose = 4
@@ -185,8 +185,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'b3lyp'
-        active_method = 'rhf'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'rhf'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         #mol2.verbose = 4
@@ -201,8 +201,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         supsystem_e = supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
         subsystem_grad = subsys.get_env_nuc_grad()
-        subsys.active_in_env_energy()
-        subsys.get_active_nuc_grad()
+        subsys.hl_in_env_energy()
+        subsys.get_hl_nuc_grad()
         supersystem_grad = supersystem.get_embedding_nuc_grad()
 
         mol3 = gto.Mole()
@@ -247,8 +247,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -325,8 +325,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.spin = 1
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, unrestricted=True, hl_unrestricted=True)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -399,7 +399,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         pass
 
     @unittest.skip
-    def test_get_active_energy(self):
+    def test_get_hl_energy(self):
         mol = gto.Mole()
         mol.verbose = 3
         mol.atom = '''
@@ -410,8 +410,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -426,7 +426,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         pass
 
     @unittest.skip
-    def test_correct_active_energy(self):
+    def test_correct_hl_energy(self):
         pass
 
     @unittest.skip
@@ -443,8 +443,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -501,8 +501,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.spin = 1
         mol.build()
         env_method = 'um06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -569,8 +569,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -628,8 +628,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -667,7 +667,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -699,7 +699,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #env_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, save_orbs=True, save_density=True)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, save_orbs=True, save_density=True)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -765,7 +765,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #env_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -820,7 +820,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #env_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -861,7 +861,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #env_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -915,7 +915,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #nv_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -968,7 +968,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #mol.build()
         #env_method = 'm06'
         #active_method = 'ccsd'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
+        #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, active_unrestricted=True)
 
         #mol2 = gto.Mole()
         #mol2.verbose = 3
@@ -1009,7 +1009,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -1063,7 +1063,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -1116,7 +1116,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3

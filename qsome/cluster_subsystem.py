@@ -586,7 +586,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if scf_obj is None:
             scf_obj = self.env_scf
         if subcycles is None:
-            subcycles = self.subcycles
+            subcycles = self.env_subcycles
         if env_method is None:
             env_method = self.env_method
         if dmat is None:
@@ -605,6 +605,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         mol = scf_obj.mol
 
+        if fock.ndim == 2.:
+           fock = np.array([fock, fock]) 
         nA_a = fock[0].shape[0]
         nA_b = fock[1].shape[0]
         N = [np.zeros((nA_a)), np.zeros((nA_b))]
@@ -615,6 +617,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             #TODO This doesn't work.
             if i > 0:
                 fock = self.update_fock()
+                if fock.ndim == 2.:
+                   fock = np.array([fock, fock]) 
 
             if self.unrestricted:
                 emb_proj_fock = [None, None]
@@ -707,15 +711,15 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             #Smear sigma may not be right for single elctron
             mo_occ = [np.zeros_like(env_mo_energy[0]), 
                       np.zeros_like(env_mo_energy[1])]
-            if self.smearsigma > 0.:
+            if self.env_smearsigma > 0.:
                 mo_occ[0] = ((env_mo_energy[0] 
-                              - fermi[0]) / smearsigma)
+                              - fermi[0]) / self.env_smearsigma)
                 ie = np.where( mo_occ[0] < 1000 )
                 i0 = np.where( mo_occ[0] >= 1000 )
                 mo_occ[0][ie] = 1. / ( np.exp( mo_occ[0][ie] ) + 1. )
                 mo_occ[0][i0] = 0.
 
-                mo_occ[1] = (env_mo_energy[1] - fermi[1] ) / self.smearsigma
+                mo_occ[1] = (env_mo_energy[1] - fermi[1] ) / self.env_smearsigma
                 ie = np.where( mo_occ[1] < 1000 )
                 i0 = np.where( mo_occ[1] >= 1000 )
                 mo_occ[1][ie] = 1. / ( np.exp( mo_occ[1][ie] ) + 1. )
@@ -953,30 +957,30 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_sub_proj_nuc_grad = None
  
 
-    def active_proj_energy(self, dmat=None, proj_pot=None):
+    def hl_proj_energy(self, dmat=None, proj_pot=None):
         """Return the projection energy
 
         Parameters
         ----------
         dmat : numpy.float64, optional
-            The active subsystem density matrix (default is None).
+            The hl subsystem density matrix (default is None).
         proj_pot : numpy.float64, optional
             The projection potential (default is None).
         """
 
         if dmat is None:
-            dmat = self.active_dmat
+            dmat = self.hl_dmat
         if proj_pot is None:
             proj_pot = self.proj_pot
         return np.trace(dmat, proj_pot)
            
-    def active_in_env_energy(self, mol=None, dmat=None, emb_pot=None, 
-                             proj_pot=None, active_method=None, 
-                             active_conv=None, active_grad=None, 
-                             active_shift=None, active_damp=None, 
-                             active_cycles=None, active_initguess=None,
-                             active_frozen=None):
-        """Returns the active subsystem energy as embedded in the full system.
+    def hl_in_env_energy(self, mol=None, dmat=None, emb_pot=None, 
+                             proj_pot=None, hl_method=None, 
+                             hl_conv=None, hl_grad=None, 
+                             hl_shift=None, hl_damp=None, 
+                             hl_cycles=None, hl_initguess=None,
+                             hl_frozen=None):
+        """Returns the hl subsystem energy as embedded in the full system.
 
         Parameters
         ----------
@@ -990,7 +994,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             Subsystem embedding potential matrix (default is None).
         proj_pot : numpy.float64, optional
             Subsystem projection potential matrix (default is None).
-        active_method : str, optional
+        hl_method : str, optional
             Active method string (default is None).
         """
 
@@ -1021,46 +1025,46 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                                self.emb_fock[1] - fock)
         if proj_pot is None:
             proj_pot = self.proj_pot 
-        if active_method is None:
-            active_method = self.active_method
-        if active_conv is None:
-            active_conv = self.active_conv
-        if active_grad is None:
-            active_grad = self.active_grad
-        if active_shift is None:
-            active_shift = self.active_shift
-        if active_damp is None:
-            active_damp = self.active_damp
-        if active_cycles is None:
-            active_cycles = self.active_cycles
-        if active_initguess is None:
-            active_initguess = self.active_initguess
-        if active_frozen is None:
-            active_frozen = self.active_frozen
+        if hl_method is None:
+            hl_method = self.hl_method
+        if hl_conv is None:
+            hl_conv = self.hl_conv
+        if hl_grad is None:
+            hl_grad = self.hl_grad
+        if hl_shift is None:
+            hl_shift = self.hl_shift
+        if hl_damp is None:
+            hl_damp = self.hl_damp
+        if hl_cycles is None:
+            hl_cycles = self.hl_cycles
+        if hl_initguess is None:
+            hl_initguess = self.hl_initguess
+        #if hl_frozen is None:
+        #    hl_frozen = self.hl_frozen
 
-        active_energy = 0.0
+        hl_energy = 0.0
         if self.use_molpro:
             mod_hcore = (self.env_scf.get_hcore() 
                          + ((emb_pot[0] + emb_pot[1])/2.
                          + (proj_pot[0] + proj_pot[1])/2.))
-            if active_method[0] == 'r':
-                active_method = active_method[1:]
-            if active_method == 'hf':
+            if hl_method[0] == 'r':
+                hl_method = hl_method[1:]
+            if hl_method == 'hf':
                 energy = molpro_calc.molpro_energy(
-                          mol, mod_hcore, active_method, self.filename, 
-                          self.active_save_orbs, scr_dir=self.scr_dir, 
+                          mol, mod_hcore, hl_method, self.filename, 
+                          self.hl_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
-                active_energy = energy[0]
-            elif active_method == 'ccsd' or active_method == 'ccsd(t)':
+                hl_energy = energy[0]
+            elif hl_method == 'ccsd' or hl_method == 'ccsd(t)':
                 energy = molpro_calc.molpro_energy(
-                          mol, mod_hcore, active_method, self.filename, 
-                          self.active_save_orbs, scr_dir=self.scr_dir, 
+                          mol, mod_hcore, hl_method, self.filename, 
+                          self.hl_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
-                active_energy = energy[0]
-            elif re.match(re.compile('cas(pt2)?\[.*\].*'), active_method):
+                hl_energy = energy[0]
+            elif re.match(re.compile('cas(pt2)?\[.*\].*'), hl_method):
                 energy = molpro_calc.molpro_energy(
-                          mol, mod_hcore, active_method, self.filename, 
-                          self.active_save_orbs, self.active_orbs, self.avas,
+                          mol, mod_hcore, hl_method, self.filename, 
+                          self.hl_save_orbs, self.active_orbs, self.avas,
                           self.localize_orbitals, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
@@ -1069,276 +1073,276 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                           mol, mod_hcore, active_method, self.filename, 
                           self.active_save_orbs, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
-                active_energy = energy[0]
+                hl_energy = energy[0]
             else:
                 pass
 
         else:
-            if self.active_unrestricted: 
-                if (active_method == 'hf' or active_method == 'ccsd' or 
-                    active_method == 'uccsd' or active_method == 'ccsd(t)' or 
-                    active_method == 'uccsd(t)' or 
+            if self.hl_unrestricted: 
+                if (active_method == 'hf' or hl_method == 'ccsd' or 
+                    hl_method == 'uccsd' or hl_method == 'ccsd(t)' or 
+                    hl_method == 'uccsd(t)' or 
                     re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                           active_method) or
+                                           hl_method) or
                     re.match(re.compile('shci(scf)?\[.*\].*'), 
-                                           active_method) or
+                                           hl_method) or
                     re.match(re.compile('dmrg\[.*\].*'), 
-                                           active_method)):
-                    active_scf = scf.UHF(mol)
-                    active_scf.conv_tol = active_conv
-                    active_scf.conv_tol_grad = active_grad
-                    active_scf.max_cycle = active_cycles
-                    active_scf.level_shift = active_shift
-                    active_scf.damp = active_damp
-                    active_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_get_fock(active_scf, 
+                                           hl_method)):
+                    hl_scf = scf.UHF(mol)
+                    hl_scf.conv_tol = hl_conv
+                    hl_scf.conv_tol_grad = hl_grad
+                    hl_scf.max_cycle = hl_cycles
+                    hl_scf.level_shift = hl_shift
+                    hl_scf.damp = hl_damp
+                    hl_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uhf_get_fock(hl_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    active_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_energy_elec(active_scf, 
+                    hl_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uhf_energy_elec(hl_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    if active_initguess != 'ft':
-                        dmat = active_scf.get_init_guess(key=active_initguess)
+                    if hl_initguess != 'ft':
+                        dmat = hl_scf.get_init_guess(key=hl_initguess)
 
-                    active_energy = active_scf.kernel(dm0=dmat)
+                    hl_energy = hl_scf.kernel(dm0=dmat)
 
-                    self.active_scf = active_scf
-                    if 'ccsd' in active_method:
-                        active_cc = cc.UCCSD(active_scf, frozen=active_frozen)
-                        active_cc.max_cycle = active_cycles
-                        active_cc.conv_tol = active_conv
+                    self.hl_scf = hl_scf
+                    if 'ccsd' in hl_method:
+                        hl_cc = cc.UCCSD(hl_scf, frozen=hl_frozen)
+                        hl_cc.max_cycle = hl_cycles
+                        hl_cc.conv_tol = hl_conv
                         #active_cc.conv_tol_normt = 1e-6
-                        ecc, t1, t2 = active_cc.kernel()
-                        active_energy += ecc
-                        if (active_method == 'ccsd(t)' 
-                            or active_method == 'uccsd(t)'):
-                            eris = active_cc.ao2mo(active_scf.mo_coeff)
-                            ecc_t = uccsd_t.kernel(active_cc, eris)
-                            active_energy += ecc_t
+                        ecc, t1, t2 = hl_cc.kernel()
+                        hl_energy += ecc
+                        if (hl_method == 'ccsd(t)' 
+                            or hl_method == 'uccsd(t)'):
+                            eris = hl_cc.ao2mo(hl_scf.mo_coeff)
+                            ecc_t = uccsd_t.kernel(hl_cc, eris)
+                            hl_energy += ecc_t
 
                     #For the following two not sure how to include the separate potential for alpha and beta.
                     elif re.match(re.compile('shci(scf)?\[.*\].*'), 
-                                               active_method):
+                                               hl_method):
                         from pyscf.future.shciscf import shci
                         mod_hcore = ((self.env_scf.get_hcore() 
                                  + (emb_pot[0] + emb_pot[1]) /2.
                                  + (proj_pot[0] + proj_pot[1])/2.))
-                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        hl_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                         active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
-                        active_shci = shci.SHCISCF(active_scf, active_space[0], active_space[1])
-                        active_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
-                        active_shci.fcisolver.stochastic = self.shci_stochastic
-                        active_shci.fcisolver.nPTiter = self.shci_nPTiter
-                        active_shci.fcisolver.sweep_iter = self.shci_sweep_iter
-                        active_shci.fcisolver.DoRDM = self.shci_DoRDM
-                        active_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
-                        ecc = active_shci.mc1step()[0]
+                        hl_shci = shci.SHCISCF(hl_scf, active_space[0], active_space[1])
+                        hl_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
+                        hl_shci.fcisolver.stochastic = self.shci_stochastic
+                        hl_shci.fcisolver.nPTiter = self.shci_nPTiter
+                        hl_shci.fcisolver.sweep_iter = self.shci_sweep_iter
+                        hl_shci.fcisolver.DoRDM = self.shci_DoRDM
+                        hl_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
+                        ecc = hl_shci.mc1step()[0]
 
                     elif re.match(re.compile('dmrg\[.*\].*'), 
-                                               active_method):
+                                               hl_method):
                         from pyscf import dmrgscf
                         mod_hcore = ((self.env_scf.get_hcore() 
                                  + (emb_pot[0] + emb_pot[1])/2.
                                  + (proj_pot[0] + proj_pot[1])/2.))
-                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        hl_scf.get_hcore = lambda *args, **kwargs: mod_hcore
                         active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
-                        active_dmrg = dmrgscf.DMRGSCF(active_scf, active_space[0], active_space[1])
+                        hl_dmrg = dmrgscf.DMRGSCF(hl_scf, active_space[0], active_space[1])
                         if self.dmrg_memory is None:
                             dmrg_mem = self.pmem 
                         else: 
                             dmrg_mem = self.dmrg_memory 
                         if dmrg_memory is not None:
                             dmrg_memory = float(dmrg_memory) / 1e3 #DMRG Input memory is in GB for some reason.
-                        active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
-                        active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
-                        active_dmrg.fcisolver.scratchDirectory = self.scr_dir
-                        edmrg = active_dmrg.kernel()
-                        if "nevpt" in active_method:
+                        hl_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
+                        hl_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
+                        hl_dmrg.fcisolver.scratchDirectory = self.scr_dir
+                        edmrg = hl_dmrg.kernel()
+                        if "nevpt" in hl_method:
                             from pyscf import mrpt
                             if self.compress_approx:
-                                enevpt = mrpt.NEVPT(active_dmrg).compress_approx().kernel()
+                                enevpt = mrpt.NEVPT(hl_dmrg).compress_approx().kernel()
                             else:
-                                enevpt = mrpt.NEVPT(active_dmrg).kernel()
+                                enevpt = mrpt.NEVPT(hl_dmrg).kernel()
                         
 
                     elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                             active_method):
-                        active_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
-                elif active_method[1:] == 'fci':
+                                             hl_method):
+                        hl_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
+                elif hl_method[1:] == 'fci':
                     pass
                 else: 
                     pass
             elif mol.spin != 0: 
                 #RO
                 pass
-            elif active_method == 'fcidump':
-                active_scf = scf.RHF(mol)
-                active_scf.conv_tol = active_conv
-                active_scf.conv_tol_grad = active_grad
-                active_scf.max_cycle = active_cycles
-                active_scf.level_shift = active_shift
-                active_scf.damp = active_damp
+            elif hl_method == 'fcidump':
+                hl_scf = scf.RHF(mol)
+                hl_scf.conv_tol = hl_conv
+                hl_scf.conv_tol_grad = hl_grad
+                hl_scf.max_cycle = hl_cycles
+                hl_scf.level_shift = hl_shift
+                hl_scf.damp = hl_damp
                 mod_hcore = ((self.env_scf.get_hcore() 
                              + (emb_pot[0] + emb_pot[1])/2.
                              + (proj_pot[0] + proj_pot[1])/2.))
-                active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
-                active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
+                hl_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                hl_energy = hl_scf.kernel(dm0=(dmat[0] + dmat[1]))
                 fcidump_filename = (os.path.splitext(self.filename)[0] 
                                     + '.fcidump')
                 print (f"FCIDUMP GENERATED AT {fcidump_filename}")
-                tools.fcidump.from_scf(active_scf, (
+                tools.fcidump.from_scf(hl_scf, (
                     os.path.splitext(self.filename)[0] + '.fcidump'), 
                     tol=1e-200)
             else: 
-                if active_method[0] == 'r':
-                    active_method = active_method[1:]
-                if (active_method == 'hf' or active_method == 'ccsd' or 
-                    active_method == 'ccsd(t)' or  
+                if hl_method[0] == 'r':
+                    hl_method = hl_method[1:]
+                if (hl_method == 'hf' or hl_method == 'ccsd' or 
+                    hl_method == 'ccsd(t)' or  
                     re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                           active_method) or
+                                           hl_method) or
                     re.match(re.compile('shci(scf)?\[.*\].*'), 
-                                           active_method) or
+                                           hl_method) or
                     re.match(re.compile('dmrg\[.*\].*'), 
-                                           active_method)):
-                    active_scf = scf.RHF(mol)
-                    active_scf.conv_tol = active_conv
-                    active_scf.conv_tol_grad = active_grad
-                    active_scf.max_cycle = active_cycles
-                    active_scf.level_shift = active_shift
-                    active_scf.damp = active_damp
-                    active_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_get_fock(active_scf, 
+                                           hl_method)):
+                    hl_scf = scf.RHF(mol)
+                    hl_scf.conv_tol = hl_conv
+                    hl_scf.conv_tol_grad = hl_grad
+                    hl_scf.max_cycle = hl_cycles
+                    hl_scf.level_shift = hl_shift
+                    hl_scf.damp = hl_damp
+                    hl_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rhf_get_fock(hl_scf, 
                         (emb_pot[0] + emb_pot[1])/2.,
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    active_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_energy_elec(active_scf, 
+                    hl_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rhf_energy_elec(hl_scf, 
                         (emb_pot[0] + emb_pot[1])/2., 
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    if active_initguess == 'ft':
+                    if hl_initguess == 'ft':
                         init_dmat = dmat[0] + dmat[1]
                     else:
-                        init_dmat = active_scf.get_init_guess(key=active_initguess)
-                    active_energy = active_scf.kernel(dm0=init_dmat)
-                    self.active_scf = active_scf
-                    if active_method == 'hf':
+                        init_dmat = hl_scf.get_init_guess(key=hl_initguess)
+                    hl_energy = hl_scf.kernel(dm0=init_dmat)
+                    self.hl_scf = hl_scf
+                    if hl_method == 'hf':
                         # this slows down execution.
-                        self.active_dmat = self.active_scf.make_rdm1()
-                    if 'ccsd' in active_method:
-                        active_cc = cc.CCSD(active_scf, frozen=active_frozen)
-                        active_cc.max_cycle = active_cycles
-                        active_cc.conv_tol = active_conv
-                        #active_cc.conv_tol_normt = 1e-6
-                        ecc, t1, t2 = active_cc.kernel()
-                        eris = active_cc.ao2mo()
-                        active_energy += ecc
-                        self.active_scf = active_cc
-                        if active_method == 'ccsd':
+                        self.hl_dmat = self.hl_scf.make_rdm1()
+                    if 'ccsd' in hl_method:
+                        hl_cc = cc.CCSD(hl_scf, frozen=hl_frozen)
+                        hl_cc.max_cycle = hl_cycles
+                        hl_cc.conv_tol = hl_conv
+                        #hl_cc.conv_tol_normt = 1e-6
+                        ecc, t1, t2 = hl_cc.kernel()
+                        eris = hl_cc.ao2mo()
+                        hl_energy += ecc
+                        self.hl_scf = hl_cc
+                        if hl_method == 'ccsd':
                             # this slows down execution.
-                            self.active_dmat = self.active_scf.make_rdm1()
-                        if active_method == 'ccsd(t)':
-                            ecc_t = ccsd_t.kernel(active_cc, eris)
-                            active_energy += ecc_t
-                            #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
+                            self.hl_dmat = self.hl_scf.make_rdm1()
+                        if hl_method == 'ccsd(t)':
+                            ecc_t = ccsd_t.kernel(hl_cc, eris)
+                            hl_energy += ecc_t
+                            #l1, l2 = ccsd_t_lambda_slow.kernel(self.hl_cc, new_eris, t1, t2,)[1:]
                             # this slows down execution.
-                            self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
+                            self.hl_dmat = ccsd_t_rdm_slow.make_rdm1(self.hl_cc, t1, t2, l1, l2, eris=new_eris)
                         else:
                             pass
                             # this slows down execution.
-                            #self.active_dmat = self.active_cc.make_rdm1()
+                            #self.hl_dmat = self.hl_cc.make_rdm1()
 
                         # Convert to AO form
-                        #temp_dmat = copy(self.active_dmat)
-                        #ao_dmat = reduce (np.dot, (self.active_cc.mo_coeff, np.dot(temp_dmat, self.active_cc.mo_coeff.T)))
+                        #temp_dmat = copy(self.hl_dmat)
+                        #ao_dmat = reduce (np.dot, (self.hl_cc.mo_coeff, np.dot(temp_dmat, self.hl_cc.mo_coeff.T)))
                         #print ("DMATS")
-                        #print (self.active_dmat)
+                        #print (self.hl_dmat)
                         #print (ao_dmat)
                         #print (self.dmat[0] + self.dmat[1])
-                        #self.active_dmat = ao_dmat
+                        #self.hl_dmat = ao_dmat
 
                     elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
-                                             active_method):
-                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
-                        active_cc_scf = mcscf.CASSCF(active_scf, active_space[0], active_space[1])
-                        active_cc_scf.kernel()
-                        if self.active_save_orbs:
-                            self.save_orbitals(active_cc_scf, active_scf.mo_occ)
+                                             hl_method):
+                        active_space = [int(i) for i in (active_method[hl_method.find("[") + 1:hl_method.find("]")]).split(',')]
+                        hl_cc_scf = mcscf.CASSCF(hl_scf, active_space[0], active_space[1])
+                        hl_cc_scf.kernel()
+                        if self.hl_save_orbs:
+                            self.save_orbitals(hl_cc_scf, hl_scf.mo_occ)
 
                     elif re.match(re.compile('shci(scf)?\[.*\].*'), 
-                                                       active_method):
+                                                       hl_method):
                         from pyscf.future.shciscf import shci
                         mod_hcore = (self.env_scf.get_hcore() 
                              + ((emb_pot[0] + emb_pot[1])/2.
                              + (proj_pot[0] + proj_pot[1])/2.))
-                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
-                        active_shci = shci.SHCISCF(active_scf, active_space[0], active_space[1])
-                        active_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
-                        active_shci.fcisolver.stochastic = self.shci_stochastic
-                        active_shci.fcisolver.nPTiter = self.shci_nPTiter
-                        active_shci.fcisolver.sweep_iter = self.shci_sweep_iter
-                        active_shci.fcisolver.DoRDM = self.shci_DoRDM
-                        active_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
-                        ecc = active_shci.mc1step()[0]
+                        active_space = [int(i) for i in (hl_method[hl_method.find("[") + 1:hl_method.find("]")]).split(',')]
+                        hl_shci = shci.SHCISCF(hl_scf, active_space[0], active_space[1])
+                        hl_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
+                        hl_shci.fcisolver.stochastic = self.shci_stochastic
+                        hl_shci.fcisolver.nPTiter = self.shci_nPTiter
+                        hl_shci.fcisolver.sweep_iter = self.shci_sweep_iter
+                        hl_shci.fcisolver.DoRDM = self.shci_DoRDM
+                        hl_shci.fcisolver.sweep_epsilon = self.shci_sweep_epsilon
+                        ecc = hl_shci.mc1step()[0]
 
                     elif re.match(re.compile('dmrg\[.*\].*'), 
-                                                       active_method):
+                                                       hl_method):
                         from pyscf import dmrgscf
                         mod_hcore = (self.env_scf.get_hcore() 
                              + ((emb_pot[0] + emb_pot[1])/2.
                              + (proj_pot[0] + proj_pot[1])/2.))
-                        active_scf.get_hcore = lambda *args, **kwargs: mod_hcore
-                        active_space = [int(i) for i in (active_method[active_method.find("[") + 1:active_method.find("]")]).split(',')]
-                        active_dmrg = dmrgscf.DMRGSCF(active_scf, active_space[0], active_space[1])
+                        hl_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                        active_space = [int(i) for i in (hl_method[hl_method.find("[") + 1:hl_method.find("]")]).split(',')]
+                        hl_dmrg = dmrgscf.DMRGSCF(hl_scf, active_space[0], active_space[1])
                         if self.dmrg_memory is None:
                             dmrg_mem = self.pmem
                         else: 
                             dmrg_mem = self.dmrg_memory
                         if dmrg_memory is not None:
                             dmrg_memory = float(dmrg_memory) / 1e3 #DMRG Input memory is in GB for some reason.
-                        active_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
-                        active_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
-                        active_dmrg.fcisolver.scratchDirectory = self.scr_dir
-                        edmrg = active_dmrg.kernel()
-                        if "nevpt" in active_method:
+                        hl_dmrg.fcisolver = dmrgscf.DMRGCI(self.mol, maxM=self.dmrg_maxM, memory=dmrg_mem)
+                        hl_dmrg.fcisolver.num_thrds = self.dmrg_numthrds
+                        hl_dmrg.fcisolver.scratchDirectory = self.scr_dir
+                        edmrg = hl_dmrg.kernel()
+                        if "nevpt" in hl_method:
                             from pyscf import mrpt
                             if self.compress_approx:
-                                enevpt = mrpt.NEVPT(active_dmrg).compress_approx().kernel()
+                                enevpt = mrpt.NEVPT(hl_dmrg).compress_approx().kernel()
                             else:
-                                enevpt = mrpt.NEVPT(active_dmrg).kernel()
+                                enevpt = mrpt.NEVPT(hl_dmrg).kernel()
 
                 else: #DFT
-                    active_scf = scf.RKS(mol)
-                    active_scf.xc = active_method
-                    active_scf.grids = self.env_scf.grids
-                    active_scf.small_rho_cutoff = self.rho_cutoff
-                    active_scf.conv_tol = active_conv
-                    active_scf.conv_tol_grad = active_grad
-                    active_scf.max_cycle = active_cycles
-                    active_scf.level_shift = active_shift
-                    active_scf.damp = active_damp
-                    #active_scf.get_hcore = lambda *args, **kwargs: env_hcore
-                    active_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_get_fock(active_scf, 
+                    hl_scf = scf.RKS(mol)
+                    hl_scf.xc = hl_method
+                    hl_scf.grids = self.env_scf.grids
+                    hl_scf.small_rho_cutoff = self.rho_cutoff
+                    hl_scf.conv_tol = hl_conv
+                    hl_scf.conv_tol_grad = hl_grad
+                    hl_scf.max_cycle = hl_cycles
+                    hl_scf.level_shift = hl_shift
+                    hl_scf.damp = hl_damp
+                    #hl_scf.get_hcore = lambda *args, **kwargs: env_hcore
+                    hl_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rks_get_fock(hl_scf, 
                         (emb_pot[0] + emb_pot[1])/2.,
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    active_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_energy_elec(active_scf, 
+                    hl_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rks_energy_elec(hl_scf, 
                         (emb_pot[0] + emb_pot[1])/2., 
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    active_energy = active_scf.kernel(dm0=(dmat[0] + dmat[1]))
+                    hl_energy = hl_scf.kernel(dm0=(dmat[0] + dmat[1]))
                     #Slows down execution
-                    self.active_scf = active_scf
-                    self.active_dmat = self.active_scf.make_rdm1()
+                    self.hl_scf = hl_scf
+                    self.hl_dmat = self.hl_scf.make_rdm1()
 
-                temp_dmat = copy(self.active_dmat)
-                self.active_dmat = [temp_dmat/2., temp_dmat/2.]
-        self.active_energy = active_energy 
+                temp_dmat = copy(self.hl_dmat)
+                self.hl_dmat = [temp_dmat/2., temp_dmat/2.]
+        self.hl_energy = hl_energy 
 
-        if self.active_save_density:
+        if self.hl_save_density:
             pass
-        if self.active_save_orbs:
+        if self.hl_save_orbs:
             pass
-        return self.active_energy
+        return self.hl_energy
 
-    def get_active_nuc_grad(self, mol=None, scf_obj=None):
+    def get_hl_nuc_grad(self, mol=None, scf_obj=None):
         if mol is None:
             mol = self.mol
         if scf_obj is None:
