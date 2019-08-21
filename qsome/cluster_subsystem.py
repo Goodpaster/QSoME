@@ -102,11 +102,11 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     """
 
 
-    def __init__(self, mol, env_method, env_order=1, smearsigma=0,
+    def __init__(self, mol, env_method, env_order=1, env_smearsigma=0,
                  initguess=None, conv=1e-8, damp=0., shift=0., subcycles=1, 
-                 diis=0, unrestricted=False, freeze=False, save_orbs=False,
-                 save_density=False, grid_level=4, rhocutoff=1e-7, verbose=3, 
-                 filename=None, nproc=None, pmem=None, scr_dir=None):
+                 setfermi=None, diis=0, unrestricted=False, density_fitting=False, 
+                 freeze=False, save_orbs=False, save_density=False,
+                 verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
         """
         Parameters
         ----------
@@ -155,13 +155,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_method = env_method
         self.env_order = env_order
 
-        self.smearsigma = smearsigma
-        self.initguess = initguess
+        self.env_smearsigma = env_smearsigma
+        self.env_initguess = initguess
         self.env_conv = conv
         self.env_damp = damp
         self.env_shift = shift
 
         self.env_subcycles = subcycles
+        self.env_setfermi = setfermi
         self.diis_num = diis
         if diis == 1:
             #Use subtractive diis. Most simple
@@ -180,12 +181,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             self.diis = None 
 
         self.unrestricted = unrestricted
+        self.density_fitting = density_fitting
         self.freeze = freeze
         self.save_orbs = save_orbs
         self.save_density = save_density
-
-        self.grid_level = grid_level
-        self.rho_cutoff = rhocutoff
 
         self.verbose = verbose
         if filename == None:
@@ -193,7 +192,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.filename = filename
         self.nproc = nproc
         self.pmem = pmem
-        self.scr_dir = scr_dir
+        self.scr_dir = scrdir
 
 
         self.fermi = [0., 0.]
@@ -221,8 +220,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_vhf_deriv = None
 
 
-    def init_env_scf(self, mol=None, env_method=None, grid_level=None, 
-                     rho_cutoff=None, verbose=None, damp=None, shift=None):
+    def init_env_scf(self, mol=None, env_method=None, verbose=None,
+                     damp=None, shift=None):
         """Initializes the environment pyscf scf object.
         
         Parameters
@@ -245,10 +244,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             mol = self.mol
         if env_method is None:
             env_method = self.env_method
-        if grid_level is None:
-            grid_level = self.grid_level
-        if rho_cutoff is None:
-            rho_cutoff = self.rho_cutoff
         if verbose is None:
             verbose = self.verbose
         if damp is None:
@@ -265,7 +260,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             else:
                 scf_obj = scf.UKS(mol)
                 scf_obj.xc = env_method
-                scf_obj.small_rho_cutoff = rho_cutoff
 
         elif mol.spin != 0:
             if mol.spin < 0:
@@ -277,14 +271,12 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             else:
                 scf_obj = scf.ROKS(mol)
                 scf_obj.xc = env_method
-                scf_obj.small_rho_cutoff = rho_cutoff
         else:
             if env_method == 'hf':
                scf_obj = scf.RHF(mol) 
             else:
                 scf_obj = scf.RKS(mol)
                 scf_obj.xc = env_method
-                scf_obj.small_rho_cutoff = rho_cutoff
 
         env_scf = scf_obj
         env_scf.verbose = verbose
@@ -867,11 +859,13 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, hl_method, hl_initguess=None,
                  hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
-                 hl_damp=0., hl_shift=0., hl_ext=None, hl_unrestricted=False, 
+                 hl_damp=0., hl_shift=0., hl_ext=None, hl_unrestricted=False,
+                 hl_compress_approx=False, hl_density_fitting=False,
+                 hl_save_orbs=False, hl_save_density=False,
                  cas_loc_orbs=False, cas_init_guess=None, cas_active_orbs=None,
                  cas_avas=None, shci_mpi_prefix=None, shci_sweep_iter=None, 
                  shci_sweep_epsilon=None, shci_nPTiter=None, 
-                 shci_stochastic=False, shci_DoRDM=False, dmrg_maxM=100, 
+                 shci_no_stochastic=False, shci_NoRDM=False, dmrg_maxM=100, 
                  dmrg_num_thrds=1, **kwargs):
         """
         Parameters
@@ -906,41 +900,44 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         super().__init__(mol, env_method, **kwargs)
 
         self.hl_method = hl_method
-        self.hl_unrestricted = hl_unrestricted
-        self.cas_loc_orbs = cas_loc_orbs
-        self.cas_active_orbs = cas_active_orbs
-        self.cas_avas = cas_avas
+        self.hl_initguess = hl_initguess
+        self.hl_spin = hl_spin
         self.hl_conv = hl_conv
         self.hl_grad = hl_grad
         self.hl_cycles = hl_cycles
         self.hl_damp = hl_damp
-        #self.hl_frozen = hl_frozen
         self.hl_shift = hl_shift
-        self.hl_initguess = hl_initguess
+
         self.hl_ext = hl_ext
-        #self.hl_save_orbs = hl_save_orbs
-        #self.hl_save_density = hl_save_density
-        #self.compress_approx = compress_approx
+        self.hl_unrestricted = hl_unrestricted
+        self.hl_compress_approx = hl_compress_approx
+        self.hl_density_fitting = hl_density_fitting
+        self.hl_save_orbs = hl_save_orbs
+        self.hl_save_density = hl_save_density
+
+        self.cas_loc_orbs = cas_loc_orbs
+        self.cas_init_guess = cas_init_guess
+        self.cas_active_orbs = cas_active_orbs
+        self.cas_avas = cas_avas
 
         self.shci_mpi_prefix = shci_mpi_prefix
-        self.shci_stochastic = shci_stochastic
-        self.shci_nPTiter = shci_nPTiter
         self.shci_sweep_iter = shci_sweep_iter
-        self.shci_DoRDM = shci_DoRDM
         self.shci_sweep_epsilon = shci_sweep_epsilon
+        self.shci_no_stochastic = shci_no_stochastic
+        self.shci_nPTiter = shci_nPTiter
+        self.shci_NoRDM = shci_NoRDM
 
         self.dmrg_maxM = dmrg_maxM
-        #self.dmrg_memory = self.p
         self.dmrg_num_thrds = dmrg_num_thrds
 
-        self.active_mo_coeff = None
-        self.active_mo_occ = None
-        self.active_mo_energy = None
+        self.hl_mo_coeff = None
+        self.hl_mo_occ = None
+        self.hl_mo_energy = None
 
-        self.active_dmat = None
-        self.active_sub_nuc_grad = None
-        self.active_sub_emb_nuc_grad = None
-        self.active_sub_proj_nuc_grad = None
+        self.hl_dmat = None
+        self.hl_sub_nuc_grad = None
+        self.hl_sub_emb_nuc_grad = None
+        self.hl_sub_proj_nuc_grad = None
  
 
     def active_proj_energy(self, dmat=None, proj_pot=None):

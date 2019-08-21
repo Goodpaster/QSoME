@@ -159,10 +159,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
 
     def __init__(self, subsystems, fs_method, fs_smearsigma=0.,
-                 fs_initguess=None, fs_conv=1e-9, fs_grad=None, 
+                 fs_initguess=None, fs_conv=1e-9, fs_grad=None, fs_cycles=None,
                  fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=4, 
                  fs_rhocutoff=1e-7, fs_verbose=3, fs_unrestricted=False, 
-                 fs_density_fitting=False, fs_compare_density=False, 
+                 fs_density_fitting=False, compare_density=False, 
                  fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
                  ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, 
                  ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
@@ -259,8 +259,38 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         """
 
         self.subsystems = subsystems
+
         self.fs_method = fs_method
+        self.fs_smearsigma = fs_smearsigma
+        self.fs_initguess = fs_initguess
+        self.fs_conv = fs_conv
+        self.fs_grad = fs_grad
+        self.fs_cycles = fs_cycles
+        self.fs_damp = fs_damp
+        self.fs_shift = fs_shift
+        self.fs_diis_num = fs_diis
+        self.grid_level = fs_grid_level
+        self.rho_cutoff = fs_rhocutoff
+        self.fs_verbose = fs_verbose
+
         self.fs_unrestricted = fs_unrestricted
+        self.fs_density_fitting = fs_density_fitting
+        self.compare_density = compare_density
+        self.fs_save_orbs = fs_save_orbs
+        self.fs_save_density = fs_save_density
+
+
+        # freeze and thaw settings
+        self.ft_cycles = ft_cycles
+        self.ft_conv = ft_conv
+        self.ft_grad = ft_grad
+        self.ft_damp = ft_damp
+        self.ft_diis_num = ft_diis
+        self.ft_updatefock = ft_updatefock
+        self.ft_initguess = ft_initguess
+        self.ft_unrestricted = ft_unrestricted
+        self.ft_save_orbs = ft_save_orbs
+        self.ft_save_density = ft_save_density
         self.proj_oper = ft_proj_oper
 
         self.nproc = nproc
@@ -270,39 +300,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             filename = os.getcwd() + '/temp.inp'
         self.filename = filename
         self.chk_filename = os.path.splitext(self.filename)[0] + '.hdf5'
-
-        # freeze and thaw settings
-        self.ft_cycles = ft_cycles
-        self.ft_conv = ft_conv
-        self.ft_grad = ft_grad
-        self.ft_damp = ft_damp
-
-        #self.ft_setfermi = ft_setfermi
-        self.ft_initguess = ft_initguess
-        self.ft_updatefock = ft_updatefock
-        self.ft_save_orbs = ft_save_orbs
-        self.ft_save_density = ft_save_density
-
-        # full system settings
-        #self.fs_cycles = fs_cycles
-        self.fs_conv = fs_conv
-        self.fs_grad = fs_grad
-        #self.rho_cutoff = rhocutoff
-        self.fs_damp = fs_damp
-        self.fs_shift = fs_shift
-        self.fs_smearsigma = fs_smearsigma
-        self.fs_initguess = fs_initguess
-        self.fs_save_orbs = fs_save_orbs
-        self.fs_save_density = fs_save_density
-
-        # general system settings
-        #self.grid_level = grid_level
-        #self.verbose = verbose
-        self.verbose = fs_verbose
-        #self.analysis = analysis #provide a more detail at higher cost
-        #self.debug = debug
-        #self.compare_density = compare_density
-        
 
         # Densities are stored separately to allow for alpha and beta.
         self.is_ft_conv = False
@@ -425,7 +422,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         if fs_method is None:
             fs_method = self.fs_method
         if verbose is None:
-            verbose = self.verbose
+            verbose = self.fs_verbose
         if damp is None:
             damp = self.fs_damp
         if shift is None:
@@ -441,7 +438,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             else:
                 scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
-                #scf_obj.small_rho_cutoff = self.rho_cutoff
+                scf_obj.small_rho_cutoff = self.rho_cutoff
                 u_scf_obj = scf_obj
 
         elif mol.spin != 0:
@@ -453,8 +450,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                #scf_obj.small_rho_cutoff = self.rho_cutoff
-                #u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                scf_obj.small_rho_cutoff = self.rho_cutoff
+                u_scf_obj.small_rho_cutoff = self.rho_cutoff
         else:
             if fs_method == 'hf':
                 scf_obj = scf.RHF(mol) 
@@ -464,22 +461,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                #scf_obj.small_rho_cutoff = self.rho_cutoff
-                #u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                scf_obj.small_rho_cutoff = self.rho_cutoff
+                u_scf_obj.small_rho_cutoff = self.rho_cutoff
 
         fs_scf = scf_obj
-        #fs_scf.max_cycle = self.fs_cycles
+        fs_scf.max_cycle = self.fs_cycles
         fs_scf.conv_tol = self.fs_conv
         fs_scf.conv_tol_grad = self.fs_grad
         fs_scf.damp = self.fs_damp
         fs_scf.level_shift = self.fs_shift
         fs_scf.verbose = self.verbose
 
-        #grids = dft.gen_grid.Grids(mol)
-        #grids.level = self.grid_level
-        #grids.build()
-        #fs_scf.grids = grids
-        #u_scf_obj.grids = grids
+        grids = dft.gen_grid.Grids(mol)
+        grids.level = self.grid_level
+        grids.build()
+        fs_scf.grids = grids
+        u_scf_obj.grids = grids
         return fs_scf, u_scf_obj
 
 
@@ -514,8 +511,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         for i in range(len(subsystems)):
             sub_dmat = [0., 0.]
             subsystem = subsystems[i]
-            # Ensure same gridpoints for all systems
+            # Ensure same gridpoints and rho_cutoff for all systems
             subsystem.env_scf.grids = fs_scf.grids
+            subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
             sub_guess = subsystem.initguess
             if sub_guess is None:
                 sub_guess = self.ft_initguess

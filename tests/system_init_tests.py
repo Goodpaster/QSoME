@@ -32,28 +32,23 @@ class TestEnvSubsystem(unittest.TestCase):
         self.assertEqual(subsys.env_method, 'm06')
         self.assertEqual(subsys.filename, os.getcwd() + '/temp.inp')
 
-        self.assertEqual(subsys.smearsigma, 0)
-        self.assertEqual(subsys.damp, 0)
-        self.assertEqual(subsys.shift, 0)
-        self.assertEqual(subsys.subcycles, 1)
+        self.assertEqual(subsys.env_smearsigma, 0)
+        self.assertEqual(subsys.env_damp, 0)
+        self.assertEqual(subsys.env_shift, 0)
+        self.assertEqual(subsys.env_subcycles, 1)
         self.assertEqual(subsys.freeze, False)
-        self.assertEqual(subsys.initguess, None)
-        self.assertEqual(subsys.grid_level, 4)
-        self.assertEqual(subsys.rho_cutoff, 1e-7)
+        self.assertEqual(subsys.env_initguess, None)
         self.assertEqual(subsys.verbose, 3)
-        self.assertEqual(subsys.analysis, False)
-        self.assertEqual(subsys.debug, False)
 
         #Check SCF object
         scf_obj = subsys.env_scf
         comp_scf_obj = dft.RKS(mol)
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
         self.assertEqual(scf_obj.xc, 'm06')
-        
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
     def test_unrestricted_subsystem(self):
         mol = gto.Mole()
@@ -114,25 +109,22 @@ class TestEnvSubsystem(unittest.TestCase):
         env_method = 'b3lyp'
 
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, 
-            smearsigma=0.5, damp=1, shift=1, subcycles=10, freeze=True, 
-            initguess='supmol', grid_level=1, rhocutoff=1e-1, verbose=2, 
-            analysis=True, debug=True, save_orbs=True, save_density=True)
+            env_order=2, env_smearsigma=0.5, conv=1e-4, damp=1, shift=1, 
+            subcycles=10, setfermi=1.0. diis=2, unrestricted=False,
+            density_fitting=True, freeze=True, verbose=2, nproc=4, pmem=300,
+            scrdir='/path/to/scratch/', save_orbs=True, save_density=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'b3lyp')
         self.assertEqual(subsys.filename, os.getcwd() + '/temp.inp')
 
-        self.assertEqual(subsys.smearsigma, 0.5)
-        self.assertEqual(subsys.damp, 1)
-        self.assertEqual(subsys.shift, 1)
-        self.assertEqual(subsys.subcycles, 10)
+        self.assertEqual(subsys.env_smearsigma, 0.5)
+        self.assertEqual(subsys.env_damp, 1)
+        self.assertEqual(subsys.env_shift, 1)
+        self.assertEqual(subsys.env_subcycles, 10)
         self.assertEqual(subsys.freeze, True)
-        self.assertEqual(subsys.initguess, 'supmol')
-        self.assertEqual(subsys.grid_level, 1)
-        self.assertEqual(subsys.rho_cutoff, 1e-1)
+        self.assertEqual(subsys.env_initguess, 'supmol')
         self.assertEqual(subsys.verbose, 2)
-        self.assertEqual(subsys.analysis, True)
-        self.assertEqual(subsys.debug, True)
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
 
@@ -144,7 +136,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat)
 
     def test_ghost_subsystem(self):
         mol = gto.Mole()
@@ -194,27 +186,23 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.env_method, 'm06')
         self.assertEqual(subsys.filename, os.getcwd() + '/temp.inp')
 
-        self.assertEqual(subsys.smearsigma, 0)
-        self.assertEqual(subsys.damp, 0)
-        self.assertEqual(subsys.shift, 0)
-        self.assertEqual(subsys.subcycles, 1)
+        self.assertEqual(subsys.env_smearsigma, 0)
+        self.assertEqual(subsys.env_damp, 0)
+        self.assertEqual(subsys.env_shift, 0)
+        self.assertEqual(subsys.env_subcycles, 1)
         self.assertEqual(subsys.freeze, False)
-        self.assertEqual(subsys.initguess, None)
-        self.assertEqual(subsys.grid_level, 4)
-        self.assertEqual(subsys.rho_cutoff, 1e-7)
+        self.assertEqual(subsys.env_initguess, None)
         self.assertEqual(subsys.verbose, 3)
-        self.assertEqual(subsys.analysis, False)
-        self.assertEqual(subsys.debug, False)
 
         self.assertEqual(subsys.hl_method, 'ccsd')
-        self.assertEqual(subsys.localize_orbitals, False)
-        self.assertEqual(subsys.active_orbs, None)
+        self.assertEqual(subsys.cas_loc_orbs, False)
+        self.assertEqual(subsys.cas_active_orbs, None)
         self.assertEqual(subsys.hl_conv, 1e-9)
         self.assertEqual(subsys.hl_grad, None)
         self.assertEqual(subsys.hl_cycles, 100)
         self.assertEqual(subsys.hl_damp, 0)
         self.assertEqual(subsys.hl_shift, 0)
-        self.assertEqual(subsys.hl_initguess, 'ft')
+        self.assertEqual(subsys.hl_initguess, None)
 
     def test_custom_obj_set(self):
         mol = gto.Mole()
@@ -229,13 +217,13 @@ class TestActiveSubSystem(unittest.TestCase):
         hl_method  = 'mp2'
 
         subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, 
-            hl_method, localize_orbitals=True, active_orbs=[2,3,4,5],
-            hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, 
-            hl_damp=0.1, hl_shift=0.001, hl_initguess='minao', 
-            smearsigma=0.5, damp=1, shift=1, subcycles=10, freeze=True, 
-            initguess='supmol', grid_level=1, rhocutoff=1e-3, verbose=2, 
-            analysis=True, debug=True, save_orbs=True, save_density=True, 
-            hl_save_orbs=True, hl_save_density=True)
+            hl_method, cas_loc_orbs=True, cas_active_orbs=[2,3,4,5],
+            hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, hl_damp=0.1,
+            hl_shift=0.001, hl_initguess='minao', smearsigma=0.5, damp=1,
+            shift=1, subcycles=10, freeze=True, initguess='supmol',
+            grid_level=1, rhocutoff=1e-3, verbose=2, analysis=True, debug=True,
+            save_orbs=True, save_density=True, hl_save_orbs=True,
+            hl_save_density=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')

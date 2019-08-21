@@ -124,6 +124,7 @@ class InpReader:
         sub_env_settings.add_line_key('damp', type=float) # subsys damping parameter
         sub_env_settings.add_line_key('shift', type=float) # SCF level-shift parameter
         sub_env_settings.add_line_key('subcycles', type=int) # num subsys diag. cycles
+        sub_env_settings.add_line_key('setfermi', type=int) # num subsys diag. cycles
         sub_env_settings.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
         sub_env_settings.add_boolean_key('unrestricted')
         sub_env_settings.add_boolean_key('density_fitting')
@@ -282,6 +283,7 @@ class InpReader:
 
         dmrg_settings = hl_settings.add_block_key('dmrg_settings')
         dmrg_settings.add_line_key('maxM', type=int)
+        dmrg_settings.add_line_key('num_thirds', type=int)
 
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         basis = reader.add_block_key('basis')
