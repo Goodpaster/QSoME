@@ -332,8 +332,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
 
         self.update_fock(diis=False)
-        self.update_proj_pot()
         self.ft_fermi = [[0., 0.] for i in range(len(subsystems))]
+        self.update_proj_pot()
 
     def gen_sub2sup(self, mol=None, subsystems=None):
         """Generate the translation matrix between subsystem to supersystem.

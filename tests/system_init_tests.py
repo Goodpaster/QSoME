@@ -246,7 +246,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.hl_grad, 1e-8)
         self.assertEqual(subsys.hl_cycles, 2)
         self.assertEqual(subsys.hl_damp, 0.1)
-        self.assertEqual(subsys.hl_shift, -1.001)
+        self.assertEqual(subsys.hl_shift, 0.001)
         self.assertEqual(subsys.hl_initguess, 'minao')
         self.assertEqual(subsys.hl_save_orbs, True)
         self.assertEqual(subsys.hl_save_density, True)
@@ -344,7 +344,7 @@ class TestSuperSystem(unittest.TestCase):
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2],
                           'b3lyp', ft_proj_oper='huzfermi', ft_cycles=2, 
                           ft_conv=1e-1, ft_grad=1e-4, ft_diis=3, 
-                          ft_initguess='1e', ft_updatefock=1,
+                          ft_initguess='1e', ft_updatefock=1, ft_setfermi=-0.1,
                           ft_damp=0.5, fs_cycles=3, fs_conv=2, fs_grad=4, 
                           fs_damp=1, fs_shift=2.1, fs_smearsigma=0.1, 
                           fs_initguess='atom', fs_grid_level=2, fs_rhocutoff=1e-2,
@@ -374,9 +374,9 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, 'atom')
         self.assertEqual(supersystem.grid_level, 2)
         self.assertEqual(supersystem.rho_cutoff, 1e-2)
-        self.assertEqual(supersystem.verbose, 1)
-        self.assertEqual(supersystem.analysis, True)
-        self.assertEqual(supersystem.debug, True)
+        self.assertEqual(supersystem.fs_verbose, 1)
+        #self.assertEqual(supersystem.analysis, True)
+        #self.assertEqual(supersystem.debug, True)
         self.assertEqual(supersystem.compare_density, True)
         self.assertEqual(supersystem.fs_save_orbs, True)
         self.assertEqual(supersystem.fs_save_density, True)
@@ -385,10 +385,10 @@ class TestSuperSystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol, '1e')
-        self.assertTrue(np.allclose(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.allclose(init_dmat, subsys.dmat))
 
         init_dmat = scf.get_init_guess(mol2, '1e')
-        self.assertTrue(np.allclose(init_dmat, subsys2.dmat[0] + subsys2.dmat[1]))
+        self.assertTrue(np.allclose(init_dmat, subsys2.dmat))
 
         init_dmat2 = scf.hf.init_guess_by_atom(gto.mole.conc_mol(mol, mol2))
         self.assertTrue(np.allclose(init_dmat2, supersystem.dmat[0] + supersystem.dmat[1]))
