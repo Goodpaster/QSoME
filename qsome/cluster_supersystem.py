@@ -306,10 +306,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         # Densities are stored separately to allow for alpha and beta.
         self.is_ft_conv = False
         self.mol = self.concat_mols()
-        if ((np.count_nonzero(
-          [subsystem.mol.spin for subsystem in self.subsystems]) > 1) and
-          self.mol.spin != 0):
-            self.fs_unrestricted = True
         self.sub2sup = self.gen_sub2sup()
         self.fs_scf, self.os_scf = self.init_scf()
 
@@ -372,8 +368,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 ir = ir[1] - ir[0]
                 nssl[i][j] = ir
 
-            if nssl[i].sum() != subsystems[i].mol.nao_nr():
-                print ('ERROR: naos not equal!') # should throw exception.
+            assert nssl[i].sum() == subsystems[i].mol.nao_nr(),"naos not equal!"
 
         mAB = mol
         nsl = np.zeros(mAB.natm, dtype=int)
@@ -384,8 +379,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             ir = ir[1] - ir[0]
             nsl[i] = ir
 
-        if nsl.sum() != mAB.nao_nr():
-            print ('ERROR: naos not equal!') # should throw exception.
+        assert nsl.sum() == mAB.nao_nr(),"naos not equal!"
 
         sub2sup = [ None for i in range(len(subsystems)) ]
         for i in range(len(subsystems)):
@@ -404,8 +398,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         jb = ib + nsl[b]
                         sub2sup[i][ia:ja] = range(ib, jb)
 
-                if not match:
-                    print ('ERROR: I did not find an atom match!') # should throw exception.
+                assert match,'no atom match!'
         return sub2sup
 
     def init_scf(self, mol=None, fs_method=None, verbose=None, damp=None, 
@@ -453,14 +446,18 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         elif mol.spin != 0:
             if fs_method == 'hf':
                 scf_obj = scf.ROHF(mol) 
+                u_scf_obj = scf.UHF(mol)
             else:
                 scf_obj = scf.ROKS(mol)
+                u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
+                u_scf_obj.xc = fs_method
                 scf_obj.small_rho_cutoff = self.rho_cutoff
+                u_scf_obj.small_rho_cutoff = self.rho_cutoff
         else:
             if fs_method == 'hf':
-               scf_obj = scf.RHF(mol) 
-               u_scf_obj = scf.UHF(mol)
+                scf_obj = scf.RHF(mol) 
+                u_scf_obj = scf.UHF(mol)
             else:
                 scf_obj = scf.RKS(mol)
                 u_scf_obj = scf.UKS(mol)
@@ -526,7 +523,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 self.get_supersystem_energy(readchk=super_chk)
                 sub_dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])] 
                 sub_dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])] 
-                temp_smat = np.copy(fs_scf.get_ovlp())
+                temp_smat = self.smat
                 temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
                 num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
                 num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
@@ -688,9 +685,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             elif sub_guess == 'submol':
                 subsystem.env_scf.kernel()
                 temp_dmat = subsystem.env_scf.make_rdm1() 
-                if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                    t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                    temp_dmat = t_d
                 if subsystem.flip_ros:
                     sub_dmat = [temp_dmat[1], temp_dmat[0]]
                 else:
@@ -698,9 +692,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 subsystem.update_density(sub_dmat)
             elif sub_guess in ['atom', '1e', 'minao']:
                 temp_dmat = subsystem.env_scf.get_init_guess(key=sub_guess)
-                if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                    t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                    temp_dmat = t_d
                 if subsystem.flip_ros:
                     sub_dmat = [temp_dmat[1], temp_dmat[0]]
                 else:
@@ -807,6 +798,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         mol1.unit = 'bohr'
         mol1.build(basis=mol1._basis)
         return mol1
+
+    # Called by the mediator to add the potential of the surrounding low level system.
+    def add_external_potential(self, potential):
+        self.external_potential = potential
 
     @time_method("Supersystem Energy")
     def get_supersystem_energy(self, scf_obj=None, fs_method=None, 

@@ -14,8 +14,6 @@ from functools import reduce
 
 import numpy as np
 import scipy as sp
-
-#Custom PYSCF method for the active subsystem.
 from copy import deepcopy as copy
 
 
@@ -207,8 +205,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                         np.zeros_like(self.env_hcore)]
         self.proj_pot = [np.zeros_like(self.env_hcore), 
                         np.zeros_like(self.env_hcore)]
-        self.fock = copy(self.proj_pot)
-        self.emb_fock = None
+        self.fock = self.update_fock()
+        self.emb_fock = copy(self.fock)
         self.env_mo_coeff = [np.zeros_like(self.env_hcore), 
                              np.zeros_like(self.env_hcore)]
         self.env_mo_occ = [np.zeros_like(self.env_hcore[0]), 
@@ -309,7 +307,17 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         initguess : str, optional
             Subsystem density guess method (default is None).
         """
-        if not in_dmat is None:
+        if in_dmat is not None:
+            #Here convert the density matrix into the correct form for the subsystem.
+            if self.unrestricted:
+                if in_dmat.ndim == 2:
+                    in_dmat = [in_dmat/2., in_dmat/2.]
+            elif self.mol.spin != 0:
+                if in_dmat.ndim == 2:
+                    in_dmat = [in_dmat/2., in_dmat/2.]
+            else:
+                if in_dmat.ndim == 3:
+                    in_dmat = (in_dmat[0] + in_dmat[1])
             return in_dmat
 
         else:
@@ -320,28 +328,27 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if initguess is None:
                 initguess = self.initguess
 
-            if self.unrestricted:
-                if initguess in ['atom', '1e', 'minao']:
-                    dmat = scf_obj.get_init_guess(self.initguess)
-                else:
-                    dmat = scf_obj.get_init_guess()
-            elif self.mol.spin != 0:
-                if initguess in ['atom', '1e', 'minao']:
-                    dmat = scf_obj.get_init_guess(initguess)
-                else:
-                    dmat = scf_obj.get_init_guess()
-            else:
-                if initguess in ['atom', '1e', 'minao']:
-                    t_dmat = scf_obj.get_init_guess(initguess)
-                else:
-                    t_dmat = scf_obj.get_init_guess()
-                dmat = [t_dmat/2., t_dmat/2.]
+            if initguess in ['atom', '1e', 'minao']:
+                dmat = scf_obj.get_init_guess(self.initguess)
+             else:
+                dmat = scf_obj.get_init_guess()
             if self.flip_ros:
                 temp_dmat = copy(dmat)
                 dmat[0] = temp_dmat[1]
                 dmat[1] = temp_dmat[0]
 
             return dmat
+
+    def update_fock(self, dmat=None, hcore=None):
+
+        if dmat is None:
+            dmat = self.dmat
+        if hcore is None:
+            hcore = self.env_hcore
+
+        self.fock = hcore + self.env_scf.get_veff(dm=dmat)
+        return self.fock
+
 
     def get_env_elec_energy(self, env_method=None, fock=None,  dmat=None, 
                             env_hcore=None, proj_pot=None, emb_pot=None):
@@ -369,14 +376,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if dmat is None:
             dmat = self.dmat
         if fock is None:
-            if self.unrestricted or self.mol.spin != 0:
-                self.fock = (self.env_scf.get_hcore() 
-                             + self.env_scf.get_veff(dm=dmat))
-                fock = self.fock
-            else:
-                self.fock = (self.env_scf.get_hcore() 
-                             + self.env_scf.get_veff(dm=(dmat[0] + dmat[1])))
-                fock = self.fock
+            fock = self.update_fock()
         if env_hcore is None:
             env_hcore = self.env_hcore
         if proj_pot is None:
@@ -394,22 +394,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     emb_pot = [self.emb_fock[0] - fock, 
                                self.emb_fock[1] - fock]
 
-
-        e_emb = 0.0
-        #subsys_e = np.einsum('ij,ji', env_hcore, (dmat[0] + dmat[1])).real
-        if self.unrestricted or self.mol.spin != 0:
-            e_proj = (np.einsum('ij,ji', proj_pot[0], dmat[0]) + 
-                      np.einsum('ij,ji', proj_pot[1], dmat[1])).real
-            e_emb = (np.einsum('ij,ji', emb_pot[0], dmat[0]) + 
-                     np.einsum('ij,ji', emb_pot[1], dmat[1])).real
-            subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
-        else:
-            e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2.,
-                                (dmat[0] + dmat[1])).real)
-            e_emb = (np.einsum('ij,ji', (emb_pot[0] + emb_pot[1])/2.,
-                     (dmat[0] + dmat[1])).real)
-            subsys_e = self.env_scf.energy_elec(dm=(dmat[0] + dmat[1]))[0]
-
+        e_emb = self.get_env_emb_e(emb_pot, dmat)
+        e_proj = self.get_env_proj_e(proj_pot, dmat)
+        subsys_e = self.env_scf.energy_elec(dm=(dmat))[0]
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None):
@@ -481,7 +468,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
     def update_proj_nuc_grad(self, new_proj_grad):
         self.env_sub_proj_grad = new_proj_grad
 
-    def get_env_proj_e(self, env_method=None, proj_pot=None, dmat=None):
+    def get_env_proj_e(self, proj_pot=None, dmat=None):
         """Gets the projection operator energy
 
         Parameters
@@ -494,9 +481,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             Subsystem density matrix (default is None).
         """
 
-
-        if env_method is None:
-            env_method = self.env_method
         if proj_pot is None:
             proj_pot = self.proj_pot
         if dmat is None:
@@ -506,10 +490,47 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             e_proj = (np.einsum('ij,ji', proj_pot[0], dmat[0]) + 
                       np.einsum('ij,ji', proj_pot[1], dmat[1])).real
         else:
-            e_proj = (np.einsum('ij,ji', (proj_pot[0] + proj_pot[1])/2., 
-                      (dmat[0] + dmat[1])).real)
+            proj_pot = (proj_pot[0] + proj_pot[1])/2.
+            e_proj = np.einsum('ij,ji',  proj_pot, dmat.real
 
         return e_proj 
+
+    def get_env_emb_e(self, emb_pot=None, dmat=None):
+        """Gets the embedded energy
+
+        Parameters
+        ----------
+        env_method : str, optional
+            Subsystem low level method string (default is None).
+        proj_pot : numpy.float64, optional
+            Projection potential matrix (default is None).
+        dmat : numpy.float64, optional
+            Subsystem density matrix (default is None).
+        """
+
+        if emb_pot is None:
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
+            elif self.emb_fock is None:
+                emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
+            else:
+                if self.unrestricted or self.mol.spin != 0:
+                    emb_pot = [self.emb_fock[0] - fock[0], 
+                               self.emb_fock[1] - fock[1]]
+                else:
+                    emb_pot = [self.emb_fock[0] - fock, 
+                               self.emb_fock[1] - fock]
+        if dmat is None:
+            dmat = self.dmat
+
+        if self.unrestricted or self.mol.spin != 0:
+            e_emb = (np.einsum('ij,ji', emb_pot[0], dmat[0]) + 
+                      np.einsum('ij,ji', emb_pot[1], dmat[1])).real
+        else:
+            emb_pot = (emb_pot[0] + emb_pot[1])/2.
+            e_emb = np.einsum('ij,ji',  emb_pot, dmat.real
+
+        return e_emb
 
     def update_emb_fock(self, new_fock):
         self.emb_fock = new_fock
@@ -569,13 +590,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             proj_pot = self.proj_pot
         if fock is None:
             if self.emb_fock is None:
-                if self.unrestricted:
-                    fock = scf_obj.get_fock(dm=dmat)
-                elif scf_obj.mol.spin != 0:
-                    fock = dft.uhf.get_fock(scf_obj, dm=dmat)
-                else:
-                    single_fock = scf_obj.get_fock(dm=(dmat[0] + dmat[1]))
-                    fock = [single_fock, single_fock]
+                fock = self.update_fock()
             else:
                 fock = self.emb_fock
         if env_hcore is None:
@@ -718,10 +733,21 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             self.env_mo_coeff = env_mo_coeff
             self.env_mo_occ = mo_occ
             self.fermi = fermi
-            self.dmat[0] = np.dot((env_mo_coeff[0] * mo_occ[0]), 
-                                   env_mo_coeff[0].transpose().conjugate())
-            self.dmat[1] = np.dot((env_mo_coeff[1] * mo_occ[1]), 
-                                   env_mo_coeff[1].transpose().conjugate())
+            if self.unrestricted:
+                self.dmat[0] = np.dot((env_mo_coeff[0] * mo_occ[0]), 
+                                       env_mo_coeff[0].transpose().conjugate())
+                self.dmat[1] = np.dot((env_mo_coeff[1] * mo_occ[1]), 
+                                       env_mo_coeff[1].transpose().conjugate())
+            elif self.mol.spin != 0:
+                #ROKS case
+                pass
+            else:
+                self.env_mo_energy = env_mo_energy[0]
+                self.env_mo_coeff = env_mo_coeff[0]
+                self.env_mo_occ = 2. * mo_occ[0]
+                self.fermi = fermi[0]
+                self.dmat = np.dot((env_mo_coeff[0] * 2. * mo_occ[0]), 
+                                       env_mo_coeff[0].transpose().conjugate())
 
             return self.dmat
 

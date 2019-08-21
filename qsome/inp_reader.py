@@ -12,6 +12,15 @@ import pwd, os
 
 #from pyscf import gto, pbc
 
+class Error(Exception):
+    #Base Error Class
+    pass
+
+class InputError(Error):
+
+    def __init__(self, message):
+        self.message = message
+
 
 class InpReader:
     """
@@ -412,8 +421,8 @@ class InpReader:
 
             if subsystem.env_method_num is None:
                 if len(inp.env_method_settings) > 1:
-                    #Throw error. Unclear which env method to use.
-                    pass
+                    #Throw error. Unclear which env method to use
+                    raise InputError('Multiple environment methods available. Either specify which to use in the subsystem or specify only one environment method')
                 else:
                     env_method_settings['env_method_num'] = 1
                     setattr(inp.env_method_settings[0], 'env_order', 1)
@@ -427,11 +436,11 @@ class InpReader:
                     if (env_param.embed_settings is not None):
                         env_method_settings['subcycles'] = env_param['subcycles']
                 elif env_param.env_order == method_num and params_found:
-                    #Ambigious environment parameter specification. Throe wrror
-                    pass
+                    #Ambigious environment parameter specification
+                    raise InputError('Multiple environment methods with the same order number. Each environment method should have a unique identifying number.')
             if not params_found:
-                #Parameters with the given number not found. throw error
-                pass
+                #Parameters with the given number not found
+                raise InputError('Environment method not found with number specified in the subsystem.')
 
             if subsystem.env_method_settings is not None:
                 env_method_settings.update(vars(subsystem.env_method_settings))
@@ -481,11 +490,11 @@ class InpReader:
                             hl_method_settings.update(vars(hl_param_dict['dmrg_settings']))
 
                     elif hl_param_dict['hl_order'] == method_num and params_found:
-                        #Ambigious environment parameter specification. Throe wrror
-                        pass
+                        #Ambigious environment parameter specification
+                        raise InputError('Multiple high level methods with the same order number. Each hl method should have a unique identifying number.')
                 if not params_found:
-                    #Parameters with the given number not found. throw error
-                    pass
+                    #Parameters with the given number not found
+                    raise InputError('High level method not found with number specified in the subsystem.')
 
                 #Update with the subsystem particluar settings
                 if subsystem.hl_method_settings is not None:
