@@ -164,7 +164,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                  fs_rhocutoff=1e-7, fs_verbose=3, fs_unrestricted=False, 
                  fs_density_fitting=False, compare_density=False, 
                  fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
-                 ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, 
+                 ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, ft_setfermi=None,
                  ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
                  ft_save_orbs=False, ft_save_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
@@ -286,6 +286,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_grad = ft_grad
         self.ft_damp = ft_damp
         self.ft_diis_num = ft_diis
+        self.ft_setfermi = ft_setfermi
         self.ft_updatefock = ft_updatefock
         self.ft_initguess = ft_initguess
         self.ft_unrestricted = ft_unrestricted
@@ -1467,15 +1468,13 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FAB[0] = self.fock[0][np.ix_(s2s[A], s2s[B])]
                     FAB[1] = self.fock[1][np.ix_(s2s[A], s2s[B])]
                     #The max of the fermi energy
-                    efermi = [0., 0.]
-                    #efermi = [None, None]
-                    # Should be fermi from the subsystems I think.
-                    #if self.ft_setfermi is None:
-                    #    efermi[0] = max([fermi[0] for fermi in self.ft_fermi])
-                    #    efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
-                    #else:
-                    #    efermi[0] = self.ft_setfermi
-                    #    efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
+                    efermi = [None, None]
+                    if self.ft_setfermi is None:
+                        efermi[0] = max([fermi[0] for fermi in self.ft_fermi])
+                        efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
+                    else:
+                        efermi[0] = self.ft_setfermi
+                        efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
 
                     FAB[0] -= SAB * efermi[0]
                     FAB[1] -= SAB * efermi[1] #could probably specify fermi for each alpha or beta electron.
