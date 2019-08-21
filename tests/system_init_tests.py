@@ -110,7 +110,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, 
             env_order=2, env_smearsigma=0.5, conv=1e-4, damp=1, shift=1, 
-            subcycles=10, setfermi=1.0. diis=2, unrestricted=False,
+            subcycles=10, setfermi=1.0, diis=2, unrestricted=False,
             density_fitting=True, freeze=True, verbose=2, nproc=4, pmem=300,
             scrdir='/path/to/scratch/', save_orbs=True, save_density=True)
 
@@ -123,7 +123,7 @@ class TestEnvSubsystem(unittest.TestCase):
         self.assertEqual(subsys.env_shift, 1)
         self.assertEqual(subsys.env_subcycles, 10)
         self.assertEqual(subsys.freeze, True)
-        self.assertEqual(subsys.env_initguess, 'supmol')
+        self.assertEqual(subsys.env_initguess, None)
         self.assertEqual(subsys.verbose, 2)
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
@@ -136,7 +136,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat)
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
     def test_ghost_subsystem(self):
         mol = gto.Mole()
@@ -219,33 +219,29 @@ class TestActiveSubSystem(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, 
             hl_method, cas_loc_orbs=True, cas_active_orbs=[2,3,4,5],
             hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, hl_damp=0.1,
-            hl_shift=0.001, hl_initguess='minao', smearsigma=0.5, damp=1,
+            hl_shift=0.001, hl_initguess='minao', env_smearsigma=0.5, damp=1,
             shift=1, subcycles=10, freeze=True, initguess='supmol',
-            grid_level=1, rhocutoff=1e-3, verbose=2, analysis=True, debug=True,
-            save_orbs=True, save_density=True, hl_save_orbs=True,
-            hl_save_density=True)
+            verbose=2, save_orbs=True, save_density=True, 
+            hl_save_orbs=True, hl_save_density=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
         self.assertEqual(subsys.filename, os.getcwd() + '/temp.inp')
 
-        self.assertEqual(subsys.smearsigma, 0.5)
-        self.assertEqual(subsys.damp, 1)
-        self.assertEqual(subsys.shift, 1)
-        self.assertEqual(subsys.subcycles, 10)
+        self.assertEqual(subsys.env_smearsigma, 0.5)
+        self.assertEqual(subsys.env_damp, 1)
+        self.assertEqual(subsys.env_shift, 1)
+        self.assertEqual(subsys.env_subcycles, 10)
         self.assertEqual(subsys.freeze, True)
-        self.assertEqual(subsys.initguess, 'supmol')
-        self.assertEqual(subsys.grid_level, 1)
-        self.assertEqual(subsys.rho_cutoff, 1e-3)
+        self.assertEqual(subsys.env_initguess, 'supmol')
         self.assertEqual(subsys.verbose, 2)
-        self.assertEqual(subsys.analysis, True)
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
 
         # hl methods
         self.assertEqual(subsys.hl_method, 'mp2')
-        self.assertEqual(subsys.localize_orbitals, True)
-        self.assertEqual(subsys.active_orbs, [2,3,4,5])
+        self.assertEqual(subsys.cas_loc_orbs, True)
+        self.assertEqual(subsys.cas_active_orbs, [2,3,4,5])
         self.assertEqual(subsys.hl_conv, 1e-9)
         self.assertEqual(subsys.hl_grad, 1e-8)
         self.assertEqual(subsys.hl_cycles, 2)
@@ -295,11 +291,10 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, None)
         self.assertEqual(supersystem.ft_damp, 0)
-        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, 'minao')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_cycles, 100)
+        self.assertEqual(supersystem.fs_cycles, None)
         self.assertEqual(supersystem.fs_conv, 1e-9)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
@@ -308,16 +303,16 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, None)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.verbose, 3)
-        self.assertEqual(supersystem.analysis, False)
-        self.assertEqual(supersystem.debug, False)
+        self.assertEqual(supersystem.fs_verbose, 3)
+        #self.assertEqual(supersystem.analysis, False)
+        #self.assertEqual(supersystem.debug, False)
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat[0] + subsys2.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
 
         init_dmat = scf.get_init_guess(gto.mole.conc_mol(mol, mol2))
         self.assertTrue(np.allclose(init_dmat, supersystem.dmat[0] + supersystem.dmat[1]))
@@ -347,14 +342,13 @@ class TestSuperSystem(unittest.TestCase):
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2],
-                          'b3lyp', proj_oper='huzfermi', ft_cycles=2, 
+                          'b3lyp', ft_proj_oper='huzfermi', ft_cycles=2, 
                           ft_conv=1e-1, ft_grad=1e-4, ft_diis=3, 
-                          ft_setfermi=-0.1, ft_initguess='1e', ft_updatefock=1,
+                          ft_initguess='1e', ft_updatefock=1,
                           ft_damp=0.5, fs_cycles=3, fs_conv=2, fs_grad=4, 
                           fs_damp=1, fs_shift=2.1, fs_smearsigma=0.1, 
-                          fs_initguess='atom', grid_level=2, rhocutoff=1e-2, 
-                          verbose=1, analysis=True, debug=True, 
-                          fs_save_orbs=True, fs_save_density=True, 
+                          fs_initguess='atom', fs_grid_level=2, fs_rhocutoff=1e-2,
+                          fs_verbose=1, fs_save_orbs=True, fs_save_density=True, 
                           compare_density=True, ft_save_density=True, 
                           ft_save_orbs=True)
 
@@ -428,11 +422,9 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, 'readchk')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_cycles, 100)
         self.assertEqual(supersystem.fs_conv, 1e-9)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
@@ -441,9 +433,8 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, None)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.verbose, 3)
-        self.assertEqual(supersystem.analysis, False)
-        self.assertEqual(supersystem.debug, False)
+        self.assertEqual(supersystem.fs_verbose, 3)
+        #self.assertEqual(supersystem.analysis, False)
 
         #Check density
         old_sup_dmat = copy(supersystem.dmat)
@@ -487,11 +478,10 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, 'minao')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_cycles, 100)
+        self.assertEqual(supersystem.fs_cycles, None)
         self.assertEqual(supersystem.fs_conv, 1e-9)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
@@ -500,16 +490,16 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, None)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.verbose, 3)
-        self.assertEqual(supersystem.analysis, False)
-        self.assertEqual(supersystem.debug, False)
+        self.assertEqual(supersystem.fs_verbose, 3)
+        #self.assertEqual(supersystem.analysis, False)
+        #self.assertEqual(supersystem.debug, False)
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat[0] + subsys2.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
@@ -550,11 +540,9 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, 'minao')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_cycles, 100)
         self.assertEqual(supersystem.fs_conv, 1e-9)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
@@ -563,16 +551,16 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, None)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.verbose, 3)
-        self.assertEqual(supersystem.analysis, False)
-        self.assertEqual(supersystem.debug, False)
+        self.assertEqual(supersystem.fs_verbose, 3)
+        #self.assertEqual(supersystem.analysis, False)
+        #self.assertEqual(supersystem.debug, False)
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat[0] + subsys2.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
@@ -619,11 +607,10 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_cycles, 100)
         self.assertEqual(supersystem.ft_conv, 1e-8)
         self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_setfermi, None)
         self.assertEqual(supersystem.ft_initguess, 'minao')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_cycles, 100)
+        self.assertEqual(supersystem.fs_cycles, None)
         self.assertEqual(supersystem.fs_conv, 1e-9)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
@@ -632,16 +619,16 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_initguess, None)
         self.assertEqual(supersystem.grid_level, 4)
         self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.verbose, 3)
-        self.assertEqual(supersystem.analysis, False)
-        self.assertEqual(supersystem.debug, False)
+        self.assertEqual(supersystem.fs_verbose, 3)
+        #self.assertEqual(supersystem.analysis, False)
+        #self.assertEqual(supersystem.debug, False)
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat[0] + subsys2.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)

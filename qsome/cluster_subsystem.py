@@ -164,21 +164,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_subcycles = subcycles
         self.env_setfermi = setfermi
         self.diis_num = diis
-        if diis == 1:
-            #Use subtractive diis. Most simple
-            self.diis = lib_diis.DIIS()
-        elif diis == 2:
-            self.diis = scf_diis.CDIIS(self.env_scf)
-        elif diis == 3:
-            self.diis = scf_diis.EDIIS()
-        elif diis == 4:
-            self.diis = scf.diis.ADIIS()
-        elif diis == 5:
-            self.diis = comb_diis.EDIIS_DIIS(self.env_scf)
-        elif diis == 6:
-            self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
-        else:
-            self.diis = None 
 
         self.unrestricted = unrestricted
         self.density_fitting = density_fitting
@@ -212,6 +197,22 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                            np.zeros_like(self.env_hcore[0])]
         self.env_mo_energy = self.env_mo_occ.copy()
         self.env_energy = 0.0
+
+        if diis == 1:
+            #Use subtractive diis. Most simple
+            self.diis = lib_diis.DIIS()
+        elif diis == 2:
+            self.diis = scf_diis.CDIIS(self.env_scf)
+        elif diis == 3:
+            self.diis = scf_diis.EDIIS()
+        elif diis == 4:
+            self.diis = scf.diis.ADIIS()
+        elif diis == 5:
+            self.diis = comb_diis.EDIIS_DIIS(self.env_scf)
+        elif diis == 6:
+            self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
+        else:
+            self.diis = None 
 
         self.env_sub_nuc_grad = None
         self.env_sub_emb_nuc_grad = None
@@ -301,6 +302,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         """
         if in_dmat is not None:
             #Here convert the density matrix into the correct form for the subsystem.
+            in_dmat = np.array(in_dmat)
             if self.unrestricted:
                 if in_dmat.ndim == 2:
                     in_dmat = [in_dmat/2., in_dmat/2.]
@@ -318,10 +320,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if env_method is None:
                 env_method = self.env_method
             if initguess is None:
-                initguess = self.initguess
+                initguess = self.env_initguess
 
             if initguess in ['atom', '1e', 'minao']:
-                dmat = scf_obj.get_init_guess(self.initguess)
+                dmat = scf_obj.get_init_guess(initguess)
             else:
                 dmat = scf_obj.get_init_guess()
             if self.flip_ros:
@@ -528,6 +530,17 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.emb_fock = new_fock
 
     def update_density(self, new_den):
+       #Here convert the density matrix into the correct form for the subsystem.
+        new_den = np.array(new_den)
+        if self.unrestricted:
+            if new_den.ndim == 2:
+                new_den = [new_den/2., new_den/2.]
+        elif self.mol.spin != 0:
+            if new_den.ndim == 2:
+                new_den = [new_den/2., new_den/2.]
+        else:
+            if new_den.ndim == 3:
+                new_den = (new_den[0] + new_den[1])
         self.dmat = new_den
         return self.dmat
 

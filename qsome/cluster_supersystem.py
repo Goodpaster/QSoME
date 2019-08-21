@@ -465,12 +465,13 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj.small_rho_cutoff = self.rho_cutoff
 
         fs_scf = scf_obj
-        fs_scf.max_cycle = self.fs_cycles
+        if self.fs_cycles is not None:
+            fs_scf.max_cycle = self.fs_cycles
         fs_scf.conv_tol = self.fs_conv
         fs_scf.conv_tol_grad = self.fs_grad
         fs_scf.damp = self.fs_damp
         fs_scf.level_shift = self.fs_shift
-        fs_scf.verbose = self.verbose
+        fs_scf.verbose = self.fs_verbose
 
         grids = dft.gen_grid.Grids(mol)
         grids.level = self.grid_level
@@ -514,7 +515,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             # Ensure same gridpoints and rho_cutoff for all systems
             subsystem.env_scf.grids = fs_scf.grids
             subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
-            sub_guess = subsystem.initguess
+            sub_guess = subsystem.env_initguess
             if sub_guess is None:
                 sub_guess = self.ft_initguess
 
@@ -853,27 +854,27 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.dmat = scf_obj.make_rdm1()
 
             #One way of determining electrons.
-            if self.analysis:
-                temp_dmat = np.copy(self.dmat)
-                temp_dmat[:self.subsystems[0].mol.nao_nr(), 
-                          :self.subsystems[0].mol.nao_nr()] = 0.0
-                temp_dmat[self.subsystems[0].mol.nao_nr():, 
-                          self.subsystems[0].mol.nao_nr():] = 0.0
-                temp_smat = np.copy(scf_obj.get_ovlp())
-                temp_smat[:self.subsystems[0].mol.nao_nr(), 
-                          :self.subsystems[0].mol.nao_nr()] = 0.0
-                temp_smat[self.subsystems[0].mol.nao_nr():, 
-                          self.subsystems[0].mol.nao_nr():] = 0.0
-                print ("Interaction Electrion Number")
-                print (np.trace(np.dot(temp_dmat, scf_obj.get_ovlp())))
-                print ()
+            #if self.analysis:
+            #    temp_dmat = np.copy(self.dmat)
+            #    temp_dmat[:self.subsystems[0].mol.nao_nr(), 
+            #              :self.subsystems[0].mol.nao_nr()] = 0.0
+            #    temp_dmat[self.subsystems[0].mol.nao_nr():, 
+            #              self.subsystems[0].mol.nao_nr():] = 0.0
+            #    temp_smat = np.copy(scf_obj.get_ovlp())
+            #    temp_smat[:self.subsystems[0].mol.nao_nr(), 
+            #              :self.subsystems[0].mol.nao_nr()] = 0.0
+            #    temp_smat[self.subsystems[0].mol.nao_nr():, 
+            #              self.subsystems[0].mol.nao_nr():] = 0.0
+            #    print ("Interaction Electrion Number")
+            #    print (np.trace(np.dot(temp_dmat, scf_obj.get_ovlp())))
+            #    print ()
 
-                #A localization way
-                mull_pop = scf_obj.mulliken_pop(verbose=3)[1]
-                print ("Mull 1")
-                print (np.sum(mull_pop[:self.subsystems[0].mol.natm]))
-                print ("Mull 2")
-                print (np.sum(mull_pop[self.subsystems[0].mol.natm:]))
+            #    #A localization way
+            #    mull_pop = scf_obj.mulliken_pop(verbose=3)[1]
+            #    print ("Mull 1")
+            #    print (np.sum(mull_pop[:self.subsystems[0].mol.natm]))
+            #    print ("Mull 2")
+            #    print (np.sum(mull_pop[self.subsystems[0].mol.natm:]))
 
             if self.dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
                 t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
@@ -1436,21 +1437,28 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             for B in range(len(self.subsystems)):
                 if B==A: continue
 
+                if not (self.subsystems[B].unrestricted or 
+                        self.subsystems[B].mol.spin !=0):
+                    print (self.subsystems[B].dmat)
+                    sub_dmat = [self.subsystems[B].dmat/2., self.subsystems[B].dmat/2.]
+                else:
+                    sub_dmat = self.subsystems[B].dmat
+
                 SAB = self.smat[np.ix_(s2s[A], s2s[B])]
                 SBA = self.smat[np.ix_(s2s[B], s2s[A])]
 
                 # get mu-parameter projection operator
                 if isinstance(self.proj_oper, int) or isinstance(self.proj_oper, float):
-                    POp[0] += self.proj_oper * np.dot( SAB, np.dot( self.subsystems[B].dmat[0], SBA ))
-                    POp[1] += self.proj_oper * np.dot( SAB, np.dot( self.subsystems[B].dmat[1], SBA ))
+                    POp[0] += self.proj_oper * np.dot( SAB, np.dot( sub_dmat[0], SBA ))
+                    POp[1] += self.proj_oper * np.dot( SAB, np.dot( sub_dmat[1], SBA ))
 
                 elif self.proj_oper in ('huzinaga', 'huz'):
                     FAB = [None, None]
                     FAB[0] = self.fock[0][np.ix_(s2s[A], s2s[B])]
                     FAB[1] = self.fock[1][np.ix_(s2s[A], s2s[B])]
                     FDS = [None, None]
-                    FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
-                    FDS[1] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
+                    FDS[0] = np.dot( FAB[0], np.dot( sub_dmat[0], SBA ))
+                    FDS[1] = np.dot( FAB[1], np.dot( sub_dmat[1], SBA ))
                     POp[0] += -1. * ( FDS[0] + FDS[0].transpose() ) 
                     POp[1] += -1. * ( FDS[1] + FDS[1].transpose() )
 
@@ -1459,20 +1467,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     FAB[0] = self.fock[0][np.ix_(s2s[A], s2s[B])]
                     FAB[1] = self.fock[1][np.ix_(s2s[A], s2s[B])]
                     #The max of the fermi energy
-                    efermi = [None, None]
-                    if self.ft_setfermi is None:
-                        efermi[0] = max([fermi[0] for fermi in self.ft_fermi])
-                        efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
-                    else:
-                        efermi[0] = self.ft_setfermi
-                        efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
+                    efermi = [0., 0.]
+                    #efermi = [None, None]
+                    # Should be fermi from the subsystems I think.
+                    #if self.ft_setfermi is None:
+                    #    efermi[0] = max([fermi[0] for fermi in self.ft_fermi])
+                    #    efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
+                    #else:
+                    #    efermi[0] = self.ft_setfermi
+                    #    efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
 
                     FAB[0] -= SAB * efermi[0]
                     FAB[1] -= SAB * efermi[1] #could probably specify fermi for each alpha or beta electron.
 
                     FDS = [None, None]
-                    FDS[0] = np.dot( FAB[0], np.dot( self.subsystems[B].dmat[0], SBA ))
-                    FDS[1] = np.dot( FAB[1], np.dot( self.subsystems[B].dmat[1], SBA ))
+                    FDS[0] = np.dot( FAB[0], np.dot( sub_dmat[0], SBA ))
+                    FDS[1] = np.dot( FAB[1], np.dot( sub_dmat[1], SBA ))
                     POp[0] += -1. * ( FDS[0] + FDS[0].transpose() ) 
                     POp[1] += -1. * ( FDS[1] + FDS[1].transpose() )
             self.proj_pot[i] = POp.copy()
