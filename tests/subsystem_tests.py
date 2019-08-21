@@ -29,7 +29,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method)
         # Default test
         def_elec_e = subsys.get_env_elec_energy()
-        sub_dmat = subsys.dmat[0] + subsys.dmat[1]
+        sub_dmat = subsys.dmat
         test_scf = dft.RKS(mol)
         test_scf.xc = env_method
         test_elec_e = test_scf.energy_elec(dm=sub_dmat)
@@ -80,7 +80,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, unrestricted=True)
         # Default test
         def_elec_e = subsys.get_env_elec_energy()
-        sub_dmat = [subsys.dmat[0], subsys.dmat[1]]
+        sub_dmat = subsys.dmat
         test_scf = dft.UKS(mol)
         test_scf.xc = env_method
         test_elec_e = test_scf.energy_elec(dm=sub_dmat)
@@ -171,7 +171,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method)
-        sub_dmat = subsys.dmat[0] + subsys.dmat[1]
+        sub_dmat = subsys.dmat
         # With 0 potential.
         no_proj_e = subsys.get_env_proj_e()
         self.assertEqual(no_proj_e, 0.0)
@@ -196,7 +196,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'pbe'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, unrestricted=True)
-        sub_dmat = [subsys.dmat[0], subsys.dmat[1]]
+        sub_dmat = subsys.dmat
         # With 0 potential.
         no_proj_e = subsys.get_env_proj_e()
         self.assertEqual(no_proj_e, 0.0)
@@ -242,7 +242,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'lda'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method)
-        sub_dmat = subsys.dmat[0] + subsys.dmat[1]
+        sub_dmat = subsys.dmat
         test_scf = dft.RKS(mol)
         test_scf.xc = env_method
         #grids = dft.gen_grid.Grids(mol)
@@ -270,7 +270,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'lda'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, unrestricted=True)
-        sub_dmat = [subsys.dmat[0],subsys.dmat[1]]
+        sub_dmat = subsys.dmat
         test_scf = dft.UKS(mol)
         test_scf.xc = env_method
         #grids = dft.gen_grid.Grids(mol)
@@ -298,9 +298,9 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method)
-        dim0 = subsys.dmat[0].shape[0]
-        dim1 = subsys.dmat[1].shape[1]
-        new_dmat = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        dim0 = subsys.dmat.shape[0]
+        dim1 = subsys.dmat.shape[1]
+        new_dmat = np.random.rand(dim0, dim1)
         subsys.update_density(new_dmat)
         self.assertTrue(np.array_equal(subsys.dmat, new_dmat))
 
@@ -329,14 +329,14 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method)
-        subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat[0] + subsys.dmat[1]))
+        subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat))
         subsys.diagonalize()
         test_scf = dft.RKS(mol)
         test_scf.max_cycle = 1
         test_scf.xc = env_method
         test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(test_dmat, (subsys.dmat[0] + subsys.dmat[1])))
+        self.assertTrue(np.allclose(test_dmat, (subsys.dmat)))
 
         # Unrestricted Open Shell
         # Unsure how to test this with embedding potential or projection pot.

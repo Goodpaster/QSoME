@@ -28,7 +28,7 @@ import numpy as np
 
 class TestClusterSuperSystemMethods(unittest.TestCase):
 
-    @unittest.skip
+    #@unittest.skip
     def test_get_supersystem_energy(self):
 
         #Closed Shell
@@ -174,7 +174,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         test_grad.kernel()
         #self.assertAlmostEqual(test_grad.grad(), supsystem_grad.grad())
 
-    #@unittest.skip
+    @unittest.skip
     def test_get_subsystem_nuc_grad(self):
         #Closed Shell
         mol = gto.Mole()
@@ -233,7 +233,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
     def test_get_emb_subsys_elec_energy(self):
         pass 
 
-    @unittest.skip
+    #@unittest.skip
     def test_get_emb_subsys_elec_energy(self):
 
         # Closed Shell
@@ -283,8 +283,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         #get energies of two embedded systems. 
         s2s = supersystem.sub2sup
-        mf_init_dmat[np.ix_(s2s[0], s2s[0])] += subsys.dmat[0] + subsys.dmat[1]
-        mf_init_dmat[np.ix_(s2s[1], s2s[1])] += subsys2.dmat[0] + subsys2.dmat[1]
+        mf_init_dmat[np.ix_(s2s[0], s2s[0])] += subsys.dmat
+        mf_init_dmat[np.ix_(s2s[1], s2s[1])] += subsys2.dmat
         mf_hcore = mf.get_hcore()
         mf_init_veff = mf.get_veff(dm=mf_init_dmat)
 
