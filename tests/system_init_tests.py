@@ -172,7 +172,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat[0] + subsys.dmat[1]))
+        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
 
 class TestActiveSubSystem(unittest.TestCase):
 
@@ -186,9 +186,9 @@ class TestActiveSubSystem(unittest.TestCase):
         mol.basis = 'aug-cc-pVDZ'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
+        hl_method = 'ccsd'
 
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
@@ -206,15 +206,15 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.analysis, False)
         self.assertEqual(subsys.debug, False)
 
-        self.assertEqual(subsys.active_method, 'ccsd')
+        self.assertEqual(subsys.hl_method, 'ccsd')
         self.assertEqual(subsys.localize_orbitals, False)
         self.assertEqual(subsys.active_orbs, None)
-        self.assertEqual(subsys.active_conv, 1e-9)
-        self.assertEqual(subsys.active_grad, None)
-        self.assertEqual(subsys.active_cycles, 100)
-        self.assertEqual(subsys.active_damp, 0)
-        self.assertEqual(subsys.active_shift, 0)
-        self.assertEqual(subsys.active_initguess, 'ft')
+        self.assertEqual(subsys.hl_conv, 1e-9)
+        self.assertEqual(subsys.hl_grad, None)
+        self.assertEqual(subsys.hl_cycles, 100)
+        self.assertEqual(subsys.hl_damp, 0)
+        self.assertEqual(subsys.hl_shift, 0)
+        self.assertEqual(subsys.hl_initguess, 'ft')
 
     def test_custom_obj_set(self):
         mol = gto.Mole()
@@ -226,16 +226,16 @@ class TestActiveSubSystem(unittest.TestCase):
         mol.basis = 'aug-cc-pVDZ'
         mol.build()
         env_method = 'm06'
-        active_method  = 'mp2'
+        hl_method  = 'mp2'
 
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, 
-            active_method, localize_orbitals=True, active_orbs=[2,3,4,5],
-            active_conv=1e-9, active_grad=1e-8, active_cycles=2, 
-            active_damp=0.1, active_shift=0.001, active_initguess='minao', 
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, 
+            hl_method, localize_orbitals=True, active_orbs=[2,3,4,5],
+            hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, 
+            hl_damp=0.1, hl_shift=0.001, hl_initguess='minao', 
             smearsigma=0.5, damp=1, shift=1, subcycles=10, freeze=True, 
             initguess='supmol', grid_level=1, rhocutoff=1e-3, verbose=2, 
             analysis=True, debug=True, save_orbs=True, save_density=True, 
-            active_save_orbs=True, active_save_density=True)
+            hl_save_orbs=True, hl_save_density=True)
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
@@ -254,18 +254,18 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
 
-        # active methods
-        self.assertEqual(subsys.active_method, 'mp2')
+        # hl methods
+        self.assertEqual(subsys.hl_method, 'mp2')
         self.assertEqual(subsys.localize_orbitals, True)
         self.assertEqual(subsys.active_orbs, [2,3,4,5])
-        self.assertEqual(subsys.active_conv, 1e-9)
-        self.assertEqual(subsys.active_grad, 1e-8)
-        self.assertEqual(subsys.active_cycles, 2)
-        self.assertEqual(subsys.active_damp, 0.1)
-        self.assertEqual(subsys.active_shift, 0.001)
-        self.assertEqual(subsys.active_initguess, 'minao')
-        self.assertEqual(subsys.active_save_orbs, True)
-        self.assertEqual(subsys.active_save_density, True)
+        self.assertEqual(subsys.hl_conv, 1e-9)
+        self.assertEqual(subsys.hl_grad, 1e-8)
+        self.assertEqual(subsys.hl_cycles, 2)
+        self.assertEqual(subsys.hl_damp, 0.1)
+        self.assertEqual(subsys.hl_shift, -1.001)
+        self.assertEqual(subsys.hl_initguess, 'minao')
+        self.assertEqual(subsys.hl_save_orbs, True)
+        self.assertEqual(subsys.hl_save_density, True)
 
 
 class TestExcitedSubSystem(unittest.TestCase):
@@ -286,8 +286,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -345,8 +345,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = 'aug-cc-pVDZ'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -421,8 +421,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -479,8 +479,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -541,8 +541,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -610,8 +610,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.basis = '3-21g'
         mol.build()
         env_method = 'm06'
-        active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3

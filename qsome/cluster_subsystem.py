@@ -188,12 +188,12 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.rho_cutoff = rhocutoff
 
         self.verbose = verbose
+        if filename == None:
+            filename = os.getcwd() + '/temp.inp'
         self.filename = filename
         self.nproc = nproc
         self.pmem = pmem
         self.scr_dir = scr_dir
-        if filename == None:
-            filename = os.getcwd() + '/temp.inp'
 
 
         self.fermi = [0., 0.]
@@ -330,7 +330,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
             if initguess in ['atom', '1e', 'minao']:
                 dmat = scf_obj.get_init_guess(self.initguess)
-             else:
+            else:
                 dmat = scf_obj.get_init_guess()
             if self.flip_ros:
                 temp_dmat = copy(dmat)
@@ -491,7 +491,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                       np.einsum('ij,ji', proj_pot[1], dmat[1])).real
         else:
             proj_pot = (proj_pot[0] + proj_pot[1])/2.
-            e_proj = np.einsum('ij,ji',  proj_pot, dmat.real
+            e_proj = np.einsum('ij,ji',  proj_pot, dmat).real
 
         return e_proj 
 
@@ -528,7 +528,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                       np.einsum('ij,ji', emb_pot[1], dmat[1])).real
         else:
             emb_pot = (emb_pot[0] + emb_pot[1])/2.
-            e_emb = np.einsum('ij,ji',  emb_pot, dmat.real
+            e_emb = np.einsum('ij,ji',  emb_pot, dmat).real
 
         return e_emb
 
@@ -865,14 +865,14 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         Get the high level energy embedded into the total system.
     """ 
 
-    def __init__(self, mol, env_method, hl_method, init_guess=None,
+    def __init__(self, mol, env_method, hl_method, hl_initguess=None,
                  hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
                  hl_damp=0., hl_shift=0., hl_ext=None, hl_unrestricted=False, 
                  cas_loc_orbs=False, cas_init_guess=None, cas_active_orbs=None,
                  cas_avas=None, shci_mpi_prefix=None, shci_sweep_iter=None, 
                  shci_sweep_epsilon=None, shci_nPTiter=None, 
-                 shci_no_stochastic=False, shci_noRDM=False, dmrg_maxM=100, 
-                 dmrg_num_thrds=1 **kwargs):
+                 shci_stochastic=False, shci_DoRDM=False, dmrg_maxM=100, 
+                 dmrg_num_thrds=1, **kwargs):
         """
         Parameters
         ----------
@@ -904,22 +904,23 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         """
 
         super().__init__(mol, env_method, **kwargs)
-        self.active_method = active_method
-        self.active_unrestricted = active_unrestricted
-        self.localize_orbitals = localize_orbitals
-        self.active_orbs = active_orbs
-        self.avas = avas
-        self.active_conv = active_conv
-        self.active_grad = active_grad
-        self.active_cycles = active_cycles
-        self.active_damp = active_damp
-        self.active_frozen = active_frozen
-        self.active_shift = active_shift
-        self.active_initguess = active_initguess
-        self.use_molpro = use_molpro
-        self.active_save_orbs = active_save_orbs
-        self.active_save_density = active_save_density
-        self.compress_approx = compress_approx
+
+        self.hl_method = hl_method
+        self.hl_unrestricted = hl_unrestricted
+        self.cas_loc_orbs = cas_loc_orbs
+        self.cas_active_orbs = cas_active_orbs
+        self.cas_avas = cas_avas
+        self.hl_conv = hl_conv
+        self.hl_grad = hl_grad
+        self.hl_cycles = hl_cycles
+        self.hl_damp = hl_damp
+        #self.hl_frozen = hl_frozen
+        self.hl_shift = hl_shift
+        self.hl_initguess = hl_initguess
+        self.hl_ext = hl_ext
+        #self.hl_save_orbs = hl_save_orbs
+        #self.hl_save_density = hl_save_density
+        #self.compress_approx = compress_approx
 
         self.shci_mpi_prefix = shci_mpi_prefix
         self.shci_stochastic = shci_stochastic
@@ -929,7 +930,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.shci_sweep_epsilon = shci_sweep_epsilon
 
         self.dmrg_maxM = dmrg_maxM
-        self.dmrg_memory = dmrg_memory
+        #self.dmrg_memory = self.p
         self.dmrg_num_thrds = dmrg_num_thrds
 
         self.active_mo_coeff = None
@@ -1339,7 +1340,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
          
 
  
-class ClusterExcitedSubSystem(ClusterActiveSubSystem):
+class ClusterExcitedSubSystem(ClusterHLSubSystem):
 
     def __init__(self):
         super().__init__()

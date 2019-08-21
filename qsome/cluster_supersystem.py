@@ -261,7 +261,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.subsystems = subsystems
         self.fs_method = fs_method
         self.fs_unrestricted = fs_unrestricted
-        self.proj_oper = proj_oper
+        self.proj_oper = ft_proj_oper
 
         self.nproc = nproc
         self.pmem= pmem
@@ -277,17 +277,17 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.ft_grad = ft_grad
         self.ft_damp = ft_damp
 
-        self.ft_setfermi = ft_setfermi
+        #self.ft_setfermi = ft_setfermi
         self.ft_initguess = ft_initguess
         self.ft_updatefock = ft_updatefock
         self.ft_save_orbs = ft_save_orbs
         self.ft_save_density = ft_save_density
 
         # full system settings
-        self.fs_cycles = fs_cycles
+        #self.fs_cycles = fs_cycles
         self.fs_conv = fs_conv
         self.fs_grad = fs_grad
-        self.rho_cutoff = rhocutoff
+        #self.rho_cutoff = rhocutoff
         self.fs_damp = fs_damp
         self.fs_shift = fs_shift
         self.fs_smearsigma = fs_smearsigma
@@ -296,11 +296,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fs_save_density = fs_save_density
 
         # general system settings
-        self.grid_level = grid_level
-        self.verbose = verbose
-        self.analysis = analysis #provide a more detail at higher cost
-        self.debug = debug
-        self.compare_density = compare_density
+        #self.grid_level = grid_level
+        #self.verbose = verbose
+        self.verbose = fs_verbose
+        #self.analysis = analysis #provide a more detail at higher cost
+        #self.debug = debug
+        #self.compare_density = compare_density
         
 
         # Densities are stored separately to allow for alpha and beta.
@@ -440,7 +441,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             else:
                 scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
+                #scf_obj.small_rho_cutoff = self.rho_cutoff
                 u_scf_obj = scf_obj
 
         elif mol.spin != 0:
@@ -452,8 +453,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
-                u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                #scf_obj.small_rho_cutoff = self.rho_cutoff
+                #u_scf_obj.small_rho_cutoff = self.rho_cutoff
         else:
             if fs_method == 'hf':
                 scf_obj = scf.RHF(mol) 
@@ -463,22 +464,22 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
-                u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                #scf_obj.small_rho_cutoff = self.rho_cutoff
+                #u_scf_obj.small_rho_cutoff = self.rho_cutoff
 
         fs_scf = scf_obj
-        fs_scf.max_cycle = self.fs_cycles
+        #fs_scf.max_cycle = self.fs_cycles
         fs_scf.conv_tol = self.fs_conv
         fs_scf.conv_tol_grad = self.fs_grad
         fs_scf.damp = self.fs_damp
         fs_scf.level_shift = self.fs_shift
         fs_scf.verbose = self.verbose
 
-        grids = dft.gen_grid.Grids(mol)
-        grids.level = self.grid_level
-        grids.build()
-        fs_scf.grids = grids
-        u_scf_obj.grids = grids
+        #grids = dft.gen_grid.Grids(mol)
+        #grids.level = self.grid_level
+        #grids.build()
+        #fs_scf.grids = grids
+        #u_scf_obj.grids = grids
         return fs_scf, u_scf_obj
 
 
@@ -741,7 +742,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         if subsys_list is None:
             subsys_list = self.subsystems
-        assert (len(subsys_list) < 2),"Must have more than 1 subsystem"
+        assert (len(subsys_list) > 1),"Must have more than 1 subsystem"
 
         mol1 = gto.mole.copy(subsys_list[0].mol)
         if subsys_list[0].flip_ros:
