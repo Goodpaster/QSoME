@@ -355,9 +355,9 @@ class InpReader:
                    'damp'            :       'fs_damp', 
                    'shift'           :       'fs_shift', 
                    'diis'            :       'fs_diis', 
-                   'grid'            :       'grid_level',
-                   'rhocutoff'       :       'rhocufoff', 
-                   'verbose'         :       'verbose', 
+                   'grid'            :       'fs_grid_level',
+                   'rhocutoff'       :       'fs_rhocutoff', 
+                   'verbose'         :       'fs_verbose', 
                    'unrestricted'    :       'fs_unrestricted', 
                    'density_fitting' :       'fs_density_fitting',
                    'compare_density' :       'compare_density',
@@ -369,13 +369,13 @@ class InpReader:
                    'grad'            :       'ft_grad',
                    'damp'            :       'ft_damp', 
                    'diis'            :       'ft_diis', 
-                   'diis'            :       'ft_setfermi', 
+                   'setfermi'        :       'ft_setfermi', 
                    'updatefock'      :       'ft_updatefock',
                    'initguess'       :       'ft_initguess', 
                    'unrestricted'    :       'ft_unrestricted', 
                    'save_orbs'       :       'ft_save_orbs', 
                    'save_density'    :       'ft_save_density',
-                   'proj_oper'        :       'proj_oper'}
+                   'proj_oper'        :      'ft_proj_oper'}
 
         for supersystem in inp.env_method_settings:
             sup_settings_dict = vars(supersystem)
@@ -418,6 +418,8 @@ class InpReader:
                 universal_subsys_settings[universal_key] = inp_dict[universal_key]
 
         env_kwargs = []
+
+        env_dict = {'smearsigma'    : 'env_smearsigma'}
         for subsystem in inp.subsystem:
 
             env_method_settings = {}
@@ -439,6 +441,8 @@ class InpReader:
                     env_method_settings['env_method'] = env_param.env_method
                     if (env_param.embed_settings is not None):
                         env_method_settings['subcycles'] = env_param.embed_settings.subcycles
+                        if (env_param.embed_settings.unrestricted is not None):
+                            env_method_settings['unrestricted'] = env_param.embed_settings.unrestricted
                 elif env_param.env_order == method_num and params_found:
                     #Ambigious environment parameter specification
                     raise InputError('Multiple environment methods with the same order number. Each environment method should have a unique identifying number.')
@@ -450,6 +454,20 @@ class InpReader:
                 env_method_settings.update(vars(subsystem.env_method_settings))
 
             env_method_settings.update(universal_subsys_settings.copy())
+
+            #Remove keys put there by input_reader and for some reason None valued keys
+            list_keys = list(env_method_settings.keys())
+            for k in list_keys:
+                if k.startswith('_'):
+                    env_method_settings.pop(k)
+                elif env_method_settings[k] is None:
+                    env_method_settings.pop(k)
+
+            list_keys = list(env_method_settings.keys())
+            for correct in env_dict.keys():
+                if correct in list_keys:
+                    env_method_settings[env_dict[correct]] = env_method_settings.pop(correct)
+                
             env_kwargs.append(env_method_settings)
 
         return env_kwargs
@@ -469,6 +487,30 @@ class InpReader:
             inp = self.inp
 
         hl_kwargs = []
+
+        hl_dict = {'initguess': 'hl_initguess',
+                    'spin' : 'hl_spin',
+                    'conv' : 'hl_conv',
+                    'grad' : 'hl_grad',
+                    'cycles' : 'hl_cycles',
+                    'damp' : 'hl_damp',
+                    'shift' : 'hl_shift',
+                    'compress_approx': 'hl_compress_approx',
+                    'unrestricted': 'hl_unrestricted',
+                    'density_fitting': 'hl_density_fitting',
+                    'use_ext': 'hl_ext',
+                    'loc_orbs': 'cas_loc_orbs',
+                    'cas_initguess': 'cas_initguess',
+                    'active_orbs': 'cas_active_orbs',
+                    'avas' : 'cas_avas',
+                    'mpi_prefix': 'shci_mpi_prefix',
+                    'sweep_iter': 'shci_sweep_iter',
+                    'sweep_epsilon': 'shci_sweep_epsilon',
+                    'nPTiter': 'shci_nPTiter',
+                    'no_stochastic' : 'shci_no_stochastic',
+                    'NoRDM': 'shci_NoRDM',
+                    'maxM': 'dmrg_maxM',
+                    'num_thirds': 'dmrg_num_thirds'}
 
         base_setting_kwargs = ['hl_method', 'initguess', 'spin', 'conv',
                 'grad', 'cycles', 'damp', 'shift', 'compress_approx',
@@ -502,19 +544,37 @@ class InpReader:
 
                 #Update with the subsystem particluar settings
                 if subsystem.hl_method_settings is not None:
-                    for hl_param in subsystem.hl_method_settings:
-                        hl_param_dict = vars(hl_param)
-                        for base_kwarg in base_setting_kwargs:
-                            if hl_param_dict[base_kwarg] is not None:
-                                hl_method_settings[base_kwarg] = hl_param_dict[base_kwarg]
-                        if hl_param_dict['cas_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['cas_settings']))
-                        if hl_param_dict['shci_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['shci_settings']))
-                        if hl_param_dict['dmrg_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['dmrg_settings']))
+                    hl_param = subsystem.hl_method_settings
+                    hl_param_dict = vars(hl_param)
+                    for base_kwarg in base_setting_kwargs[1:]:
+                        if hl_param_dict[base_kwarg] is not None:
+                            hl_method_settings[base_kwarg] = hl_param_dict[base_kwarg]
+                    if hl_param_dict['cas_settings'] is not None:
+                        hl_method_settings.update(vars(hl_param_dict['cas_settings']))
+                    if hl_param_dict['shci_settings'] is not None:
+                        hl_method_settings.update(vars(hl_param_dict['shci_settings']))
+                    if hl_param_dict['dmrg_settings'] is not None:
+                        hl_method_settings.update(vars(hl_param_dict['dmrg_settings']))
 
+                list_keys = list(hl_method_settings.keys())
+                for k in list_keys:
+                    if k.startswith('_'):
+                        hl_method_settings.pop(k)
+                    elif hl_method_settings[k] is None:
+                        hl_method_settings.pop(k)
+
+                list_keys = list(hl_method_settings.keys())
+                for correct in hl_dict.keys():
+                    if correct in list_keys:
+                        hl_method_settings[hl_dict[correct]] = hl_method_settings.pop(correct)
+
+                #Evaluate the avas and active orbs
+                eval_list = ['cas_avas', 'cas_active_orbs']
+                for to_eval in eval_list:
+                    if to_eval in hl_method_settings.keys():
+                        hl_method_settings[to_eval] = eval(hl_method_settings[to_eval])
                 hl_kwargs.append(hl_method_settings)
+
 
         return hl_kwargs
 

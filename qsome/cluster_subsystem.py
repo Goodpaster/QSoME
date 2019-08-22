@@ -376,9 +376,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if proj_pot is None:
             proj_pot = self.proj_pot
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
-            elif self.emb_fock is None:
+            #if self.emb_pot is not None:
+                #print ("Here2")
+                #emb_pot = self.emb_pot
+            if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted or self.mol.spin != 0:
@@ -388,9 +389,15 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     emb_pot = [self.emb_fock[0] - fock, 
                                self.emb_fock[1] - fock]
 
+        print ("Embpot")
+        print (emb_pot)
         e_emb = self.get_env_emb_e(emb_pot, dmat)
         e_proj = self.get_env_proj_e(proj_pot, dmat)
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
+        print ("sub")
+        print (subsys_e)
+        print ('emb')
+        print (e_emb)
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None):
@@ -503,9 +510,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         """
 
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
-            elif self.emb_fock is None:
+            #if self.emb_pot is not None:
+            #    emb_pot = self.emb_pot
+            if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted or self.mol.spin != 0:
@@ -1070,7 +1077,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                           self.localize_orbitals, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
                 active_energy = energy[0]
-            elif active_method == 'fcidump':
+            elif hl_method == 'fcidump':
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
                           self.active_save_orbs, scr_dir=self.scr_dir, 
@@ -1081,7 +1088,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         else:
             if self.hl_unrestricted: 
-                if (active_method == 'hf' or hl_method == 'ccsd' or 
+                if (hl_method == 'hf' or hl_method == 'ccsd' or 
                     hl_method == 'uccsd' or hl_method == 'ccsd(t)' or 
                     hl_method == 'uccsd(t)' or 
                     re.match(re.compile('cas(pt2)?\[.*\].*'), 
@@ -1102,8 +1109,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     hl_scf.energy_elec = lambda *args, **kwargs: (
                         custom_pyscf_methods.uhf_energy_elec(hl_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    if hl_initguess != 'ft':
+                    if hl_initguess != 'ft' and hl_initguess is not None:
                         dmat = hl_scf.get_init_guess(key=hl_initguess)
+                    else:
+                        dmat = hl_scf.get_init_guess()
 
                     hl_energy = hl_scf.kernel(dm0=dmat)
 
@@ -1264,7 +1273,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
                     elif re.match(re.compile('cas(pt2)?\[.*\].*'), 
                                              hl_method):
-                        active_space = [int(i) for i in (active_method[hl_method.find("[") + 1:hl_method.find("]")]).split(',')]
+                        active_space = [int(i) for i in (hl_method[hl_method.find("[") + 1:hl_method.find("]")]).split(',')]
                         hl_cc_scf = mcscf.CASSCF(hl_scf, active_space[0], active_space[1])
                         hl_cc_scf.kernel()
                         if self.hl_save_orbs:
