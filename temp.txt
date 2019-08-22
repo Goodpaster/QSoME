@@ -1,0 +1,3 @@
+[{'env_order': 1, 'env_method': 'pbe', 'filename': '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/temp_input/default.inp'}, {'env_order': 1, 'env_method': 'pbe', 'filename': '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/temp_input/default.inp'}, {'env_order': 1, 'env_method': 'pbe', 'filename': '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/temp_input/default.inp'}, {'env_order': 1, 'env_method': 'pbe', 'filename': '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/temp_input/default.inp'}]
+[{'hl_order': 1, 'hl_method': 'rhf'}]
+[{'env_order': 1, 'fs_method': 'pbe', 'filename': '/panfs/roc/groups/13/goodpast/graha682/code/python/QSoME/temp_input/default.inp'}]

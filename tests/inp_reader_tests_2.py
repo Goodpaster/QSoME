@@ -73,6 +73,7 @@ hl_method_settings
   avas [1d]
  end
 end
+end
 
 subsystem
 He-1    2.0000    0.0000    0.0000
@@ -94,7 +95,7 @@ C    4.0000    2.0000    2.0000
 ghost:C    4.0000    4.0000    2.0000
 unit bohr
 ecp
- default 
+ default lanl2dz
 end
 env_method_num 2
 env_method_settings
@@ -110,6 +111,7 @@ env_method_settings
  freeze
  save_orbs
  save_density
+end
 end
 
 subsystem
@@ -230,15 +232,30 @@ class TestKwargCreation(unittest.TestCase):
     def test_default_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
-        inp = in_obj.inp
-        print (inp.env_subsystem_kwargs)
-        print (inp.hl_subsystem_kwargs)
-        print (inp.supersystem_method_kwargs)
-        self.assertTrue(False)
-
+        correct_env_kwargs = {'env_order': 1, 
+                              'env_method': 'pbe', 
+                              'filename': path + def_filename}
+        correct_hl_kwargs = {'hl_order': 1, 'hl_method': 'rhf'}
+        correct_supersystem_kwargs = {'env_order': 1,
+                                      'fs_method': 'pbe',
+                                      'filename': path + def_filename}
+        self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 1)
+        self.assertEqual(len(in_obj.supersystem_kwargs), 1)
+        for n in in_obj.env_subsystem_kwargs:
+            self.assertEqual(n, correct_env_kwargs)
+        for n in in_obj.hl_subsystem_kwargs:
+            self.assertEqual(n, correct_hl_kwargs)
+        for n in in_obj.supersystem_kwargs:
+            self.assertEqual(n, correct_supersystem_kwargs)
 
     def test_explicit_inp(self):
-        pass
+        path = os.getcwd() + temp_inp_dir 
+        in_obj = inp_reader.InpReader(path + explicit_filename)
+        print (in_obj.env_subsystem_kwargs)
+        print (in_obj.hl_subsystem_kwargs)
+        print (in_obj.supersystem_kwargs)
+        self.assertTrue(False)
          
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -247,3 +264,6 @@ class TestKwargCreation(unittest.TestCase):
 
 class TestMolCreation(unittest.TestCase):
     pass
+
+if __name__ == "__main__":
+    unittest.main()

@@ -10,7 +10,7 @@ import sys
 import re
 import pwd, os
 
-#from pyscf import gto, pbc
+from pyscf import gto, pbc
 
 class Error(Exception):
     #Base Error Class
@@ -100,18 +100,18 @@ class InpReader:
         # input_reader uses re which does not support repeating patterns.
         subsys.add_regex_line(
          'atoms',
-         '\s*([A-Za-z.:\d]+)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
+         '\s*([A-Za-z.:]+[.:\-]?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
          repeat=True)
         subsys.add_line_key('charge', type=int)     
         subsys.add_line_key('spin', type=int)      
         subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         subsys.add_boolean_key('addlinkbasis') # Add link H basis functions
         sub_basis = subsys.add_block_key('basis')              
-        sub_basis.add_regex_line('basis_def', '\s*([A-Za-z.:\d]+)\s+.+', 
+        sub_basis.add_regex_line('basis_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', 
             repeat=True)
 
         sub_ecp = subsys.add_block_key('ecp')              
-        sub_ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:\d]+)\s+.+', 
+        sub_ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', 
             repeat=True)
         subsys.add_line_key('env_method_num', type=int)
         subsys.add_line_key('hl_method_num', type=int)
@@ -124,7 +124,7 @@ class InpReader:
         sub_env_settings.add_line_key('damp', type=float) # subsys damping parameter
         sub_env_settings.add_line_key('shift', type=float) # SCF level-shift parameter
         sub_env_settings.add_line_key('subcycles', type=int) # num subsys diag. cycles
-        sub_env_settings.add_line_key('setfermi', type=int) # num subsys diag. cycles
+        sub_env_settings.add_line_key('setfermi', type=float) # num subsys diag. cycles
         sub_env_settings.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
         sub_env_settings.add_boolean_key('unrestricted')
         sub_env_settings.add_boolean_key('density_fitting')
@@ -287,9 +287,9 @@ class InpReader:
 
         reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
         basis = reader.add_block_key('basis')
-        basis.add_regex_line('basis_def', '\s*([A-Za-z.:\d]+)\s+.+', repeat=True)
+        basis.add_regex_line('basis_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', repeat=True)
         ecp = reader.add_block_key('ecp')
-        ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:\d]+)\s+.+', repeat=True)
+        ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', repeat=True)
         reader.add_line_key('ppmem', type=(int, float)) # MB
         reader.add_line_key('nproc', type=int) # MB
         reader.add_line_key('scrdir', type=str)
@@ -336,11 +336,11 @@ class InpReader:
 
         # universal settings
         inp_dict = vars(inp)
-        universal_subsys_settings = {}
+        universal_settings = {}
         universal_settings_keys = ['filename', 'ppmem', 'nproc', 'scrdir']
         for universal_key in universal_settings_keys:
             if inp_dict[universal_key] is not None:
-                universal_subsys_settings[universal_key] = inp_dict[universal_key]
+                universal_settings[universal_key] = inp_dict[universal_key]
 
         supersystem_kwargs = []
         # Setup supersystem method
@@ -390,6 +390,7 @@ class InpReader:
                     if emb_set_dict[s_key] is not None:
                         sup_kwargs[ft_dict[s_key]] = emb_set_dict[s_key]
 
+            sup_kwargs.update((universal_settings).copy())
             supersystem_kwargs.append(sup_kwargs)
 
 
@@ -426,17 +427,18 @@ class InpReader:
                     #Throw error. Unclear which env method to use
                     raise InputError('Multiple environment methods available. Either specify which to use in the subsystem or specify only one environment method')
                 else:
-                    env_method_settings['env_method_num'] = 1
+                    env_method_settings['env_order'] = 1
                     setattr(inp.env_method_settings[0], 'env_order', 1)
-                    
+            else:
+                env_method_settings['env_order'] = subsystem.env_method_num    
             params_found = False
-            method_num = env_method_settings['env_method_num']
+            method_num = env_method_settings['env_order']
             for env_param in inp.env_method_settings:
                 if env_param.env_order == method_num and not params_found:
                     params_found = True
                     env_method_settings['env_method'] = env_param.env_method
                     if (env_param.embed_settings is not None):
-                        env_method_settings['subcycles'] = env_param['subcycles']
+                        env_method_settings['subcycles'] = env_param.embed_settings.subcycles
                 elif env_param.env_order == method_num and params_found:
                     #Ambigious environment parameter specification
                     raise InputError('Multiple environment methods with the same order number. Each environment method should have a unique identifying number.')
@@ -474,7 +476,7 @@ class InpReader:
 
         for subsystem in inp.subsystem:
             if subsystem.hl_method_num is not None:
-                hl_method_settings = {'hl_method_num': subsystem.hl_method_num}
+                hl_method_settings = {'hl_order': subsystem.hl_method_num}
                 method_num = subsystem.hl_method_num
                 params_found = False
                 for hl_param in inp.hl_method_settings:

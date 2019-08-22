@@ -875,7 +875,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         Get the high level energy embedded into the total system.
     """ 
 
-    def __init__(self, mol, env_method, hl_method, hl_initguess=None,
+    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
                  hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
                  hl_damp=0., hl_shift=0., hl_freeze_orbs=None, hl_ext=None, 
                  hl_unrestricted=False, hl_compress_approx=False, 
