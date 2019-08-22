@@ -28,7 +28,7 @@ import numpy as np
 
 class TestClusterSuperSystemMethods(unittest.TestCase):
 
-    #@unittest.skip
+    @unittest.skip
     def test_get_supersystem_energy(self):
 
         #Closed Shell

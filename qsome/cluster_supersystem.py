@@ -241,7 +241,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                  fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=4, 
                  fs_rhocutoff=1e-7, fs_verbose=3, fs_unrestricted=False, 
                  fs_density_fitting=False, compare_density=False, 
-                 fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
+                 fs_save_orbs=False, fs_save_density=False, ft_cycles=5, 
                  ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, ft_setfermi=None,
                  ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
                  ft_save_orbs=False, ft_save_density=False, ft_proj_oper='huz',
@@ -817,15 +817,18 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.update_fock()
         full_fock = self.fock
         froz_veff = [0., 0.]
+        s2s = self.sub2sup
         for i in range(len(self.subsystems)):
             sub = self.subsystems[i]
-            sub.update_fock()
+            sub_fock = sub.update_fock()
+            if not sub.unrestricted:
+                sub_fock = [sub_fock, sub_fock]
             if sub.env_order > self.env_order:
                 FAA = [None, None]
                 FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
                 FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
-                froz_veff[0] = (FAA[0] - sub.env_hcore - subsystem.env_V[0])
-                froz_veff[1] = (FAA[1] - sub.env_hcore - subsystem.env_V[1])
+                froz_veff[0] = (FAA[0] - sub_fock[0])
+                froz_veff[1] = (FAA[1] - sub_fock[1])
 
         return froz_veff
 
@@ -1699,7 +1702,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         #dE = abs(sub_old_e - sub_new_e)
 
                     # print output to console.
-                    if self.analysis:
+                    #if self.analysis:
+                    if False:
                         print(f"iter:{ft_iter:>3d}:{i+j:<2d}          |dE|:{dE:12.6e}           |ddm|:{ddm:12.6e}           |Tr[DP]|:{proj_e:12.6e}")
                     else:
                         print(f"iter:{ft_iter:>3d}:{i+j:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")

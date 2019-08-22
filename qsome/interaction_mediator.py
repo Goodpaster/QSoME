@@ -37,7 +37,8 @@ class InteractionMediator:
             if len(higher_order_subs) > 0:
                 combined_subs = self.combine_subsystems(higher_order_subs, curr_method)
                 sub_list.append(combined_subs)
-            supersystem = ClusterSuperSystem(sub_list, curr_method, env_order=curr_order, curr_sup_kwargs)
+            curr_sup_kwargs['env_order'] = curr_order
+            supersystem = ClusterSuperSystem(sub_list, curr_method, **curr_sup_kwargs)
             supersystems.append(supersystem)
 
         return supersystems

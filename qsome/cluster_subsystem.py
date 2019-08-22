@@ -390,7 +390,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         e_emb = self.get_env_emb_e(emb_pot, dmat)
         e_proj = self.get_env_proj_e(proj_pot, dmat)
-        subsys_e = self.env_scf.energy_elec(dm=(dmat))[0]
+        subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None):
@@ -605,6 +605,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         mol = scf_obj.mol
 
+        fock = np.array(fock)
         if fock.ndim == 2.:
            fock = np.array([fock, fock]) 
         nA_a = fock[0].shape[0]
@@ -876,9 +877,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, hl_method, hl_initguess=None,
                  hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
-                 hl_damp=0., hl_shift=0., hl_ext=None, hl_unrestricted=False,
-                 hl_compress_approx=False, hl_density_fitting=False,
-                 hl_save_orbs=False, hl_save_density=False,
+                 hl_damp=0., hl_shift=0., hl_freeze_orbs=None, hl_ext=None, 
+                 hl_unrestricted=False, hl_compress_approx=False, 
+                 hl_density_fitting=False, hl_save_orbs=False, hl_save_density=False,
                  cas_loc_orbs=False, cas_init_guess=None, cas_active_orbs=None,
                  cas_avas=None, shci_mpi_prefix=None, shci_sweep_iter=None, 
                  shci_sweep_epsilon=None, shci_nPTiter=None, 
@@ -926,6 +927,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_shift = hl_shift
 
         self.hl_ext = hl_ext
+        self.hl_freeze_orbs = hl_freeze_orbs
         self.hl_unrestricted = hl_unrestricted
         self.hl_compress_approx = hl_compress_approx
         self.hl_density_fitting = hl_density_fitting
@@ -1043,7 +1045,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         #    hl_frozen = self.hl_frozen
 
         hl_energy = 0.0
-        if self.use_molpro:
+        if self.hl_ext is not None:
             mod_hcore = (self.env_scf.get_hcore() 
                          + ((emb_pot[0] + emb_pot[1])/2.
                          + (proj_pot[0] + proj_pot[1])/2.))
@@ -1219,8 +1221,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                         (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
                     if hl_initguess == 'ft':
                         init_dmat = dmat[0] + dmat[1]
-                    else:
+                    elif hl_initguess is not None:
                         init_dmat = hl_scf.get_init_guess(key=hl_initguess)
+                    else:
+                        init_dmat = hl_scf.get_init_guess()
                     hl_energy = hl_scf.kernel(dm0=init_dmat)
                     self.hl_scf = hl_scf
                     if hl_method == 'hf':
