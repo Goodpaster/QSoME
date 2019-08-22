@@ -383,7 +383,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         # Densities are stored separately to allow for alpha and beta.
         self.is_ft_conv = False
-        self.ext_pot = [0., 0.]
         self.mol = concat_mols(self.subsystems)
         self.sub2sup = self.gen_sub2sup()
         self.fs_scf, self.os_scf = self.init_scf()
@@ -814,25 +813,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
     def get_ext_pot(self):
         # Returns the potential of higher order environment subsystems, formatted for the next level of environment.
-        self.update_fock()
-        full_fock = self.fock
-        froz_veff = [0., 0.]
-        for i in range(len(self.subsystems)):
-            sub = self.subsystems[i]
-            sub.update_fock()
-            if sub.env_order > self.env_order:
-                FAA = [None, None]
-                FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
-                FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
-                froz_veff[0] = (FAA[0] - sub.env_hcore - subsystem.env_V[0])
-                froz_veff[1] = (FAA[1] - sub.env_hcore - subsystem.env_V[1])
-
-        return froz_veff
-
+        full_fock = 
 
     # Called by the mediator to add the potential of the surrounding low level system.
     def update_ext_pot(self, potential):
-        self.ext_pot = potential
+        self.external_potential = potential
 
     @time_method("Supersystem Energy")
     def get_supersystem_energy(self, scf_obj=None, fs_method=None, 
@@ -1452,10 +1437,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         #    self.fock[0] = f
         #    self.fock[1] = f
         #Every fock update also update the subsystem embedding potentials.
-
-        #Add the external potential to each fock.
-        self.fock[0] += self.ext_pot[0]
-        self.fock[1] += self.ext_pot[1]
 
         s2s = self.sub2sup
         for i in range(len(self.subsystems)):

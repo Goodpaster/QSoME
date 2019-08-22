@@ -98,6 +98,7 @@ class TestSetup(unittest.TestCase):
         sub5 = ClusterHLSubSystem(mol5, 'm06', 'rhf', env_order=3)
         subsystems = [sub1, sub2, sub3, sub4, sub5]
         mediator = InteractionMediator(subsystems)
+        mediator.do_embedding()
 
 if __name__ == "__main__":
     unittest.main()

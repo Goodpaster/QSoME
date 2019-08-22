@@ -56,15 +56,12 @@ class InteractionMediator:
 
     def do_embedding(self):
         #Do freeze and thaw for all supersystems, passing along the potential. Upon freezing and thawing all supersystems do the high level calculation.
-        ext_potential = 0.
+        ext_potential = [0., 0.]
         for i in range(len(self.supersystems)):
             curr_sup = self.supersystems[i]
             curr_sup.update_ext_pot(ext_potential)
             curr_sup.freeze_and_thaw()
-            new_ext_pot = curr_sup.get_ext_pot() #This method formats the external potential for the next super system.
-
-        #Do the final hl calculation
-
+            new_ext_pot = curr_sup.get_ext_pot() #This method formats the external potential for the next super system
 
     def get_embedding_energy(self):
         #Add all the components together to get an energy summary.
