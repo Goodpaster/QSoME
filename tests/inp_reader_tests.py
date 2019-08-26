@@ -45,6 +45,297 @@ end
 
 """
 
+env_settings_filename = 'env_settings.inp'
+env_settings_str_replace = """
+env_method_settings
+ env_method lda
+ smearsigma 0.1
+ initguess submol
+ conv 1e-6
+ grad 1e-8
+ cycles 100
+ damp 0.2
+ shift 1.4
+ diis 1
+ grid 4
+ rhocutoff 1e-1
+ verbose 3
+ unrestricted
+ density_fitting
+ compare_density
+ save_orbs
+ save_density
+ embed_settings
+  cycles 12
+  subcycles 2
+  conv 1e-4
+  grad 1e-2
+  damp 0.5
+  diis 3
+  setfermi 0.35
+  updatefock 3
+  initguess readchk
+  save_orbs
+  save_density
+  huzfermi
+ end
+end"""
+env_settings_str = default_str.replace("""
+env_method_settings
+ env_method pbe
+end""", env_settings_str_replace)
+
+hl_settings_filename = 'hl_settings.inp'
+hl_settings_str_replace = """
+hl_method_settings
+ hl_order 1
+ hl_method caspt2[10,10]
+ initguess submol
+ spin 4
+ conv 1e-12
+ grad 1e-14
+ cycles 100
+ damp 10.
+ shift 12.1
+ compress_approx
+ unrestricted
+ density_fitting
+ use_ext openmolcas
+ cas_settings
+  loc_orbs
+  cas_initguess rhf
+  active_orbs [3,4,5,6,7]
+  avas ['1d']
+ end
+end"""
+
+hl_settings_str = default_str.replace("""
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end""", hl_settings_str_replace)
+
+subsys_env_set_filename = 'subsys_env_set.inp'
+subsys_env_set_str_replace = """
+env_method_settings
+ smearsigma 0.2
+ initguess readchk
+ conv 1e-20
+ damp 12.2
+ shift 2.3
+ subcycles 10
+ setfermi 1.112
+ diis 6
+ freeze 
+ unrestricted
+end"""
+
+subsys_env_set_str = env_settings_str.replace("""
+subsystem
+C    2.0000    0.0000    0.0000
+end""", """
+subsystem
+C    2.0000    0.0000    0.0000
+""" + subsys_env_set_str_replace + """
+end""")
+
+
+subsys_hl_set_filename = 'subsys_hl_set.inp'
+subsys_hl_set_str_replace = """
+hl_method_settings
+ initguess minao
+ spin 4
+ conv 1e-3
+ grad 1e1
+ cycles 4
+ damp 0.001
+ shift 0.002
+ use_ext molpro
+ unrestricted
+ cas_settings
+  cas_initguess ci
+  active_orbs [5,6,7,8,9]
+  avas ['3d']
+ end
+end
+"""
+
+subsys_hl_set_str = hl_settings_str.replace("""
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+""", """
+He    0.0000    0.0000    0.0000
+hl_method_num 1""" + subsys_hl_set_str_replace)
+
+multi_env_filename = 'multi_env.inp'
+multi_env_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+env_method_num 1
+end
+
+subsystem
+C    2.0000    0.0000    0.0000
+env_method_num 1
+end
+
+subsystem
+C    2.0000    2.0000    0.0000
+env_method_num 2
+end
+
+subsystem
+C    2.0000    2.0000    2.0000
+env_method_num 2
+end
+
+env_method_settings
+ env_order 1
+ env_method pbe
+end
+
+env_method_settings
+ env_order 2
+ env_method lda
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end
+
+basis
+ default 3-21g
+end
+
+"""
+
+specify_basis_filename = 'specify_basis.inp'
+specify_basis_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+end
+
+subsystem
+C    2.0000    0.0000    0.0000
+end
+
+subsystem
+C-1    2.0000    2.0000    0.0000
+end
+
+subsystem
+C-1    2.0000    2.0000    2.0000
+basis
+ default cc-pVTZ
+end
+end
+
+env_method_settings
+ env_method pbe
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end
+
+basis
+ C sto-3g
+ C-1 cc-pVDZ
+ default 3-21g
+end
+
+"""
+
+specify_ecp_filename = 'specify_ecp.inp'
+specify_ecp_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+end
+
+subsystem
+Fe    2.0000    0.0000    0.0000
+ecp
+ default lanl2dz
+end
+end
+
+subsystem
+Fe-1    2.0000    2.0000    0.0000
+ecp
+ default bfd-pp
+end
+end
+
+subsystem
+Fe-1    2.0000    2.0000    2.0000
+end
+
+env_method_settings
+ env_method pbe
+end
+
+ecp
+ Fe-1 lanl08
+ default lanl2tz
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end
+
+basis
+ default 3-21g
+end
+
+"""
+
+spin_charge_filename = 'spin_charge.inp'
+spin_charge_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+spin 1
+charge -1
+end
+
+subsystem
+C    2.0000    0.0000    0.0000
+spin 2
+end
+
+subsystem
+C    2.0000    2.0000    0.0000
+charge -1
+spin -1
+end
+
+subsystem
+C    2.0000    2.0000    2.0000
+end
+
+env_method_settings
+ env_method pbe
+ spin 2
+ charge -2
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end
+
+basis
+ default 3-21g
+end
+
+"""
+
 explicit_filename = "explicit.inp"
 explicit_str = """
 subsystem
@@ -89,10 +380,10 @@ hl_method_num 2
 end
 
 subsystem
-C    4.0000    0.0000    0.0000
-C    4.0000    2.0000    0.0000
-C    4.0000    2.0000    2.0000
-ghost:C    4.0000    4.0000    2.0000
+Fe    4.0000    0.0000    0.0000
+Fe    4.0000    2.0000    0.0000
+Fe    4.0000    2.0000    2.0000
+ghost:Fe    4.0000    4.0000    2.0000
 unit bohr
 ecp
  default lanl2dz
@@ -226,6 +517,21 @@ class TestKwargCreation(unittest.TestCase):
         with open(path+def_filename, "w") as f:
             f.write(default_str)
 
+        with open(path+env_settings_filename, "w") as f:
+            f.write(env_settings_str)
+
+        with open(path+hl_settings_filename, "w") as f:
+            f.write(hl_settings_str)
+
+        with open(path+subsys_env_set_filename, "w") as f:
+            f.write(subsys_env_set_str)
+            
+        with open(path+subsys_hl_set_filename, "w") as f:
+            f.write(subsys_hl_set_str)
+
+        with open(path+multi_env_filename, "w") as f:
+            f.write(multi_env_str)
+
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
 
@@ -248,6 +554,123 @@ class TestKwargCreation(unittest.TestCase):
             self.assertDictEqual(n, correct_hl_kwargs)
         for n in in_obj.supersystem_kwargs:
             self.assertDictEqual(n, correct_supersystem_kwargs)
+
+    def test_environ_settings(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + env_settings_filename)
+        correct_supersystem_kwargs = {'env_order': 1,
+                                      'fs_method': 'lda',
+                                      'fs_smearsigma': 0.1,
+                                      'fs_initguess': 'submol',
+                                      'fs_conv': 1e-6,
+                                      'fs_grad': 1e-8,
+                                      'fs_cycles': 100,
+                                      'fs_damp': 0.2,
+                                      'fs_shift': 1.4,
+                                      'fs_diis': 1,
+                                      'fs_grid_level': 4,
+                                      'fs_rhocutoff': 1e-1,
+                                      'fs_verbose': 3,
+                                      'fs_unrestricted': True,
+                                      'fs_density_fitting': True,
+                                      'compare_density': True,
+                                      'fs_save_orbs': True,
+                                      'fs_save_density': True,
+                                      'ft_cycles': 12,
+                                      'ft_conv': 1e-4,
+                                      'ft_grad': 1e-2,
+                                      'ft_damp': 0.5,
+                                      'ft_diis': 3,
+                                      'ft_setfermi': 0.35,
+                                      'ft_updatefock': 3,
+                                      'ft_initguess': 'readchk',
+                                      'ft_save_orbs': True,
+                                      'ft_save_density': True,
+                                      'ft_proj_oper': 'huzfermi',
+                                      'filename': path + env_settings_filename}
+        self.assertEqual(len(in_obj.supersystem_kwargs), 1)
+        for n in in_obj.supersystem_kwargs:
+            self.assertDictEqual(n, correct_supersystem_kwargs)
+
+    def test_hl_settings(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + hl_settings_filename)
+        correct_hl_kwargs = {'hl_order': 1,
+                             'hl_method': 'caspt2[10,10]',
+                             'hl_initguess': 'submol',
+                             'hl_conv': 1e-12,
+                             'hl_spin': 4,
+                             'hl_grad': 1e-14,
+                             'hl_cycles': 100,
+                             'hl_damp': 10.,
+                             'hl_shift': 12.1,
+                             'hl_ext': 'openmolcas',
+                             'hl_unrestricted': True,
+                             'hl_compress_approx': True,
+                             'hl_density_fitting': True,
+                             'cas_loc_orbs': True,
+                             'cas_initguess': 'rhf',
+                             'cas_active_orbs': [3,4,5,6,7],
+                             'cas_avas': ['1d']}
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 1)
+        for n in in_obj.hl_subsystem_kwargs:
+            self.assertDictEqual(n, correct_hl_kwargs)
+
+    def test_subsys_env_settings(self):
+        path = os.getcwd() + temp_inp_dir 
+        in_obj = inp_reader.InpReader(path + subsys_env_set_filename)
+        correct_env_kwargs_1 = {'env_order': 1,
+                                'env_method': 'lda',
+                                'env_smearsigma': 0.2,
+                                'initguess': 'readchk',
+                                'conv': 1e-20,
+                                'damp': 12.2,
+                                'shift': 2.3,
+                                'subcycles': 10,
+                                'setfermi': 1.112,
+                                'diis': 6,
+                                'freeze': True,
+                                'unrestricted': True,
+                                'filename': path + subsys_env_set_filename}
+        self.assertDictEqual(in_obj.env_subsystem_kwargs[1], correct_env_kwargs_1)
+
+    def test_subsys_hl_settings(self):
+        path = os.getcwd() + temp_inp_dir 
+        in_obj = inp_reader.InpReader(path + subsys_hl_set_filename)
+        correct_hl_kwargs_1 = {'hl_order': 1,
+                               'hl_method': 'caspt2[10,10]',
+                               'hl_initguess': 'minao',
+                               'hl_conv': 1e-3,
+                               'hl_spin': 4,
+                               'hl_grad': 1e1,
+                               'hl_cycles': 4,
+                               'hl_damp': 0.001,
+                               'hl_shift': 0.002,
+                               'hl_ext': 'molpro',
+                               'hl_unrestricted': True,
+                               'hl_compress_approx': True,
+                               'hl_density_fitting': True,
+                               'cas_initguess': 'ci',
+                               'cas_active_orbs': [5,6,7,8,9],
+                               'cas_avas':['3d']}
+        self.assertDictEqual(in_obj.hl_subsystem_kwargs[0], correct_hl_kwargs_1)
+
+    def test_multi_env(self):
+        path = os.getcwd() + temp_inp_dir 
+        in_obj = inp_reader.InpReader(path + multi_env_filename)
+        correct_env_kwargs_1 = {'env_order': 1,
+                                'fs_method': 'pbe', 
+                                'filename': path + multi_env_filename}
+        correct_env_kwargs_2 = {'env_order': 2,
+                                'fs_method': 'lda', 
+                                'filename': path + multi_env_filename}
+
+        self.assertDictEqual(in_obj.supersystem_kwargs[0], correct_env_kwargs_1)
+        self.assertDictEqual(in_obj.supersystem_kwargs[1], correct_env_kwargs_2)
+        self.assertEqual(in_obj.env_subsystem_kwargs[0]['env_order'], 1)
+        self.assertEqual(in_obj.env_subsystem_kwargs[1]['env_order'], 1)
+        self.assertEqual(in_obj.env_subsystem_kwargs[2]['env_order'], 2)
+        self.assertEqual(in_obj.env_subsystem_kwargs[3]['env_order'], 2)
 
     def test_explicit_inp(self):
         path = os.getcwd() + temp_inp_dir 
@@ -398,10 +821,135 @@ class TestMolCreation(unittest.TestCase):
         with open(path+def_filename, "w") as f:
             f.write(default_str)
 
+        with open(path+specify_basis_filename, "w") as f:
+            f.write(specify_basis_str)
+
+        with open(path+specify_ecp_filename, "w") as f:
+            f.write(specify_ecp_str)
+
+        with open(path+spin_charge_filename, "w") as f:
+            f.write(spin_charge_str)
+
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
 
     def test_default(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + def_filename)
+
+        correct_mol1 = gto.M()
+        correct_mol1.atom = '''
+            He    0.0000    0.0000    0.0000'''
+        correct_mol1.basis = '3-21g'
+        correct_mol1.build()
+
+        correct_mol2 = gto.M()
+        correct_mol2.atom = '''
+            C    2.0000    0.0000    0.0000'''
+        correct_mol2.basis = '3-21g'
+        correct_mol2.build()
+
+        correct_mol3 = gto.M()
+        correct_mol3.atom = '''
+            C    2.0000    2.0000    0.0000'''
+        correct_mol3.basis = '3-21g'
+        correct_mol3.build()
+
+        correct_mol4 = gto.M()
+        correct_mol4.atom = '''
+            C    2.0000    2.0000    2.0000'''
+        correct_mol4.basis = '3-21g'
+        correct_mol4.build()
+
+        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
+        self.assertEqual(len(in_obj.subsys_mols), 4)
+        for i in range(len(in_obj.subsys_mols)):
+            test = in_obj.subsys_mols[i]
+            corr = corr_mol_list[i]
+            self.assertListEqual(test._atom, corr._atom) 
+            self.assertDictEqual(test._basis, corr._basis) 
+
+    def test_def_basis(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + specify_basis_filename)
+        self.maxDiff = None
+
+        correct_mol1 = gto.M()
+        correct_mol1.atom = '''
+            He    0.0000    0.0000    0.0000'''
+        correct_mol1.basis = '3-21g'
+        correct_mol1.build()
+
+        correct_mol2 = gto.M()
+        correct_mol2.atom = '''
+            C    2.0000    0.0000    0.0000'''
+        correct_mol2.basis = 'sto-3g'
+        correct_mol2.build()
+
+        correct_mol3 = gto.M()
+        correct_mol3.atom = '''
+            C-1    2.0000    2.0000    0.0000'''
+        correct_mol3.basis = 'cc-pVDZ'
+        correct_mol3.build()
+
+        correct_mol4 = gto.M()
+        correct_mol4.atom = '''
+            C-1    2.0000    2.0000    2.0000'''
+        correct_mol4.basis = 'cc-pVDZ'
+        correct_mol4.build()
+
+        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
+        self.assertEqual(len(in_obj.subsys_mols), 4)
+        for i in range(len(in_obj.subsys_mols)):
+            test = in_obj.subsys_mols[i]
+            corr = corr_mol_list[i]
+            self.assertListEqual(test._atom, corr._atom) 
+            for k in test._atom:
+                self.assertListEqual(test._basis[k[0]], corr._basis[k[0]]) 
+
+    def test_def_ecp(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way
+        in_obj = inp_reader.InpReader(path + specify_ecp_filename)
+        self.maxDiff = None
+
+        correct_mol1 = gto.M()
+        correct_mol1.atom = '''
+            He    0.0000    0.0000    0.0000'''
+        correct_mol1.basis = '3-21g'
+        correct_mol1.ecp = 'lanl2tz'
+        correct_mol1.build()
+
+        correct_mol2 = gto.M()
+        correct_mol2.atom = '''
+            Fe    2.0000    0.0000    0.0000'''
+        correct_mol2.basis = '3-21g'
+        correct_mol2.ecp = 'lanl2dz'
+        correct_mol2.build()
+
+        correct_mol3 = gto.M()
+        correct_mol3.atom = '''
+            Fe-1    2.0000    2.0000    0.0000'''
+        correct_mol3.basis = '3-21g'
+        correct_mol3.ecp = 'lanl08'
+        correct_mol3.build()
+
+        correct_mol4 = gto.M()
+        correct_mol4.atom = '''
+            Fe-1    2.0000    2.0000    2.0000'''
+        correct_mol4.basis = '3-21g'
+        correct_mol4.ecp = 'lanl08'
+        correct_mol4.build()
+
+        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
+        self.assertEqual(len(in_obj.subsys_mols), 4)
+        for i in range(len(in_obj.subsys_mols)):
+            test = in_obj.subsys_mols[i]
+            corr = corr_mol_list[i]
+            self.assertListEqual(test._atom, corr._atom) 
+            for k in corr._ecp.keys():
+                self.assertListEqual(test._ecp[k], corr._ecp[k]) 
+
+    def test_spin_charge(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
 
@@ -458,10 +1006,10 @@ class TestMolCreation(unittest.TestCase):
 
         correct_mol3 = gto.M()
         correct_mol3.atom = '''
-            C    4.0000    0.0000    0.0000
-            C    4.0000    2.0000    0.0000
-            C    4.0000    2.0000    2.0000
-            ghost:C    4.0000    4.0000    2.0000'''
+            Fe    4.0000    0.0000    0.0000
+            Fe    4.0000    2.0000    0.0000
+            Fe    4.0000    2.0000    2.0000
+            ghost:Fe    4.0000    4.0000    2.0000'''
         correct_mol3.basis = 'cc-pVDZ'
         correct_mol3.ecp = 'lanl2dz'
         correct_mol3.unit = 'bohr'
