@@ -12,7 +12,7 @@ from qsome.cluster_supersystem import ClusterSuperSystem
 from qsome.interaction_mediator import InteractionMediator
 from pyscf import gto
 
-
+import numpy as np
 
 
 class TestSetup(unittest.TestCase):
@@ -112,7 +112,7 @@ class TestSetup(unittest.TestCase):
         H-2 4. -2.757 2.857
         H-2 4. 2.757 2.857'''
         sup1_alt_sub_mol.basis = {'O-0': '6-31g', 'H-0': '6-31g', 'O-1': 'aug-cc-pVTZ', 'H-1': 'aug-cc-pVTZ', 'O-2': '3-21g', 'H-2': '3-21g'}
-        sup1_alt_sub = ClusterEnvSubsystem(sup1_alt_sub_mol, 'pbe', env_order=2)
+        sup1_alt_sub = ClusterEnvSubSystem(sup1_alt_sub_mol, 'pbe', env_order=2)
         supersystem_1 = ClusterSuperSystem([sub1, sub2, sup1_alt_sub], 'lda') 
 
         sup2_alt_sub_mol = gto.Mole()
@@ -126,7 +126,7 @@ class TestSetup(unittest.TestCase):
         H-1 4. 2.757 2.857'''
         sup2_alt_sub_mol.basis = {'O-0': 'aug-cc-pVTZ', 'H-0': 'aug-cc-pVTZ', 'O-1': '3-21g', 'H-1': '3-21g'}
 
-        sup2_alt_sub = ClusterEnvSubsystem(sup2_alt_sub_mol, 'm06', env_order=3)
+        sup2_alt_sub = ClusterEnvSubSystem(sup2_alt_sub_mol, 'm06', env_order=3)
         supersystem_2 = ClusterSuperSystem([sub3, sup2_alt_sub], 'pbe', env_order=2)
         supersystem_3 = ClusterSuperSystem([sub4, sub5], 'm06', env_order=3)
         supersystem_list = [supersystem_1, supersystem_2, supersystem_3]
@@ -136,7 +136,7 @@ class TestSetup(unittest.TestCase):
         for i in range(len(mediator.supersystems)):
             test = mediator.supersystems[i]
             self.assertTrue(np.allclose(test.dmat, supersystem_list[i].dmat))
-            self.assertEqual(test.fs_method, supersystem_list[i].fs_method))
+            self.assertEqual(test.fs_method, supersystem_list[i].fs_method)
 
     def test_explicit_subsystems(self):
         pass
