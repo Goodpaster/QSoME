@@ -237,11 +237,11 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
 
     def __init__(self, subsystems, fs_method, env_order=1., fs_smearsigma=0.,
-                 fs_initguess=None, fs_conv=1e-9, fs_grad=None, fs_cycles=None,
-                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=4, 
-                 fs_rhocutoff=1e-7, fs_verbose=3, fs_unrestricted=False, 
+                 fs_initguess=None, fs_conv=None, fs_grad=None, fs_cycles=None,
+                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=None, 
+                 fs_rhocutoff=None, fs_verbose=None, fs_unrestricted=False, 
                  fs_density_fitting=False, compare_density=False, 
-                 fs_save_orbs=False, fs_save_density=False, ft_cycles=5, 
+                 fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
                  ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, ft_setfermi=None,
                  ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
                  ft_save_orbs=False, ft_save_density=False, ft_proj_oper='huz',
@@ -519,7 +519,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             else:
                 scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
+                if self.rho_cutoff is not None:
+                    scf_obj.small_rho_cutoff = self.rho_cutoff
                 u_scf_obj = scf_obj
 
         elif mol.spin != 0:
@@ -531,8 +532,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
-                u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                if self.rho_cutoff is not None:
+                    scf_obj.small_rho_cutoff = self.rho_cutoff
+                    u_scf_obj.small_rho_cutoff = self.rho_cutoff
         else:
             if fs_method == 'hf':
                 scf_obj = scf.RHF(mol) 
@@ -542,23 +544,32 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 u_scf_obj = scf.UKS(mol)
                 scf_obj.xc = fs_method
                 u_scf_obj.xc = fs_method
-                scf_obj.small_rho_cutoff = self.rho_cutoff
-                u_scf_obj.small_rho_cutoff = self.rho_cutoff
+                if self.rho_cutoff is not None:
+                    scf_obj.small_rho_cutoff = self.rho_cutoff
+                    u_scf_obj.small_rho_cutoff = self.rho_cutoff
 
         fs_scf = scf_obj
         if self.fs_cycles is not None:
             fs_scf.max_cycle = self.fs_cycles
-        fs_scf.conv_tol = self.fs_conv
-        fs_scf.conv_tol_grad = self.fs_grad
+        if self.fs_conv is not None:
+            fs_scf.conv_tol = self.fs_conv
+        if self.fs_grad is not None:
+            fs_scf.conv_tol_grad = self.fs_grad
         fs_scf.damp = self.fs_damp
         fs_scf.level_shift = self.fs_shift
-        fs_scf.verbose = self.fs_verbose
+        if self.fs_verbose is not None:
+            fs_scf.verbose = self.fs_verbose
 
-        grids = dft.gen_grid.Grids(mol)
-        grids.level = self.grid_level
-        grids.build()
-        fs_scf.grids = grids
-        u_scf_obj.grids = grids
+        if self.grid_level is not None:
+            grids = dft.gen_grid.Grids(mol)
+            grids.level = self.grid_level
+            grids.build()
+            fs_scf.grids = grids
+            u_scf_obj.grids = grids
+        if self.fs_density_fitting:
+            fs_scf = fs_scf.density_fit()
+            u_scf_obj = u_scf_obj.density_fit()
+
         return fs_scf, u_scf_obj
 
 
@@ -809,6 +820,12 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 dmat = t_d
 
         print ("".center(80,'*'))
+        return dmat
+
+    def get_dmat(self):
+        dmat = self.dmat
+        if not (self.fs_unrestricted or self.mol.spin != 0):
+            dmat = self.dmat[0] + self.dmat[1]
         return dmat
 
 
@@ -1429,8 +1446,9 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             V_a = V[0]
             V_b = V[1]
         elif self.mol.spin != 0:
-            #RO
-            pass
+            V = self.fs_scf.get_veff(mol=self.mol, dm=dm)
+            V_a = V[0]
+            V_b = V[1]
         else:
             V_a = self.fs_scf.get_veff(mol=self.mol, dm=(dm[0] + dm[1]))
             V_b = V_a

@@ -30,11 +30,12 @@ class TestEnvSubsystem(unittest.TestCase):
 
         self.assertEqual(subsys.mol, mol)
         self.assertEqual(subsys.env_method, 'm06')
+        self.assertEqual(subsys.env_order, 1)
         self.assertEqual(subsys.filename, os.getcwd() + '/temp.inp')
 
-        self.assertEqual(subsys.env_smearsigma, 0)
-        self.assertEqual(subsys.env_damp, 0)
-        self.assertEqual(subsys.env_shift, 0)
+        self.assertEqual(subsys.env_smearsigma, 0.)
+        self.assertEqual(subsys.env_damp, 0.)
+        self.assertEqual(subsys.env_shift, 0.)
         self.assertEqual(subsys.env_subcycles, 1)
         self.assertEqual(subsys.freeze, False)
         self.assertEqual(subsys.env_initguess, None)
@@ -48,7 +49,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
     def test_unrestricted_subsystem(self):
         mol = gto.Mole()
@@ -71,7 +72,7 @@ class TestEnvSubsystem(unittest.TestCase):
         #Check density
         self.assertEqual(subsys.env_method, 'm06')
         init_dmat = scf.uhf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
     def test_restrictedos_subsystem(self):
         mol = gto.Mole()
@@ -95,7 +96,63 @@ class TestEnvSubsystem(unittest.TestCase):
         #Check density
         self.assertEqual(subsys.env_method, 'm06')
         init_dmat = scf.rohf.init_guess_by_minao(mol)
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
+
+    def test_density_fitting_subsystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        O 0.0 0.0 0.0
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857'''
+        mol.basis = 'aug-cc-pVDZ'
+        mol.build()
+        env_method = 'b3lyp'
+        subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, density_fitting=True)
+
+        #Check SCF object
+        scf_obj = subsys.env_scf
+        comp_scf_obj = dft.RKS(mol).density_fit()
+        from pyscf.df.df_jk import _DFHF
+        self.assertTrue(isinstance(scf_obj, _DFHF))
+
+        #Check density
+        init_dmat = scf.get_init_guess(mol)
         self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+
+    def test_density_init_sub(self):
+
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        O  0.000000  0.000000  0.000000
+        H  0.758602  0.000000  0.504284
+        H  0.758602  0.000000  -0.504284'''
+        mol.basis = 'cc-pVDZ'
+        mol.build()
+        env_method = 'lda'
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, initguess='atom')
+        #Check density
+        init_dmat = scf.get_init_guess(mol, key='atom')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, initguess='1e')
+        #Check density
+        init_dmat = scf.get_init_guess(mol, key='1e')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, initguess='minao')
+        #Check density
+        init_dmat = scf.get_init_guess(mol, key='minao')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, initguess='submol')
+        #Check density
+        scf_obj = subsys.env_scf
+        scf_obj.kernel()
+        init_dmat = scf_obj.make_rdm1()
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
 
     def test_custom_subsystem(self):
         mol = gto.Mole()
@@ -130,8 +187,9 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check SCF object
         scf_obj = subsys.env_scf
-        comp_scf_obj = dft.RKS(mol)
-        self.assertEqual(type(scf_obj), type(comp_scf_obj))
+        comp_scf_obj = dft.RKS(mol).density_fit()
+        from pyscf.df.df_jk import _DFHF
+        self.assertTrue(isinstance(scf_obj, _DFHF))
         self.assertEqual(scf_obj.xc, 'b3lyp')
 
         #Check density
@@ -168,7 +226,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
 class TestActiveSubSystem(unittest.TestCase):
 
-    def test_custom_obj_def(self):
+    def test_basic_subsystem(self):
         mol = gto.Mole()
         mol.verbose = 3
         mol.atom = '''
@@ -197,9 +255,9 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.hl_method, 'ccsd')
         self.assertEqual(subsys.cas_loc_orbs, False)
         self.assertEqual(subsys.cas_active_orbs, None)
-        self.assertEqual(subsys.hl_conv, 1e-9)
+        self.assertEqual(subsys.hl_conv, None)
         self.assertEqual(subsys.hl_grad, None)
-        self.assertEqual(subsys.hl_cycles, 100)
+        self.assertEqual(subsys.hl_cycles, None)
         self.assertEqual(subsys.hl_damp, 0)
         self.assertEqual(subsys.hl_shift, 0)
         self.assertEqual(subsys.hl_initguess, None)
@@ -283,8 +341,8 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
-        self.assertEqual(supersystem.fs_method, 'b3lyp')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        self.assertEqual(supersystem.fs_method, 'm06')
         self.assertEqual(supersystem.proj_oper, 'huz')
         self.assertEqual(supersystem.filename, os.getcwd()+"/temp.inp")
         self.assertEqual(supersystem.ft_cycles, 100)
@@ -295,28 +353,177 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_updatefock, 0)
 
         self.assertEqual(supersystem.fs_cycles, None)
-        self.assertEqual(supersystem.fs_conv, 1e-9)
+        self.assertEqual(supersystem.fs_conv, None)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
         self.assertEqual(supersystem.fs_shift, 0)
         self.assertEqual(supersystem.fs_smearsigma, 0)
         self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, 4)
-        self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.fs_verbose, 3)
+        self.assertEqual(supersystem.grid_level, None)
+        self.assertEqual(supersystem.rho_cutoff, None)
+        self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
+        #Check SCF object
+        scf_obj = supersystem.fs_scf
+        comp_scf_obj = dft.RKS(gto.mole.conc_mol(mol, mol2))
+        self.assertEqual(type(scf_obj), type(comp_scf_obj))
+        self.assertEqual(scf_obj.xc, 'm06')
+
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.get_dmat()))
 
-        init_dmat = scf.get_init_guess(gto.mole.conc_mol(mol, mol2))
-        self.assertTrue(np.allclose(init_dmat, supersystem.dmat[0] + supersystem.dmat[1]))
-        
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2))
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+    def test_unrestricted_supersystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857
+        '''
+        mol.basis = '3-21g'
+        mol.build()
+        env_method = 'm06'
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        He 1.0 20.0 0.0
+        He 3.0 20.0 0.0'''
+        mol2.basis = '3-21g'
+        mol2.build()
+
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True)
+
+        #Check SCF object
+        scf_obj = supersystem.fs_scf
+        comp_scf_obj = dft.UKS(gto.mole.conc_mol(mol, mol2))
+        self.assertEqual(type(scf_obj), type(comp_scf_obj))
+        self.assertEqual(scf_obj.xc, 'm06')
+
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2))
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+    def test_hsros_supersystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857
+        '''
+        mol.basis = '3-21g'
+        mol.spin = 2
+        mol.build()
+        env_method = 'm06'
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        He 1.0 20.0 0.0
+        He 3.0 20.0 0.0'''
+        mol2.basis = '3-21g'
+        mol2.build()
+
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+
+        #Check SCF object
+        scf_obj = supersystem.fs_scf
+        comp_scf_obj = dft.ROKS(gto.mole.conc_mol(mol, mol2))
+        self.assertEqual(type(scf_obj), type(comp_scf_obj))
+        self.assertEqual(scf_obj.xc, 'm06')
+
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2))
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+    def test_density_fitting_supersystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857
+        '''
+        mol.basis = '3-21g'
+        mol.build()
+        env_method = 'm06'
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        He 1.0 20.0 0.0
+        He 3.0 20.0 0.0'''
+        mol2.basis = '3-21g'
+        mol2.build()
+
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_density_fitting=True)
+
+        #Check SCF object
+        scf_obj = supersystem.fs_scf
+        from pyscf.df.df_jk import _DFHF
+        self.assertTrue(isinstance(scf_obj, _DFHF))
+        self.assertEqual(scf_obj.xc, 'm06')
+
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2))
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+    def test_density_init_supersystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        O  0.000000  0.000000  0.000000
+        H  0.758602  0.000000  0.504284
+        H  0.758602  0.000000  -0.504284'''
+        mol.basis = 'cc-pVDZ'
+        mol.build()
+        env_method = 'lda'
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        O  0.000000  10.000000  0.000000
+        H  0.758602  10.000000  0.504284
+        H  0.758602  10.000000  -0.504284'''
+        mol2.basis = 'cc-pVDZ'
+        mol2.build()
+        env_method = 'lda'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'lda', fs_initguess='minao')
+
+        scf_obj = supersystem.fs_scf
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2), key='minao')
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'lda', fs_initguess='1e')
+
+        scf_obj = supersystem.fs_scf
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2), key='1e')
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'lda', fs_initguess='atom')
+
+        scf_obj = supersystem.fs_scf
+        init_dmat = scf_obj.get_init_guess(gto.mole.conc_mol(mol, mol2), key='atom')
+        self.assertTrue(np.allclose(init_dmat, supersystem.get_dmat()))
 
     def test_custom_supersystem(self):
         mol = gto.Mole()
@@ -425,15 +632,15 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_initguess, 'readchk')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_conv, 1e-9)
+        self.assertEqual(supersystem.fs_conv, None)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
         self.assertEqual(supersystem.fs_shift, 0)
         self.assertEqual(supersystem.fs_smearsigma, 0)
         self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, 4)
-        self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.fs_verbose, 3)
+        self.assertEqual(supersystem.grid_level, None)
+        self.assertEqual(supersystem.rho_cutoff, None)
+        self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
 
         #Check density
@@ -482,15 +689,15 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_updatefock, 0)
 
         self.assertEqual(supersystem.fs_cycles, None)
-        self.assertEqual(supersystem.fs_conv, 1e-9)
+        self.assertEqual(supersystem.fs_conv, None)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
         self.assertEqual(supersystem.fs_shift, 0)
         self.assertEqual(supersystem.fs_smearsigma, 0)
         self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, 4)
-        self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.fs_verbose, 3)
+        self.assertEqual(supersystem.grid_level, None)
+        self.assertEqual(supersystem.rho_cutoff, None)
+        self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
@@ -506,7 +713,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
         self.assertEqual(len(supersystem.mol.atom_coords()), 5)
-        self.assertEqual(supersystem.mol._basis['ghost:H'], supersystem.mol._basis['H'])
+        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
 
     def test_totalghost_supersystem(self):
         mol = gto.Mole()
@@ -543,15 +750,15 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_initguess, 'minao')
         self.assertEqual(supersystem.ft_updatefock, 0)
 
-        self.assertEqual(supersystem.fs_conv, 1e-9)
+        self.assertEqual(supersystem.fs_conv, None)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
         self.assertEqual(supersystem.fs_shift, 0)
         self.assertEqual(supersystem.fs_smearsigma, 0)
         self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, 4)
-        self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.fs_verbose, 3)
+        self.assertEqual(supersystem.grid_level, None)
+        self.assertEqual(supersystem.rho_cutoff, None)
+        self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
@@ -566,7 +773,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
-        self.assertEqual(supersystem.mol._basis['ghost:H'], supersystem.mol._basis['H'])
+        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
         self.assertAlmostEqual(supersystem.mol.atom_coords()[3][0], 3.77945225, delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[3][1], 37.79452249, delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[3][2], 0.0, delta=1e-8)
@@ -611,15 +818,15 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.ft_updatefock, 0)
 
         self.assertEqual(supersystem.fs_cycles, None)
-        self.assertEqual(supersystem.fs_conv, 1e-9)
+        self.assertEqual(supersystem.fs_conv, None)
         self.assertEqual(supersystem.fs_grad, None)
         self.assertEqual(supersystem.fs_damp, 0)
         self.assertEqual(supersystem.fs_shift, 0)
         self.assertEqual(supersystem.fs_smearsigma, 0)
         self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, 4)
-        self.assertEqual(supersystem.rho_cutoff, 1e-7)
-        self.assertEqual(supersystem.fs_verbose, 3)
+        self.assertEqual(supersystem.grid_level, None)
+        self.assertEqual(supersystem.rho_cutoff, None)
+        self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
@@ -635,7 +842,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
         self.assertEqual(len(supersystem.mol.atom_coords()), 5)
-        self.assertEqual(supersystem.mol._basis['ghost:H'], supersystem.mol._basis['H'])
+        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
 
 if __name__ == "__main__":
     unittest.main()

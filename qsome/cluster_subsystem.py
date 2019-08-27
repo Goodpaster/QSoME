@@ -175,6 +175,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if filename == None:
             filename = os.getcwd() + '/temp.inp'
         self.filename = filename
+        self.chk_filename = os.path.splitext(self.filename)[0] + '.hdf5'
+        self.chkfile_index = None
         self.nproc = nproc
         self.pmem = pmem
         self.scr_dir = scrdir
@@ -189,8 +191,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                         np.zeros_like(self.env_hcore)]
         self.proj_pot = [np.zeros_like(self.env_hcore), 
                         np.zeros_like(self.env_hcore)]
-        self.fock = self.update_fock()
-        self.emb_fock = copy(self.fock)
+        self.subsys_fock = self.update_subsys_fock()
+        self.emb_fock = copy(self.subsys_fock)
+        if not (self.unrestricted or self.mol.spin != 0):
+            self.emb_fock = [copy(self.subsys_fock), copy(self.subsys_fock)]
         self.env_mo_coeff = [np.zeros_like(self.env_hcore), 
                              np.zeros_like(self.env_hcore)]
         self.env_mo_occ = [np.zeros_like(self.env_hcore[0]), 
@@ -283,6 +287,8 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         env_scf.verbose = verbose
         env_scf.damp = damp
         env_scf.level_shift = shift
+        if self.density_fitting:
+            env_scf = env_scf.density_fit()
         return env_scf
 
     def init_density(self, in_dmat=None, scf_obj=None, env_method=None, 
@@ -323,7 +329,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 initguess = self.env_initguess
 
             if initguess in ['atom', '1e', 'minao']:
-                dmat = scf_obj.get_init_guess(initguess)
+                dmat = scf_obj.get_init_guess(key=initguess)
+            elif initguess == 'submol':
+                scf_obj.kernel()
+                dmat = scf_obj.make_rdm1()
             else:
                 dmat = scf_obj.get_init_guess()
             if self.flip_ros:
@@ -333,15 +342,18 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
             return dmat
 
-    def update_fock(self, dmat=None, hcore=None):
+    def get_dmat(self):
+        return self.dmat
+
+    def update_subsys_fock(self, dmat=None, hcore=None):
 
         if dmat is None:
             dmat = self.dmat
         if hcore is None:
             hcore = self.env_hcore
 
-        self.fock = hcore + self.env_scf.get_veff(dm=dmat)
-        return self.fock
+        self.subsys_fock = hcore + self.env_scf.get_veff(dm=dmat)
+        return self.subsys_fock
 
 
     def get_env_elec_energy(self, env_method=None, fock=None,  dmat=None, 
@@ -370,15 +382,14 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if dmat is None:
             dmat = self.dmat
         if fock is None:
-            fock = self.update_fock()
+            fock = self.update_subsys_fock()
         if env_hcore is None:
             env_hcore = self.env_hcore
         if proj_pot is None:
             proj_pot = self.proj_pot
         if emb_pot is None:
-            #if self.emb_pot is not None:
-                #print ("Here2")
-                #emb_pot = self.emb_pot
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
@@ -389,18 +400,13 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     emb_pot = [self.emb_fock[0] - fock, 
                                self.emb_fock[1] - fock]
 
-        print ("Embpot")
-        print (emb_pot)
         e_emb = self.get_env_emb_e(emb_pot, dmat)
         e_proj = self.get_env_proj_e(proj_pot, dmat)
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
-        print ("sub")
-        print (subsys_e)
-        print ('emb')
-        print (e_emb)
         return subsys_e + e_emb + e_proj
 
-    def get_env_energy(self, mol=None):
+    def get_env_energy(self, mol=None, env_method=None, fock=None, dmat=None, 
+            env_hcore=None, proj_pot=None, emb_pot=None):
         """Return the total subsystem energy
 
         Parameters
@@ -409,9 +415,32 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             Subsystem Mole object (default is None).
         """
 
+        if env_method is None:
+            env_method = self.env_method
+        if dmat is None:
+            dmat = self.dmat
+        if fock is None:
+            fock = self.update_subsys_fock()
+        if env_hcore is None:
+            env_hcore = self.env_hcore
+        if proj_pot is None:
+            proj_pot = self.proj_pot
+        if emb_pot is None:
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
+            if self.emb_fock is None:
+                emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
+            else:
+                if self.unrestricted or self.mol.spin != 0:
+                    emb_pot = [self.emb_fock[0] - fock[0], 
+                               self.emb_fock[1] - fock[1]]
+                else:
+                    emb_pot = [self.emb_fock[0] - fock, 
+                               self.emb_fock[1] - fock]
+
         if mol is None:
             mol = self.mol
-        self.env_energy = self.get_env_elec_energy() + mol.energy_nuc()
+        self.env_energy = self.get_env_elec_energy(env_method=env_method, fock=fock, dmat=dmat, env_hcore=env_hcore, proj_pot=proj_pot, emb_pot=emb_pot) + mol.energy_nuc()
         return self.env_energy
 
     def get_env_nuc_grad(self, mol=None, scf_obj=None):
@@ -510,17 +539,17 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         """
 
         if emb_pot is None:
-            #if self.emb_pot is not None:
-            #    emb_pot = self.emb_pot
+            if self.emb_pot is not None:
+                emb_pot = self.emb_pot
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted or self.mol.spin != 0:
-                    emb_pot = [self.emb_fock[0] - fock[0], 
-                               self.emb_fock[1] - fock[1]]
+                    emb_pot = [self.emb_fock[0] - self.subsys_fock[0], 
+                               self.emb_fock[1] - self.subsys_fock[1]]
                 else:
-                    emb_pot = [self.emb_fock[0] - fock, 
-                               self.emb_fock[1] - fock]
+                    emb_pot = [self.emb_fock[0] - self.subsys_fock, 
+                               self.emb_fock[1] - self.subsys_fock]
         if dmat is None:
             dmat = self.dmat
 
@@ -535,6 +564,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
     def update_emb_fock(self, new_fock):
         self.emb_fock = new_fock
+        self.emb_pot = new_fock - self.subsys_fock
 
     def update_density(self, new_den):
        #Here convert the density matrix into the correct form for the subsystem.
@@ -551,18 +581,69 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.dmat = new_den
         return self.dmat
 
+    def save_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            filename = self.filename
+        if density is None:
+            density = self.get_dmat()
+        cubegen_fn = os.path.splitext(filename)[0] + '.cube'
+        cubegen.density(self.mol, cubegen_fn, density)
     
-    def save_orbitals(self, scf_obj=None, mo_occ=None):
+    def save_orbital_file(self, filename=None, scf_obj=None, mo_occ=None, mo_coeff=None, mo_energy=None):
         from pyscf.tools import molden
+        if filename is None:
+            filename = self.filename
         if scf_obj is None:
             scf_obj = self.env_scf
         if mo_occ is None:
-            mo_occ = scf_obj.mo_occ
-        molden_fn = os.path.splitext(self.filename)[0] + '.molden'
+            mo_occ = self.env_mo_occ
+        if mo_coeff is None:
+            mo_coeff = self.env_mo_coeff
+        if mo_energy is None:
+            mo_energy = self.env_mo_energy
+        molden_fn = os.path.splitext(filename)[0] + '.molden'
         with open(molden_fn, 'w') as fin:
             molden.header(scf_obj.mol, fin)
-            molden.orbital_coeff(scf_obj.mol, fin, scf_obj.mo_coeff, ene=scf_obj.mo_energy, occ=mo_occ)
-        molden.from_mo(scf_obj.mol, molden_fn, scf_obj.mo_coeff)
+            molden.orbital_coeff(self.mol, fin, mo_coeff, ene=mo_energy, occ=mo_occ)
+        molden.from_mo(scf_obj.mol, molden_fn, mo_coeff, ene=mo_energy, occ=mo_occ)
+
+    def set_chkfile_index(self, index):
+        self.chkfile_index = index
+
+    #This needs to be checked. I don't know if I can modify the hdf5 file after it is created by another object to add further groups.
+    def save_chkfile(self, filename=None):
+
+        if filename is None:
+            filename = self.chk_filename
+        if self.chkfile_index is None:
+            #Raise Error
+            pass
+
+        # check if file exists. 
+        if os.path.isfile(filename):
+            chk_index = self.chkfile_index
+            try:
+                with h5py.File(filename, 'r+') as hf:
+                    subsys_coeff = hf[f'subsystem:{chk_index}/mo_coeff']
+                    subsys_coeff[...] = subsystem.env_mo_coeff
+                    subsys_occ = hf[f'subsystem:{chk_index}/mo_occ']
+                    subsys_occ[...] = subsystem.env_mo_occ
+                    subsys_energy = hf[f'subsystem:{chk_index}/mo_energy']
+                    subsys_energy[...] = subsystem.env_mo_energy
+            except TypeError:
+                print ("Overwriting existing chkfile".center(80))
+                with h5py.File(self.chk_filename, 'w') as hf:
+                    sub_sys_data = hf.create_group(f'subsystem:{chk_index}')
+                    sub_sys_data.create_dataset('mo_coeff', data=subsystem.env_mo_coeff)
+                    sub_sys_data.create_dataset('mo_occ', data=subsystem.env_mo_occ)
+                    sub_sys_data.create_dataset('mo_energy', data=subsystem.env_mo_energy)
+        else:
+            with h5py.File(self.chk_filename, 'w') as hf:
+                pass
+
+    def read_chkfile(self, filename=None):
+        pass
 
     def diagonalize(self, scf_obj=None, subcycles=None, env_method=None,
                      fock=None, env_hcore=None, emb_pot=None, proj_pot=None, 
@@ -602,7 +683,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             proj_pot = self.proj_pot
         if fock is None:
             if self.emb_fock is None:
-                fock = self.update_fock()
+                fock = self.update_subsys_fock()
             else:
                 fock = self.emb_fock
         if env_hcore is None:
@@ -624,7 +705,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         for i in range(subcycles):
             #TODO This doesn't work.
             if i > 0:
-                fock = self.update_fock()
+                fock = self.update_subsys_fock()
                 if fock.ndim == 2.:
                    fock = np.array([fock, fock]) 
 
@@ -883,7 +964,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
     """ 
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
-                 hl_spin=None, hl_conv=1e-9, hl_grad=None, hl_cycles=100, 
+                 hl_spin=None, hl_conv=None, hl_grad=None, hl_cycles=None, 
                  hl_damp=0., hl_shift=0., hl_freeze_orbs=None, hl_ext=None, 
                  hl_unrestricted=False, hl_compress_approx=False, 
                  hl_density_fitting=False, hl_save_orbs=False, hl_save_density=False,

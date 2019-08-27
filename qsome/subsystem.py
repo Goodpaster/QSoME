@@ -30,5 +30,5 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def save_orbitals(self):
+    def save_orbital_file(self):
         pass
