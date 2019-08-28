@@ -118,7 +118,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
     def test_density_init_sub(self):
 
@@ -194,7 +194,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
     def test_ghost_subsystem(self):
         mol = gto.Mole()
@@ -222,7 +222,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
 class TestActiveSubSystem(unittest.TestCase):
 
