@@ -8,7 +8,7 @@ import re
 from copy import copy
 
 from qsome import cluster_subsystem, cluster_supersystem
-from pyscf import gto, lib, scf, dft, cc
+from pyscf import gto, lib, scf, dft, cc, mp
 
 import numpy as np
 
@@ -472,7 +472,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         test_scf.max_cycle = 0
         test_scf.kernel(dm0=correct_dmat)
         correct_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(correct_dmat, subsys.hl_scf.make_rdm1()))
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
 
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="minao")
         subsys_hl_e = subsys.hl_in_env_energy()
@@ -481,7 +481,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         test_scf.max_cycle = 0
         test_scf.kernel(dm0=correct_dmat)
         correct_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(correct_dmat, subsys.hl_scf.make_rdm1()))
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
 
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="atom")
         subsys_hl_e = subsys.hl_in_env_energy()
@@ -490,7 +490,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         test_scf.max_cycle = 0
         test_scf.kernel(dm0=correct_dmat)
         correct_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(correct_dmat, subsys.hl_scf.make_rdm1()))
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
 
         #Use the embedded density as the hl guess.
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="ft")
@@ -499,7 +499,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         test_scf.max_cycle = 0
         test_scf.kernel(dm0=subsys.get_dmat())
         correct_dmat = test_scf.make_rdm1()
-        self.assertTrue(np.allclose(correct_dmat, subsys.hl_scf.make_rdm1()))
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
 
     #@unittest.skip
     def test_hf_in_env_energy(self):
@@ -563,7 +563,58 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_cc_e = true_cc.kernel()[0]
         self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
 
+    def test_mp_in_env_energy(self):
+        # Closed shell
+        hl_method = 'mp2'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method)
+        subsys_hl_e = subsys.hl_in_env_energy()
+        true_scf = scf.RHF(self.cs_mol)
+        true_hf_e = true_scf.kernel()
+        true_mp = mp.MP2(true_scf)
+        true_mp_e = true_mp.kernel()[0]
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_mp_e, delta=1e-10)
+
+        # Open shell
+        hl_method = 'mp2'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_unrestricted=True)
+        subsys_hl_e = subsys.hl_in_env_energy()
+        true_scf = scf.UHF(self.os_mol)
+        true_hf_e = true_scf.kernel()
+        true_mp = mp.UMP2(true_scf)
+        true_mp_e = true_mp.kernel()[0]
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_mp_e, delta=1e-10)
+
     def test_cas_in_env_energy(self):
+        pass
+
+    def test_ci_in_env_energy(self):
+        pass
+
+    def test_dmrg_in_env_energy(self):
+        pass
+
+    def test_gw_in_env_energy(self):
+        pass
+
+    def test_hci_in_env_energy(self):
+        pass
+
+    def test_icmpspt_in_env_energy(self):
+        pass
+
+    def test_mrpt_in_env_energy(self):
+        pass
+
+    def test_shciscf_in_env_energy(self):
+        pass
+
+    def test_fci_in_env_energy(self):
+        pass
+
+    def test_fciqmc_in_env_energy(self):
+        pass
+
+    def test_fcidump_in_env_energy(self):
         pass
 
 

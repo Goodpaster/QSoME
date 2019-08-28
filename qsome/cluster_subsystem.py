@@ -4,7 +4,7 @@
 
 import re
 from qsome import subsystem, custom_pyscf_methods, molpro_calc, comb_diis
-from pyscf import gto, scf, dft, cc, mcscf, tools
+from pyscf import gto, scf, dft, cc, mcscf, tools, mp
 from pyscf.cc import ccsd_t, uccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
@@ -953,7 +953,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         Get the high level energy embedded into the total system.
     """ 
 
-    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
+    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None, hl_sr_method=None,
                  hl_spin=None, hl_conv=None, hl_grad=None, hl_cycles=None, 
                  hl_damp=0., hl_shift=0., hl_freeze_orbs=None, hl_ext=None, 
                  hl_unrestricted=False, hl_compress_approx=False, 
@@ -997,6 +997,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_method = hl_method
         self.hl_initguess = hl_initguess
+        self.hl_sr_method = hl_sr_method
         self.hl_spin = hl_spin
         self.hl_conv = hl_conv
         self.hl_grad = hl_grad
@@ -1060,7 +1061,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                              hl_conv=None, hl_grad=None, 
                              hl_shift=None, hl_damp=None, 
                              hl_cycles=None, hl_initguess=None,
-                             hl_frozen=None):
+                             hl_frozen=None, hl_sr_method=None):
 
         if mol is None:
             mol = self.mol
@@ -1105,235 +1106,145 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_initguess = self.hl_initguess
         #if hl_frozen is None:
         #    hl_frozen = self.hl_frozen
+        if hl_sr_method is None:
+            hl_sr_method = self.hl_sr_method
 
         hl_energy = 0.0
+        #Determine which method to use for the single reference orbitals.
+        #If it is None, or hf use hf. Otherwise assume it is a dft functional.
+        #If the method is a dft method and the sr is None, do sr as the dft method.
+        #If the method is a dft method and the sr is not none, do sr and use the density to seed the method.
+
+        hf_aliases = ['hf', 'uhf', 'rhf']
+        cc_aliases = ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']
+        mp_aliases = ['mp2']
+        known_methods = hf_aliases + cc_aliases + mp_aliases
+        if hl_sr_method is None:
+            if hl_method not in known_methods:
+                hl_sr_method = hl_method
+
         if self.hl_ext is not None:
             print ("use external method for hl calculation")
         else:
-            if self.hl_unrestricted:
-                print ("use unrestricted Methods")
-                if hl_method == 'hf' or hl_method == 'uhf':
-                    hl_scf = scf.UHF(mol)
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
+            print ('determine whether to use hf or dft for initial guess')
+            if (hl_sr_method is None or hl_sr_method in hf_aliases):
+                #Use HF for initial guesses
+                if self.hl_unrestricted:
+                    hl_sr_scf = scf.UHF(mol)
                     #Update the fock and electronic energies to use custom methods.
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_get_fock(hl_scf, 
+                    hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uhf_get_fock(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_energy_elec(hl_scf, 
+                    hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uhf_energy_elec(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-
-                    if hl_initguess == 'ft':
-                        dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        dmat = hl_scf.get_init_guess()
-
-                    hl_energy = hl_scf.kernel(dm0=dmat)
-                   
-                elif hl_method == 'ccsd':
-
-                    hl_scf = scf.UHF(mol)
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
-                    #Update the fock and electronic energies to use custom methods.
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_get_fock(hl_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.uhf_energy_elec(hl_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-
-                    if hl_initguess == 'ft':
-                        dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        dmat = hl_scf.get_init_guess()
-
-                    hl_energy = hl_scf.kernel(dm0=dmat)
-
-                    hl_cc = cc.UCCSD(hl_scf)#, frozen=hl_frozen)
-                    if hl_conv is not None:
-                        hl_cc.conv_tol = hl_conv
-                    if hl_cycles is not None:
-                        hl_cc.max_cycle = hl_cycles
-                    ecc, t1, t2 = hl_cc.kernel()
-                    hl_energy += ecc
-
-
-
-                #dft as high level
+                elif self.mol.spin != 0:
+                    print ('restricted open shell hl')
                 else:
-                    hl_scf = scf.UKS(mol)
-                    hl_scf.xc = hl_method
+                    hl_sr_scf = scf.RHF(mol)
+                    #Update the fock and electronic energies to use custom methods.
+                    hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rhf_get_fock(hl_sr_scf, 
+                        (emb_pot[0] + emb_pot[1])/2., (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
+                    hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rhf_energy_elec(hl_sr_scf, 
+                        (emb_pot[0] + emb_pot[1])/2., (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
 
-                    #These things may be adjusted. For now just match the env settings.
-                    hl_scf.grids = self.env_scf.grids
-                    hl_scf.small_rho_cutoff = self.env_scf.small_rho_cutoff
-
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
-                    if hl_initguess == 'ft':
-                        init_dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        init_dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        init_dmat = hl_scf.get_init_guess()
-
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_get_fock(hl_scf, 
-                        (emb_pot[0] + emb_pot[1])/2.,
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_energy_elec(hl_scf, 
-                        (emb_pot[0] + emb_pot[1])/2., 
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-
-                    hl_energy = hl_scf.kernel(dm0=init_dmat)
-                    
-
-            elif mol.spin != 0:
-                print ('use ro methods')
             else:
-                print ('use restricted closed shell methods')
-                if hl_method == 'hf' or hl_method == 'uhf':
-                    hl_scf = scf.RHF(mol)
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
+                #Use DFT for initial guesses
+                if self.hl_unrestricted:
+                    hl_sr_scf = scf.UKS(mol)
                     #Update the fock and electronic energies to use custom methods.
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_get_fock(hl_scf, 
+                    hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uks_get_fock(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_energy_elec(hl_scf, 
+                    hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.uks_energy_elec(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))
-
-                    if hl_initguess == 'ft':
-                        init_dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        init_dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        init_dmat = hl_scf.get_init_guess()
-
-                    hl_energy = hl_scf.kernel(dm0=init_dmat)
-
-                elif hl_method == 'ccsd':
-
-                    hl_scf = scf.RHF(mol)
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
-                    #Update the fock and electronic energies to use custom methods.
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_get_fock(hl_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rhf_energy_elec(hl_scf, 
-                        emb_pot, proj_pot, *args, **kwargs))
-
-                    if hl_initguess == 'ft':
-                        dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        dmat = hl_scf.get_init_guess()
-
-                    hl_energy = hl_scf.kernel(dm0=dmat)
-
-                    hl_cc = cc.CCSD(hl_scf)#, frozen=hl_frozen)
-                    if hl_conv is not None:
-                        hl_cc.conv_tol = hl_conv
-                    if hl_cycles is not None:
-                        hl_cc.max_cycle = hl_cycles
-                    ecc, t1, t2 = hl_cc.kernel()
-                    hl_energy += ecc
-
-                #DFT as high level
+                elif self.mol.spin != 0:
+                    print ('restricted open shell hl')
                 else:
+                    hl_sr_scf = scf.RKS(mol)
+                    #Update the fock and electronic energies to use custom methods.
+                    hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rks_get_fock(hl_sr_scf, 
+                        (emb_pot[0] + emb_pot[1])/2., (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
+                    hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+                        custom_pyscf_methods.rks_energy_elec(hl_sr_scf, 
+                        (emb_pot[0] + emb_pot[1])/2., (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
+                #Set grid, rho and xc
+                hl_sr_scf.xc = hl_sr_method #Change
+                
 
-                    hl_scf = scf.RKS(mol)
-                    hl_scf.xc = hl_method
+            #Set parameters
+            if hl_conv is not None:
+                hl_sr_scf.conv_tol = hl_conv
+            if hl_grad is not None:
+                hl_sr_scf.conv_tol_grad = hl_grad
+            if hl_cycles is not None:
+                hl_sr_scf.max_cycle = hl_cycles
 
-                    #These things may be adjusted. For now just match the env settings.
-                    hl_scf.grids = self.env_scf.grids
-                    hl_scf.small_rho_cutoff = self.env_scf.small_rho_cutoff
-
-                    if hl_conv is not None:
-                        hl_scf.conv_tol = hl_conv
-                    if hl_grad is not None:
-                        hl_scf.conv_tol_grad = hl_grad
-                    if hl_cycles is not None:
-                        hl_scf.max_cycle = hl_cycles
-
-                    hl_scf.level_shift = hl_shift
-                    hl_scf.damp = hl_damp
-
-                    if hl_initguess == 'ft':
-                        init_dmat = self.get_dmat()
-                    elif hl_initguess is not None:
-                        init_dmat = hl_scf.get_init_guess(key=hl_initguess)
-                    else:
-                        init_dmat = hl_scf.get_init_guess()
-
-                    hl_scf.get_fock = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_get_fock(hl_scf, 
-                        (emb_pot[0] + emb_pot[1])/2.,
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-                    hl_scf.energy_elec = lambda *args, **kwargs: (
-                        custom_pyscf_methods.rks_energy_elec(hl_scf, 
-                        (emb_pot[0] + emb_pot[1])/2., 
-                        (proj_pot[0] + proj_pot[1])/2., *args, **kwargs))
-
-                    hl_energy = hl_scf.kernel(dm0=init_dmat)
-
-        self.hl_scf = hl_scf
-        self.hl_energy = hl_energy
-        return hl_energy
+            hl_sr_scf.level_shift = hl_shift
+            hl_sr_scf.damp = hl_damp
 
 
+            if hl_initguess == 'ft':
+                dmat = self.get_dmat()
+            elif hl_initguess is not None:
+                dmat = hl_sr_scf.get_init_guess(key=hl_initguess)
+            else:
+                dmat = hl_sr_scf.get_init_guess()
 
+            hl_energy = hl_sr_scf.kernel(dm0=dmat)
+            self.hl_sr_scf = hl_sr_scf
+
+            if hl_method in hf_aliases:
+                self.hl_energy = hl_energy
+                return hl_energy
+                   
+            elif hl_method in cc_aliases:
+
+                #If dft for sr method, need to convert to hf.
+                if self.hl_unrestricted:
+                    hl_cc = cc.UCCSD(hl_sr_scf)#, frozen=hl_frozen)
+                elif self.mol.spin != 0:
+                    print ("ro ccsd")
+                else:
+                    hl_cc = cc.CCSD(hl_sr_scf)#, frozen=hl_frozen)
+
+                if hl_conv is not None:
+                    hl_cc.conv_tol = hl_conv
+                if hl_cycles is not None:
+                    hl_cc.max_cycle = hl_cycles
+                ecc, t1, t2 = hl_cc.kernel()
+                hl_energy += ecc
+                self.hl_energy = hl_energy
+                return hl_energy
+
+            elif hl_method in mp_aliases:
+                #If dft for sr method, need to convert to hf.
+                if self.hl_unrestricted:
+                    hl_mp = mp.UMP2(hl_sr_scf)#, frozen=hl_frozen)
+                elif self.mol.spin != 0:
+                    print ("ro mp2")
+                else:
+                    hl_mp = mp.MP2(hl_sr_scf)#, frozen=hl_frozen)
+
+                if hl_conv is not None:
+                    hl_mp.conv_tol = hl_conv
+                if hl_cycles is not None:
+                    hl_mp.max_cycle = hl_cycles
+                emp, t1 = hl_mp.kernel()
+                hl_energy += emp
+                self.hl_energy = hl_energy
+                return hl_energy
+
+            #dft as high level
+            #Assume used for the initial starting orbital guess.
+            else:
+                self.hl_energy = hl_energy
+                return hl_energy
+                
            
     def hl_in_env_energy2(self, mol=None, dmat=None, emb_pot=None, 
                              proj_pot=None, hl_method=None, 
