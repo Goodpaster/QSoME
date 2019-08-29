@@ -331,7 +331,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         subsys.set_chkfile_index('0')
         subsys.diagonalize()
         test_ftmp = tempfile.NamedTemporaryFile()
-        subsys.save_chkfile(filename=test_ftmp.name)
+        subsys.save_chkfile(filename=test_ftmp.name + '.hdf5')
 
         with h5py.File(test_ftmp.name + '.hdf5', 'r') as hf:
             subsys_coeff = hf[f'subsystem:0/mo_coeff']

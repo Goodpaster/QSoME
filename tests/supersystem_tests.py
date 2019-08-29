@@ -28,22 +28,18 @@ import numpy as np
 
 class TestClusterSuperSystemMethods(unittest.TestCase):
 
-    @unittest.skip
-    def test_get_supersystem_energy(self):
-
-        #Closed Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
+    def setUp(self):
+        gh_mol = gto.Mole()
+        gh_mol.verbose = 3
+        gh_mol.atom = '''
         H 0. -2.757 2.857
         H 0. 2.757 2.857
         ghost:H 0. 0. 2.857
         '''
-        mol.basis = '3-21g'
-        mol.build()
-        env_method = 'm06'
-        hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+        gh_mol.basis = '3-21g'
+        gh_mol.build()
+        self.env_method = 'lda'
+        self.cs_gh_mol_1 = gh_mol
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -52,10 +48,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         He 3.0 20.0 0.0'''
         mol2.basis = '3-21g'
         mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
-        supsystem_e = supersystem.get_supersystem_energy()
+        self.cs_mol_2 = mol2
 
         mol3 = gto.Mole()
         mol3.verbose = 3
@@ -68,58 +61,84 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         '''
         mol3.basis = '3-21g'
         mol3.build()
-        test_scf = dft.RKS(mol3)
+        self.cs_mol_sup1 = mol3
+
+        os_mol1 = gto.Mole()
+        os_mol1.verbose = 3
+        os_mol1.atom = '''
+        Li 0.0 0.0 0.0
+        '''
+        os_mol1.basis = '3-21g'
+        os_mol1.spin = 1
+        os_mol1.build()
+        self.os_mol_1 = os_mol1
+
+        mol3 = gto.Mole()
+        mol3.verbose = 3
+        mol3.atom = '''
+        He 3.0 0.0 0.0'''
+        mol3.basis = '3-21g'
+        mol3.build()
+        self.cs_mol_3 = mol3
+
+        mol4 = gto.Mole()
+        mol4.verbose = 3
+        mol4.atom = '''
+        Li 0.0 0.0 0.0
+        He 3.0 0.0 0.0
+        '''
+        mol4.basis = '3-21g'
+        mol4.spin = 1
+        mol4.build()
+        self.os_mol_sup1 = mol4
+
+        mol5 = gto.Mole()
+        mol5.verbose = 3
+        mol5.atom = '''
+        H 1.595 0.0 0.0'''
+        mol5.basis = '3-21g'
+        mol5.spin = -1
+        mol5.build()
+        self.os_mol_2 = mol5
+
+        mol6 = gto.Mole()
+        mol6.verbose = 3
+        mol6.atom = '''
+        Li 0.0 0.0 0.0
+        H 1.595 0.0 0.0'''
+        mol6.basis = '3-21g'
+        mol6.build()
+        self.os_mol_sup2 = mol6
+
+
+    #@unittest.skip
+    def test_get_supersystem_energy(self):
+
+        #Closed Shell
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
+
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supsystem_e = supersystem.get_supersystem_energy()
+
+        test_scf = dft.RKS(self.cs_mol_sup1)
         test_scf.xc = 'b3lyp'
-        test_scf.conv_tol = supersystem.fs_conv
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        test_scf.grids = grids
         test_e = test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
         self.assertAlmostEqual(test_e, supsystem_e)
         self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1])))
 
         # Unrestricted Open Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        Li 0.0 0.0 0.0
-        '''
-        mol.basis = 'aug-cc-pVDZ'
-        mol.spin = 1
-        mol.build()
-        env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_unrestricted=True, unrestricted=True)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol_1, self.env_method, hl_method, hl_unrestricted=True, unrestricted=True)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        He 3.0 0.0 0.0'''
-        mol2.basis = 'aug-cc-pVDZ'
-        mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_3, self.env_method, unrestricted=True)
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', fs_unrestricted=True)
         supsystem_e = supersystem.get_supersystem_energy()
 
-        mol3 = gto.Mole()
-        mol3.verbose = 3
-        mol3.atom = '''
-        Li 0.0 0.0 0.0
-        He 3.0 0.0 0.0
-        '''
-        mol3.basis = 'aug-cc-pVDZ'
-        mol3.spin = 1
-        mol3.build()
-        test_scf = dft.UKS(mol3)
+        test_scf = dft.UKS(self.os_mol_sup1)
         test_scf.xc = 'b3lyp'
-        test_scf.conv_tol = supersystem.fs_conv
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        test_scf.grids = grids
         test_e = test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
         self.assertAlmostEqual(test_e, supsystem_e)
@@ -233,58 +252,25 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
     def test_get_emb_subsys_elec_energy(self):
         pass 
 
-    @unittest.skip
+    #@unittest.skip
     def test_get_emb_subsys_elec_energy(self):
 
         # Closed Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857
-        ghost:H 0. 0. 2.857
-        '''
-        mol.basis = '3-21g'
-        mol.build()
-        env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        He 1.0 20.0 0.0
-        He 3.0 20.0 0.0'''
-        mol2.basis = '3-21g'
-        mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
 
-        mol3 = gto.Mole()
-        mol3.verbose = 3
-        mol3.atom ='''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857
-        ghost:H 0. 0. 2.857
-        He 1.0 20.0 0.0
-        He 3.0 20.0 0.0'''
-        mol3.basis = '3-21g'
-        mol3.build()
-        mf = dft.RKS(mol3)
+        mf = dft.RKS(self.cs_mol_sup1)
         mf.xc = 'b3lyp'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
-        mf.small_rho_cutoff = supersystem.rho_cutoff
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
         #get energies of two embedded systems. 
         s2s = supersystem.sub2sup
-        mf_init_dmat[np.ix_(s2s[0], s2s[0])] += subsys.dmat
-        mf_init_dmat[np.ix_(s2s[1], s2s[1])] += subsys2.dmat
+        mf_init_dmat[np.ix_(s2s[0], s2s[0])] += subsys.get_dmat()
+        mf_init_dmat[np.ix_(s2s[1], s2s[1])] += subsys2.get_dmat()
         mf_hcore = mf.get_hcore()
         mf_init_veff = mf.get_veff(dm=mf_init_dmat)
 
@@ -292,8 +278,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         hcore_1_emb = mf_hcore[np.ix_(s2s[0], s2s[0])]
         veff_1_emb = mf_init_veff[np.ix_(s2s[0], s2s[0])]
         mf_1 = dft.RKS(mol)
-        mf_1.xc = 'm06'
-        mf_1.grids = supersystem.fs_scf.grids
+        mf_1.xc = self.env_method
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = veff_1_emb - veff_1
@@ -303,8 +288,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         hcore_2_emb = mf_hcore[np.ix_(s2s[1], s2s[1])]
         veff_2_emb = mf_init_veff[np.ix_(s2s[1], s2s[1])]
         mf_2 = dft.RKS(mol2)
-        mf_2.xc = 'm06'
-        mf_2.grids = supersystem.fs_scf.grids
+        mf_2.xc = self.env_method
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = veff_2_emb - veff_2
@@ -316,45 +300,15 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertAlmostEqual(test_sub2_e, sub2_e, delta=1e-8)
 
         # Unrestricted Open Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        Li 0.0 0.0 0.0
-        '''
-        mol.basis = '3-21g'
-        mol.spin = 1
-        mol.build()
-        env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, unrestricted=True, hl_unrestricted=True)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol_1, self.env_method, hl_method, unrestricted=True, hl_unrestricted=True)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        H 1.595 0.0 0.0'''
-        mol2.basis = '3-21g'
-        mol2.spin = -1
-        mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol_2, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, ft_initguess='minao')
 
         supsystem_e = supersystem.get_supersystem_energy()
-        mol3 = gto.Mole()
-        mol3.verbose = 3
-        mol3.atom = '''
-        Li 0.0 0.0 0.0
-        H 1.595 0.0 0.0
-        '''
-        mol3.basis = '3-21g'
-        mol3.build()
-        mf = dft.RKS(mol3)
-        mf.xc = 'm06'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
-        mf.small_rho_cutoff = supersystem.rho_cutoff
+        mf = dft.RKS(self.os_mol_sup2)
+        mf.xc = self.env_method
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
@@ -368,9 +322,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         dm_1 = [mf_init_dmat[np.ix_(s2s[0], s2s[0])]/2., mf_init_dmat[np.ix_(s2s[0], s2s[0])]/2.]
         hcore_1_emb = mf_hcore[np.ix_(s2s[0], s2s[0])]
         veff_1_emb = [mf_init_veff[np.ix_(s2s[0], s2s[0])], mf_init_veff[np.ix_(s2s[0], s2s[0])]]
-        mf_1 = dft.UKS(mol)
-        mf_1.xc = 'm06'
-        mf_1.grids = supersystem.fs_scf.grids
+        mf_1 = dft.UKS(self.os_mol_1)
+        mf_1.xc = self.env_method
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = [veff_1_emb[0] - veff_1[0], veff_1_emb[1] - veff_1[1]]
@@ -379,9 +332,8 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         dm_2 = [mf_init_dmat[np.ix_(s2s[1], s2s[1])]/2., mf_init_dmat[np.ix_(s2s[1], s2s[1])]/2.]
         hcore_2_emb = mf_hcore[np.ix_(s2s[1], s2s[1])]
         veff_2_emb = [mf_init_veff[np.ix_(s2s[1], s2s[1])], mf_init_veff[np.ix_(s2s[1], s2s[1])]]
-        mf_2 = dft.UKS(mol2)
-        mf_2.xc = 'm06'
-        mf_2.grids = supersystem.fs_scf.grids
+        mf_2 = dft.UKS(self.os_mol_2)
+        mf_2.xc = self.env_method
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = [veff_2_emb[0] - veff_2[0], veff_2_emb[1] - veff_2[1]]
@@ -400,28 +352,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
     @unittest.skip
     def test_get_hl_energy(self):
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857
-        ghost:H 0. 0. 2.857
-        '''
-        mol.basis = '3-21g'
-        mol.build()
-        env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        He 1.0 20.0 0.0
-        He 3.0 20.0 0.0'''
-        mol2.basis = '3-21g'
-        mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao') 
         pass
 
@@ -429,52 +363,19 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
     def test_correct_hl_energy(self):
         pass
 
-    @unittest.skip
+    #@unittest.skip
     def test_update_fock(self):
 
         # Closed Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857
-        ghost:H 0. 0. 2.857
-        '''
-        mol.basis = '3-21g'
-        mol.build()
-        env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        He 1.0 20.0 0.0
-        He 3.0 20.0 0.0'''
-        mol2.basis = '3-21g'
-        mol2.build()
-        env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
         supersystem.update_fock()
 
-        mol3 = gto.Mole()
-        mol3.verbose = 3
-        mol3.atom ='''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857
-        ghost:H 0. 0. 2.857
-        He 1.0 20.0 0.0
-        He 3.0 20.0 0.0'''
-        mol3.basis = '3-21g'
-        mol3.build()
-        mf = dft.RKS(mol3)
+        mf = dft.RKS(self.cs_mol_sup1)
         mf.xc = 'b3lyp'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
-        mf.small_rho_cutoff = supersystem.rho_cutoff
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
         #get energies of two embedded systems. 
@@ -492,45 +393,15 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_fock2, supersystem.subsystems[1].emb_fock[0]))
 
         # Unrestricted Open Shell
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        Li 0.0 0.0 0.0
-        '''
-        mol.basis = '3-21g'
-        mol.spin = 1
-        mol.build()
-        env_method = 'um06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol_1, self.env_method, hl_method, unrestricted=True)
 
-        mol2 = gto.Mole()
-        mol2.verbose = 3
-        mol2.atom = '''
-        H 1.595 0.0 0.0'''
-        mol2.basis = '3-21g'
-        mol2.spin = -1
-        mol2.build()
-        env_method = 'um06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol_2, self.env_method, unrestricted=True)
         supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
         supersystem.update_fock()
 
-        mol3 = gto.Mole()
-        mol3.verbose = 3
-        mol3.atom = '''
-        Li 0.0 0.0 0.0
-        H 1.595 0.0 0.0
-        '''
-        mol3.basis = '3-21g'
-        mol3.build()
-        mf = dft.UKS(mol3)
+        mf = dft.UKS(self.os_mol_sup2)
         mf.xc = 'm06'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
-        mf.small_rho_cutoff = supersystem.rho_cutoff
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
@@ -553,7 +424,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_fock2[0], supersystem.subsystems[1].emb_fock[0]))
         self.assertTrue(np.allclose(test_fock2[1], supersystem.subsystems[1].emb_fock[1]))
 
-    @unittest.skip
+    #@unittest.skip
     def test_update_proj_pot(self):
         """This test is crude, but the only other way to do it would 
             be to actually calculate the projection operator."""
@@ -616,7 +487,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         # Unrestricted Open Shell
 
-    @unittest.skip
+    #@unittest.skip
     def test_read_chkfile(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -654,7 +525,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         # Unrestricted Open Shell 
 
-    @unittest.skip
+    #@unittest.skip
     def test_save_chkfile(self):
         mol = gto.Mole()
         mol.verbose = 3

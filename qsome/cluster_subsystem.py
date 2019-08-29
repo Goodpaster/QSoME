@@ -318,6 +318,22 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             if initguess is None:
                 initguess = self.env_initguess
 
+            if initguess == 'readchk':
+                is_chkfile = self.read_chkfile()
+                if is_chkfile:
+                    if (np.any(self.env_mo_coeff) 
+                      and np.any(self.env_mo_occ)):
+                        dmat = [0,0]
+                        dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]),
+                                          self.env_mo_coeff[0].T.conjugate())
+                        dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]),
+                                          self.env_mo_coeff[1].T.conjugate())
+                    else:
+                        self.env_initguess = 'supmol'
+                else:
+                    self.env_initguess = 'supmol'
+
+
             if initguess in ['atom', '1e', 'minao']:
                 dmat = scf_obj.get_init_guess(key=initguess)
             elif initguess == 'submol':
@@ -333,6 +349,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             #Dmat always stored [alpha, beta]
             if dmat.ndim == 2:
                 dmat = [dmat/2., dmat/2.]
+            self.dmat = dmat
             return dmat
 
     def get_dmat(self):
@@ -595,9 +612,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
             filename = self.chk_filename
         assert(self.chkfile_index is not None),'Need to set chkfile_index'
 
-        filename = os.path.splitext(filename)[0] + '.hdf5'
         chk_index = self.chkfile_index
-
         # check if file exists. 
         if os.path.isfile(filename):
             try:
@@ -610,6 +625,13 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     subsys_energy[...] = self.env_mo_energy
             except TypeError:
                 print ("Overwriting existing chkfile".center(80))
+                with h5py.File(filename, 'w') as hf:
+                    sub_sys_data = hf.create_group(f'subsystem:{chk_index}')
+                    sub_sys_data.create_dataset('mo_coeff', data=self.env_mo_coeff)
+                    sub_sys_data.create_dataset('mo_occ', data=self.env_mo_occ)
+                    sub_sys_data.create_dataset('mo_energy', data=self.env_mo_energy)
+            except KeyError:
+                print ("Missing subsystem data in chkfile".center(80))
                 with h5py.File(filename, 'w') as hf:
                     sub_sys_data = hf.create_group(f'subsystem:{chk_index}')
                     sub_sys_data.create_dataset('mo_coeff', data=self.env_mo_coeff)
@@ -642,6 +664,9 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     self.env_mo_energy = subsys_energy[:]
             except TypeError:
                 print ("chkfile improperly formatted".center(80))
+                return False
+            except KeyError:
+                print ("Missing subsystem data in chkfile".center(80))
                 return False
         else:
             print ("chkfile NOT found".center(80))

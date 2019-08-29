@@ -404,7 +404,7 @@ class TestSuperSystem(unittest.TestCase):
 
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True, chkfile_index=0)
 
         #Check SCF object
         scf_obj = supersystem.fs_scf
@@ -592,10 +592,13 @@ class TestSuperSystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol, '1e')
-        self.assertTrue(np.allclose(init_dmat, subsys.dmat))
+        print (init_dmat)
+        print (subsys.get_dmat())
+        print (subsys.env_initguess)
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
 
         init_dmat = scf.get_init_guess(mol2, '1e')
-        self.assertTrue(np.allclose(init_dmat, subsys2.dmat))
+        self.assertTrue(np.allclose(init_dmat, subsys2.get_dmat()))
 
         init_dmat2 = scf.hf.init_guess_by_atom(gto.mole.conc_mol(mol, mol2))
         self.assertTrue(np.allclose(init_dmat2, supersystem.dmat[0] + supersystem.dmat[1]))
@@ -622,7 +625,7 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='readchk')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='readchk', chkfile_index=0)
         self.assertEqual(supersystem.fs_method, 'm06')
         self.assertEqual(supersystem.proj_oper, 'huz')
         self.assertEqual(supersystem.filename, os.getcwd()+"/temp.inp")
@@ -649,7 +652,7 @@ class TestSuperSystem(unittest.TestCase):
         old_sub2_dmat = copy(subsys2.dmat)
 
         #This isn't working because the save doesn't have mo_coeffs or mo_orbitals to store. Only a density fragment. 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='readchk')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='readchk', chkfile_index=0, fs_initguess='readchk')
         self.assertTrue(np.allclose(old_sup_dmat, supersystem.dmat))
         self.assertTrue(np.allclose(old_sub1_dmat, subsys.dmat))
         self.assertTrue(np.allclose(old_sub2_dmat, subsys2.dmat))
@@ -703,10 +706,10 @@ class TestSuperSystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.get_dmat()))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
@@ -764,10 +767,10 @@ class TestSuperSystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.get_dmat()))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
@@ -832,10 +835,10 @@ class TestSuperSystem(unittest.TestCase):
 
         #Check density
         init_dmat = scf.get_init_guess(mol)
-        self.assertTrue(np.array_equal(init_dmat, subsys.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys.get_dmat()))
 
         init_dmat = scf.get_init_guess(mol2)
-        self.assertTrue(np.array_equal(init_dmat, subsys2.dmat))
+        self.assertTrue(np.array_equal(init_dmat, subsys2.get_dmat()))
 
         #Check concat mols
         self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)

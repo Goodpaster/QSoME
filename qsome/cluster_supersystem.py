@@ -240,7 +240,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                  fs_initguess=None, fs_conv=None, fs_grad=None, fs_cycles=None,
                  fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=None, 
                  fs_rhocutoff=None, fs_verbose=None, fs_unrestricted=False, 
-                 fs_density_fitting=False, compare_density=False, 
+                 fs_density_fitting=False, compare_density=False, chkfile_index=None,
                  fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
                  ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, ft_setfermi=None,
                  ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
@@ -338,6 +338,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         self.subsystems = subsystems
         self.env_order = env_order
+        self.set_chkfile_index(chkfile_index)
 
         self.fs_method = fs_method
         self.fs_smearsigma = fs_smearsigma
@@ -401,7 +402,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.fs_energy = None
         self.fs_nuc_grad = None
 
-        self.dmat = self.init_density()
+        self.init_density()
         self.dftindft_dmat = [None, None]
         self.save_chkfile()
 
@@ -601,15 +602,49 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         super_chk = (self.fs_initguess == 'readchk')
         s2s = self.sub2sup
 
+        # Initialize supersystem density.
+        if self.ft_initguess == 'supmol':
+            self.get_supersystem_energy(initguess=super_chk)
+        if self.fs_initguess == 'readchk': 
+            is_chkfile = self.read_chkfile()
+            if is_chkfile:
+                if (np.any(self.mo_coeff) and np.any(self.mo_occ)):
+                    dmat[0] = np.dot((self.mo_coeff[0] * self.mo_occ[0]), 
+                                      self.mo_coeff[0].T.conjugate())
+                    dmat[1] = np.dot((self.mo_coeff[1] * self.mo_occ[1]), 
+                                      self.mo_coeff[1].T.conjugate())
+                else:
+                    temp_dmat = self.fs_scf.get_init_guess()
+                    if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
+                        t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
+                        temp_dmat = t_d
+                    dmat = temp_dmat
+        else:
+            if self.fs_initguess == "ft":
+                pass
+            elif self.fs_initguess != None:
+                dmat = fs_scf.get_init_guess(key=self.fs_initguess)
+            else:
+                dmat = fs_scf.get_init_guess()
+
+            if dmat.ndim == 2:  #Temp dmat is only one dimensional
+                t_d = [dmat.copy()/2., dmat.copy()/2.]
+                dmat = t_d
+
+        self.dmat = dmat
+
         for i in range(len(subsystems)):
             sub_dmat = [0., 0.]
             subsystem = subsystems[i]
             # Ensure same gridpoints and rho_cutoff for all systems
             subsystem.env_scf.grids = fs_scf.grids
             subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
+
             sub_guess = subsystem.env_initguess
             if sub_guess is None:
                 sub_guess = self.ft_initguess
+            subsystem.init_density(initguess=sub_guess)
+            sub_guess = subsystem.env_initguess
 
             if sub_guess == 'supmol':
                 self.get_supersystem_energy(readchk=super_chk)
@@ -710,117 +745,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                         new_dm[1] += temp_d
 
                 subsystem.update_density(new_dm)
- 
-            elif sub_guess == 'readchk':
-                is_chkfile = self.read_chkfile()
-                if is_chkfile:
-                    if (np.any(subsystem.env_mo_coeff) 
-                      and np.any(subsystem.env_mo_occ)):
-                        sub_mo_coeff = subsystem.env_mo_coeff
-                        sub_mo_occ = subsystem.env_mo_occ
-                        sub_dmat[0] = np.dot((sub_mo_coeff[0] * sub_mo_occ[0]),
-                                          sub_mo_coeff[0].T.conjugate())
-                        sub_dmat[1] = np.dot((sub_mo_coeff[1] * sub_mo_occ[1]),
-                                          sub_mo_coeff[1].T.conjugate())
-                        subsystem.update_density(sub_dmat)
-                    elif (np.any(self.mo_coeff) and np.any(self.mo_occ)):
-                        sup_dmat = [None, None]
-                        sup_dmat[0] = np.dot((self.mo_coeff[0] * self.mo_occ[0]), 
-                                          self.mo_coeff[0].T.conjugate())
-                        sup_dmat[1] = np.dot((self.mo_coeff[1] * self.mo_occ[1]), 
-                                          self.mo_coeff[1].T.conjugate())
-                        sub_dmat[0] = sup_dmat[0][np.ix_(s2s[i], s2s[i])]
-                        sub_dmat[1] = sup_dmat[1][np.ix_(s2s[i], s2s[i])]
-                        # Normalize Density
-                        temp_smat = np.copy(fs_scf.get_ovlp())
-                        temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
-                        num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
-                        num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                        if subsystem.flip_ros:
-                            sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
-                            sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
-                        else:
-                            sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                            sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
-                        subsystem.update_density(sub_dmat)
-                    else: #default to super
-                        self.get_supersystem_energy(readchk=super_chk)
-                        sub_dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
-                        sub_dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
-                        # Normalize Density
-                        temp_smat = np.copy(fs_scf.get_ovlp())
-                        temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
-                        num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
-                        num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                        if subsystem.flip_ros:
-                            sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
-                            sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
-                        else:
-                            sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                            sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
-                        subsystem.update_density(sub_dmat)
-                else: # default to super.
-                    self.get_supersystem_energy(readchk=super_chk)
-                    sub_dmat[0] = self.dmat[0][np.ix_(s2s[i], s2s[i])]
-                    sub_dmat[1] = self.dmat[1][np.ix_(s2s[i], s2s[i])]
-                    temp_smat = np.copy(fs_scf.get_ovlp())
-                    temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
-                    num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
-                    num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
-                    if subsystem.flip_ros:
-                        sub_dmat[0] *= subsystem.mol.nelec[1]/num_e_a
-                        sub_dmat[1] *= subsystem.mol.nelec[0]/num_e_b
-                    else:
-                        sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
-                        sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
-                    subsystem.update_density(sub_dmat)
-            elif sub_guess == 'submol':
-                subsystem.env_scf.kernel()
-                temp_dmat = subsystem.env_scf.make_rdm1() 
-                if subsystem.flip_ros:
-                    sub_dmat = [temp_dmat[1], temp_dmat[0]]
-                else:
-                    sub_dmat = temp_dmat
-                subsystem.update_density(sub_dmat)
-            elif sub_guess in ['atom', '1e', 'minao']:
-                temp_dmat = subsystem.env_scf.get_init_guess(key=sub_guess)
-                if subsystem.flip_ros:
-                    sub_dmat = [temp_dmat[1], temp_dmat[0]]
-                else:
-                    sub_dmat = temp_dmat
-                subsystem.update_density(sub_dmat)
-
-        # Initialize supersystem density.
-        if self.fs_initguess == 'supmol':
-            self.get_supersystem_energy(readchk=super_chk)
-        if self.fs_initguess == 'readchk': 
-            is_chkfile = self.read_chkfile()
-            if is_chkfile:
-                if (np.any(self.mo_coeff) and np.any(self.mo_occ)):
-                    dmat[0] = np.dot((self.mo_coeff[0] * self.mo_occ[0]), 
-                                      self.mo_coeff[0].T.conjugate())
-                    dmat[1] = np.dot((self.mo_coeff[1] * self.mo_occ[1]), 
-                                      self.mo_coeff[1].T.conjugate())
-                else:
-                    temp_dmat = self.fs_scf.get_init_guess()
-                    if temp_dmat.ndim == 2:  #Temp dmat is only one dimensional
-                        t_d = [temp_dmat.copy()/2., temp_dmat.copy()/2.]
-                        temp_dmat = t_d
-                    dmat = temp_dmat
-        else:
-            if self.fs_initguess == "ft":
-                pass
-            elif self.fs_initguess != None:
-                dmat = fs_scf.get_init_guess(key=self.fs_initguess)
-            else:
-                dmat = fs_scf.get_init_guess()
-
-            if dmat.ndim == 2:  #Temp dmat is only one dimensional
-                t_d = [dmat.copy()/2., dmat.copy()/2.]
-                dmat = t_d
 
         print ("".center(80,'*'))
-        return dmat
 
     def get_dmat(self):
         dmat = self.dmat
@@ -931,10 +857,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 t_d = [self.dmat.copy()/2., self.dmat.copy()/2.]
                 self.dmat = t_d
                 self.mo_coeff = [self.fs_scf.mo_coeff, self.fs_scf.mo_coeff]
-                self.mo_occ = [self.fs_scf.mo_occ/2, self.fs_scf.mo_occ/2]
+                self.mo_occ = [self.fs_scf.mo_occ/2., self.fs_scf.mo_occ/2.]
                 self.mo_energy = [self.fs_scf.mo_energy, self.fs_scf.mo_energy]
             
-            #self.save_chkfile()
+            self.save_chkfile()
             self.fs_energy = scf_obj.energy_tot()
             print("".center(80,'*'))
             if self.fs_save_density:
@@ -1160,7 +1086,6 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         """Calculates subsystem energy
 
         """ 
-
         s2s = self.sub2sup
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
@@ -1438,8 +1363,8 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             elif self.subsystems[i].mol.spin != 0:
                 pass
             else:
-                dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].dmat/2.)
-                dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].dmat/2.)
+                dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
+                dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
 
         if self.fs_unrestricted or sub_openshell:
             V = self.os_scf.get_veff(mol=self.mol, dm=dm)
@@ -1500,7 +1425,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
                 if not (self.subsystems[B].unrestricted or 
                         self.subsystems[B].mol.spin !=0):
-                    sub_dmat = [self.subsystems[B].dmat/2., self.subsystems[B].dmat/2.]
+                    sub_dmat = [self.subsystems[B].get_dmat()/2., self.subsystems[B].get_dmat()/2.]
                 else:
                     sub_dmat = self.subsystems[B].dmat
 
@@ -1546,27 +1471,29 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             self.proj_pot[i] = POp.copy()
         return self.proj_pot
 
-    #These should catch exceptions.
-    def read_chkfile(self):
-    # Need to make more robust. Handle errors and such.
-        if os.path.isfile(self.chk_filename):
-            try:
-                with h5py.File(self.chk_filename, 'r') as hf:
-                    supsys_coeff = hf['supersystem/mo_coeff']
-                    self.mo_coeff = supsys_coeff[:]
-                    supsys_occ = hf['supersystem/mo_occ']
-                    self.mo_occ = supsys_occ[:]
-                    supsys_energy = hf['supersystem/mo_energy']
-                    self.mo_energy = supsys_energy[:]
+    def set_chkfile_index(self, index):
+        self.chkfile_index = str(index)
+        for i in range(len(self.subsystems)):
+            sub = self.subsystems[i].set_chkfile_index(str(index) + ":" + str(i))
 
-                    for i in range(len(self.subsystems)):
-                        subsystem = self.subsystems[i]
-                        subsys_coeff = hf[f'subsystem:{i}/mo_coeff']
-                        subsystem.env_mo_coeff = subsys_coeff[:]
-                        subsys_occ = hf[f'subsystem:{i}/mo_occ']
-                        subsystem.env_mo_occ = subsys_occ[:]
-                        subsys_energy = hf[f'subsystem:{i}/mo_energy']
-                        subsystem.env_mo_energy = subsys_energy[:]
+    #These should catch exceptions.
+    def read_chkfile(self, filename=None):
+    # Need to make more robust. Handle errors and such.
+
+        if filename is None:
+            filename = self.chk_filename
+        assert(self.chkfile_index is not None),'Need to set chkfile_index'
+
+        chk_index = self.chkfile_index
+        if os.path.isfile(filename):
+            try:
+                with h5py.File(filename, 'r') as hf:
+                    supsys_coeff = hf['supersystem:{chk_index}/mo_coeff']
+                    self.mo_coeff = supsys_coeff[:]
+                    supsys_occ = hf['supersystem:{chk_index}/mo_occ']
+                    self.mo_occ = supsys_occ[:]
+                    supsys_energy = hf['supersystem:{chk_index}/mo_energy']
+                    self.mo_energy = supsys_energy[:]
                 return True 
             except TypeError:
                 print ("chkfile improperly formatted".center(80))
@@ -1575,7 +1502,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
             print ("chkfile NOT found".center(80))
             return False
 
-    def save_chkfile(self):
+    def save_chkfile(self, filename=None):
         # current plan is to save mo_coefficients, occupation vector, and energies.
         # becasue of how h5py works we need to check if none and save as the correct filetype (f)
         #Need to make more robust. Handle errors and such.
@@ -1597,53 +1524,42 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         #    print (self.subsystems[k].env_mo_energy)
         
         # check if file exists. 
-        if os.path.isfile(self.chk_filename):
+
+        if filename is None:
+            filename = self.chk_filename
+        assert(self.chkfile_index is not None),'Need to set chkfile_index'
+
+        chk_index = self.chkfile_index
+        if os.path.isfile(filename):
             try:
-                with h5py.File(self.chk_filename, 'r+') as hf:
-                    supsys_coeff = hf['supersystem/mo_coeff']
+                with h5py.File(filename, 'r+') as hf:
+                    supsys_coeff = hf['supersystem:{chk_index}/mo_coeff']
                     supsys_coeff[...] = self.mo_coeff
-                    supsys_occ = hf['supersystem/mo_occ']
+                    supsys_occ = hf['supersystem:{chk_index}/mo_occ']
                     supsys_occ[...] = self.mo_occ
-                    supsys_energy = hf['supersystem/mo_energy']
+                    supsys_energy = hf['supersystem:{chk_index}/mo_energy']
                     supsys_energy[...] = self.mo_energy
-                    for i in range(len(self.subsystems)):
-                        subsystem = self.subsystems[i]
-                        subsys_coeff = hf[f'subsystem:{i}/mo_coeff']
-                        subsys_coeff[...] = subsystem.env_mo_coeff
-                        subsys_occ = hf[f'subsystem:{i}/mo_occ']
-                        subsys_occ[...] = subsystem.env_mo_occ
-                        subsys_energy = hf[f'subsystem:{i}/mo_energy']
-                        subsys_energy[...] = subsystem.env_mo_energy
             except TypeError:
                 print ("Overwriting existing chkfile".center(80))
-                with h5py.File(self.chk_filename, 'w') as hf:
-                    hf.create_dataset("embedding_chkfile", data=True)
-                    sup_mol = hf.create_group('supersystem')
+                with h5py.File(filename, 'w') as hf:
+                    sup_mol = hf.create_group('supersystem:{chk_index}')
+                    sup_mol.create_dataset('mo_coeff', data=self.mo_coeff)
+                    sup_mol.create_dataset('mo_occ', data=self.mo_occ)
+                    sup_mol.create_dataset('mo_energy', data=self.mo_energy)
+            except KeyError:
+                print ("Updating existing chkfile".center(80))
+                with h5py.File(filename, 'w') as hf:
+                    sup_mol = hf.create_group('supersystem:{chk_index}')
                     sup_mol.create_dataset('mo_coeff', data=self.mo_coeff)
                     sup_mol.create_dataset('mo_occ', data=self.mo_occ)
                     sup_mol.create_dataset('mo_energy', data=self.mo_energy)
 
-                    for i in range(len(self.subsystems)):
-                        subsystem = self.subsystems[i]
-                        sub_sys_data = hf.create_group(f'subsystem:{i}')
-                        sub_sys_data.create_dataset('mo_coeff', data=subsystem.env_mo_coeff)
-                        sub_sys_data.create_dataset('mo_occ', data=subsystem.env_mo_occ)
-                        sub_sys_data.create_dataset('mo_energy', data=subsystem.env_mo_energy)
-         
         else:
-            with h5py.File(self.chk_filename, 'w') as hf:
-                hf.create_dataset("embedding_chkfile", data=True)
-                sup_mol = hf.create_group('supersystem')
+            with h5py.File(filename, 'w') as hf:
+                sup_mol = hf.create_group('supersystem:{chk_index}')
                 sup_mol.create_dataset('mo_coeff', data=self.mo_coeff)
                 sup_mol.create_dataset('mo_occ', data=self.mo_occ)
                 sup_mol.create_dataset('mo_energy', data=self.mo_energy)
-
-                for i in range(len(self.subsystems)):
-                    subsystem = self.subsystems[i]
-                    sub_sys_data = hf.create_group(f'subsystem:{i}')
-                    sub_sys_data.create_dataset('mo_coeff', data=subsystem.env_mo_coeff)
-                    sub_sys_data.create_dataset('mo_occ', data=subsystem.env_mo_occ)
-                    sub_sys_data.create_dataset('mo_energy', data=subsystem.env_mo_energy)
 
     @time_method("Freeze and Thaw")
     def freeze_and_thaw(self):
