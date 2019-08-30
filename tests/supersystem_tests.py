@@ -145,6 +145,88 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_dmat[0], supersystem.dmat[0]))
         self.assertTrue(np.allclose(test_dmat[1], supersystem.dmat[1]))
 
+    def test_save_fs_density(self):
+        import tempfile
+        from pyscf.tools import cubegen
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
+
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supersystem.get_supersystem_energy()
+        test_ftmp = tempfile.NamedTemporaryFile()
+        supersystem.save_fs_density_file(filename=test_ftmp.name)
+        true_ftmp = tempfile.NamedTemporaryFile()
+        sup_dmat = supersystem.dmat[0] + supersystem.dmat[1] #This should be the FS density.
+        cubegen.density(self.cs_mol_sup1, true_ftmp.name, sup_dmat)
+
+        with open(test_ftmp.name + '.cube', 'r') as fin:
+            test_den_data = fin.read()
+
+        with open(true_ftmp.name, 'r') as fin:
+            true_den_data = fin.read()
+
+        self.assertEqual(test_den_data[99:], true_den_data[99:])
+
+    def test_save_ft_density(self):
+        import tempfile
+        from pyscf.tools import cubegen
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
+
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supersystem.get_supersystem_energy()
+        supersystem.freeze_and_thaw()
+        test_ftmp = tempfile.NamedTemporaryFile()
+        supersystem.save_ft_density_file(filename=test_ftmp.name)
+        true_ftmp = tempfile.NamedTemporaryFile()
+        nS = supersystem.mol.nao_nr()
+        dm_env = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        for i in range(len(supersystem.subsystems)):
+            dm_env[0][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += supersystem.subsystems[i].dmat[0]
+            dm_env[1][np.ix_(supersystem.sub2sup[i], supersystem.sub2sup[i])] += supersystem.subsystems[i].dmat[1]
+        sup_dmat = dm_env[0] + dm_env[1]
+        cubegen.density(self.cs_mol_sup1, true_ftmp.name, sup_dmat)
+
+        with open(test_ftmp.name + '.cube', 'r') as fin:
+            test_den_data = fin.read()
+
+        with open(true_ftmp.name, 'r') as fin:
+            true_den_data = fin.read()
+
+        self.assertEqual(test_den_data[99:], true_den_data[99:])
+
+    def test_save_fs_orbs(self):
+        import tempfile
+        from pyscf.tools import molden
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
+
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supersystem.get_supersystem_energy()
+        sup_mo_coeff = supersystem.fs_scf.mo_coeff
+        sup_mo_energy = supersystem.fs_scf.mo_energy
+        sup_mo_occ = supersystem.fs_scf.mo_occ
+        test_ftmp = tempfile.NamedTemporaryFile()
+        supersystem.save_fs_orbital_file(filename=test_ftmp.name)
+        true_ftmp = tempfile.NamedTemporaryFile()
+        molden.from_mo(self.cs_mol_sup1, true_ftmp.name, sup_mo_coeff, ene=sup_mo_energy, occ=sup_mo_occ)
+
+        with open(test_ftmp.name + '.molden', 'r') as fin:
+            test_den_data = fin.read()
+
+        with open(true_ftmp.name, 'r') as fin:
+            true_den_data = fin.read()
+
+        self.assertEqual(test_den_data, true_den_data)
+        pass
+
+    def test_save_ft_orbs(self):
+        #Save all subsystem orbital files.
+        pass
+
     @unittest.skip
     def test_get_supersystem_nuc_grad(self):
         #Closed Shell
@@ -260,10 +342,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_gh_mol_1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol_2, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, ft_initguess='minao')
 
         mf = dft.RKS(self.cs_mol_sup1)
-        mf.xc = 'b3lyp'
+        mf.xc = self.env_method
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
@@ -277,8 +359,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         dm_1 = mf_init_dmat[np.ix_(s2s[0], s2s[0])]
         hcore_1_emb = mf_hcore[np.ix_(s2s[0], s2s[0])]
         veff_1_emb = mf_init_veff[np.ix_(s2s[0], s2s[0])]
-        mf_1 = dft.RKS(mol)
+        mf_1 = dft.RKS(self.cs_gh_mol_1)
         mf_1.xc = self.env_method
+        mf_1.grids = supersystem.fs_scf.grids
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = veff_1_emb - veff_1
@@ -287,8 +370,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         dm_2 = mf_init_dmat[np.ix_(s2s[1], s2s[1])]
         hcore_2_emb = mf_hcore[np.ix_(s2s[1], s2s[1])]
         veff_2_emb = mf_init_veff[np.ix_(s2s[1], s2s[1])]
-        mf_2 = dft.RKS(mol2)
+        mf_2 = dft.RKS(self.cs_mol_2)
         mf_2.xc = self.env_method
+        mf_2.grids = supersystem.fs_scf.grids
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = veff_2_emb - veff_2
@@ -324,6 +408,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_1_emb = [mf_init_veff[np.ix_(s2s[0], s2s[0])], mf_init_veff[np.ix_(s2s[0], s2s[0])]]
         mf_1 = dft.UKS(self.os_mol_1)
         mf_1.xc = self.env_method
+        mf_1.grids = supersystem.fs_scf.grids
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = [veff_1_emb[0] - veff_1[0], veff_1_emb[1] - veff_1[1]]
@@ -334,6 +419,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_2_emb = [mf_init_veff[np.ix_(s2s[1], s2s[1])], mf_init_veff[np.ix_(s2s[1], s2s[1])]]
         mf_2 = dft.UKS(self.os_mol_2)
         mf_2.xc = self.env_method
+        mf_2.grids = supersystem.fs_scf.grids
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = [veff_2_emb[0] - veff_2[0], veff_2_emb[1] - veff_2[1]]
@@ -487,7 +573,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         # Unrestricted Open Shell
 
-    #@unittest.skip
+    @unittest.skip
     def test_read_chkfile(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -515,6 +601,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         old_dmat = supersystem.dmat
         old_sub1_dmat = supersystem.subsystems[0].dmat
         old_sub2_dmat = supersystem.subsystems[1].dmat
+
         supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], 'b3lyp', ft_initguess='readchk')
         new_dmat = supersystem2.dmat
         new_sub1_dmat = supersystem2.subsystems[0].dmat
@@ -525,7 +612,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         # Unrestricted Open Shell 
 
-    #@unittest.skip
+    @unittest.skip
     def test_save_chkfile(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -570,7 +657,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         active_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, save_orbs=True, save_density=True)
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
@@ -583,18 +670,11 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.basis = '3-21g'
         mol2.build()
         env_method = 'm06'
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, save_orbs=True, save_density=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_save_orbs=True, fs_save_density=True, ft_save_orbs=True, ft_save_density=True)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
         supersystem.freeze_and_thaw()
         supersystem.env_in_env_energy()
         supersystem.get_supersystem_energy()
-        self.assertTrue(os.path.isfile('temp_1.molden'))
-        self.assertTrue(os.path.isfile('temp_2.molden'))
-        self.assertTrue(os.path.isfile('temp_1.cube'))
-        self.assertTrue(os.path.isfile('temp_2.cube'))
-        self.assertTrue(os.path.isfile('temp_dftindft.cube'))
-        self.assertTrue(os.path.isfile('temp_super.molden'))
-        self.assertTrue(os.path.isfile('temp_super.cube'))
 
         projector_energy = np.trace(np.dot(subsys.dmat[0], supersystem.proj_pot[0][0]))
         projector_energy += np.trace(np.dot(subsys.dmat[1], supersystem.proj_pot[0][1]))
@@ -614,15 +694,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol3.build()
         mf = dft.RKS(mol3)
         mf.xc = 'm06'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
         mf.kernel()
         test_dmat = mf.make_rdm1()
         test_e = mf.energy_tot()
         sup_e = supersystem.env_in_env_energy()
-        #self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
         #Long distance test.
@@ -669,15 +744,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol3.build()
         mf = dft.RKS(mol3)
         mf.xc = 'm06'
-        grids = dft.gen_grid.Grids(mol3)
-        grids.level = supersystem.grid_level
-        grids.build()
-        mf.grids = grids
         mf.kernel()
         test_dmat = mf.make_rdm1()
         test_e = mf.energy_tot()
         sup_e = supersystem.env_in_env_energy()
-        #self.assertTrue(np.allclose(test_dmat, (supersystem.dmat[0] + supersystem.dmat[1]), atol=1e-6))
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
         #Projection energy

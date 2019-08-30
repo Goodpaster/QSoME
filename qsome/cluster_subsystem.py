@@ -406,8 +406,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if proj_pot is None:
             proj_pot = self.proj_pot
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
@@ -416,7 +414,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
         e_emb = self.get_env_emb_e(emb_pot, dmat)
         e_proj = self.get_env_proj_e(proj_pot, dmat)
-        if not (self.unrestricted or self.mol.spin !=0):
+        if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
         return subsys_e + e_emb + e_proj
@@ -442,8 +440,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if proj_pot is None:
             proj_pot = self.proj_pot
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
@@ -498,9 +494,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         self.env_sub_nuc_grad = total_grad
         return total_grad
     
-    def update_emb_pot(self, new_emb_pot):
-        self.emb_pot = new_emb_pot 
-
     def update_proj_pot(self, new_POp):
         self.proj_pot = new_POp
 
@@ -547,8 +540,6 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         """
 
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
             if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
@@ -1093,9 +1084,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if dmat is None:
             dmat = self.dmat
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
-            elif self.emb_fock is None:
+            if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted:
@@ -1300,9 +1289,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if dmat is None:
             dmat = self.dmat
         if emb_pot is None:
-            if self.emb_pot is not None:
-                emb_pot = self.emb_pot
-            elif self.emb_fock is None:
+            if self.emb_fock is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
                 if self.unrestricted:

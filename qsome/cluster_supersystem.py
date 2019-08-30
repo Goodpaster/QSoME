@@ -604,7 +604,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
         # Initialize supersystem density.
         if self.ft_initguess == 'supmol':
-            self.get_supersystem_energy(initguess=super_chk)
+            self.get_supersystem_energy(readchk=super_chk)
         if self.fs_initguess == 'readchk': 
             is_chkfile = self.read_chkfile()
             if is_chkfile:
@@ -1561,6 +1561,52 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 sup_mol.create_dataset('mo_occ', data=self.mo_occ)
                 sup_mol.create_dataset('mo_energy', data=self.mo_energy)
 
+    def save_fs_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            filename = self.filename
+        if density is None:
+            density = self.get_dmat()
+        cubegen_fn = os.path.splitext(filename)[0] + '.cube'
+        cubegen.density(self.mol, cubegen_fn, density)
+
+    def save_ft_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            filename = self.filename
+        if density is None:
+            nS = self.mol.nao_nr()
+            dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            for i in range(len(self.subsystems)):
+                if self.subsystems[i].unrestricted:
+                    dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[0]
+                    dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[1]
+                else:
+                    dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
+                    dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
+        cubegen_fn = os.path.splitext(filename)[0] + '.cube'
+        cubegen.density(self.mol, cubegen_fn, (dm[0] + dm[1]))
+
+    def save_fs_orbital_file(self, filename=None, scf_obj=None, mo_occ=None, mo_coeff=None, mo_energy=None):
+        from pyscf.tools import molden
+        if filename is None:
+            filename = self.filename
+        if scf_obj is None:
+            scf_obj = self.fs_scf
+        if mo_occ is None:
+            mo_occ = scf_obj.mo_occ
+        if mo_coeff is None:
+            mo_coeff = scf_obj.mo_coeff
+        if mo_energy is None:
+            mo_energy = scf_obj.mo_energy
+        molden_fn = os.path.splitext(filename)[0] + '.molden'
+        with open(molden_fn, 'w') as fin:
+            if not (self.fs_unrestricted or self.mol.spin != 0):
+                molden.header(scf_obj.mol, fin)
+                molden.orbital_coeff(self.mol, fin, mo_coeff, ene=mo_energy, occ=mo_occ)
+            else:
+                print ("OPEN SHELL NOT CODED STOP ASKING")
+
     @time_method("Freeze and Thaw")
     def freeze_and_thaw(self):
         # Optimization: rather than recalculate vA use the existing fock and subtract out the block that is double counted.
@@ -1594,7 +1640,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                 #    self.get_emb_subsys_elec_energy()
                 #    sub_old_e = subsystem.get_env_energy()
 
-                sub_old_dms = [sub.dmat.copy() for sub in sub_list]
+                sub_old_dms = [sub.get_dmat().copy() for sub in sub_list]
              
                 for j in range(len(sub_list)):
                     self.update_proj_pot() #could use i as input and only get for that sub.
@@ -1622,10 +1668,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     elif subsystem.mol.spin != 0:
                         pass
                     else:
-                        new_dm = ((1 - self.ft_damp) * subsystem.dmat + (self.ft_damp * sub_old_dms[k]))
-                        subsystem.update_density(new_dm) 
-                        ddm = sp.linalg.norm(subsystem.dmat - sub_old_dms[k])
-                        proj_e = np.trace(np.dot(subsystem.dmat, self.proj_pot[i+k][0]))
+                        new_dm = ((1. - self.ft_damp) * subsystem.get_dmat() + (self.ft_damp * sub_old_dms[k]))
+                        subsystem.update_density([new_dm/2., new_dm/2.]) 
+                        ddm = sp.linalg.norm(subsystem.get_dmat() - sub_old_dms[k])
+                        proj_e = np.trace(np.dot(subsystem.get_dmat(), self.proj_pot[i+k][0]))
                         ft_err += ddm
                         self.ft_fermi[i+k] = [subsystem.fermi, subsystem.fermi]
 

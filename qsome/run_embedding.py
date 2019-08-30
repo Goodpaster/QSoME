@@ -35,7 +35,7 @@ def main():
                 env_kwargs['pmem'] = pmem
             if not "scr_dir" in env_kwargs.keys():
                 env_kwargs['scr_dir'] = scr_dir
-            active_method = in_obj.active_subsystem_kwargs.pop('active_method')
+            active_method = in_obj.active_subsystem_kwargs.pop('hl_method')
             active_kwargs = in_obj.active_subsystem_kwargs
             active_kwargs.update(env_kwargs)
             subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method,  **active_kwargs)

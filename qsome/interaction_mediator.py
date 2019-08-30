@@ -26,8 +26,10 @@ class InteractionMediator:
             curr_order = sorted_subs[0].env_order
             curr_method = sorted_subs[0].env_method
             curr_sup_kwargs = {}
+            sub_sup_kwargs = {}
             if sup_kwargs is not None:
-                match_sup_kwargs = [x for x in sup_kwargs if x.env_num == curr_order]
+                match_sup_kwargs = [x for x in sup_kwargs if x['env_order'] == curr_order]
+                sub_sup_kwargs = [x for x in sup_kwargs if x['env_order'] == (curr_order + 1)]
                 assert len(match_sup_kwargs) < 2,'Ambigious supersystem settings'
                 curr_sup_kwargs = match_sup_kwargs[0]
             higher_order_subs = [x for x in sorted_subs if x.env_order > curr_order]
@@ -35,7 +37,11 @@ class InteractionMediator:
             while len(sorted_subs) > 0 and sorted_subs[0].env_order == curr_order:
                 sub_list.append(sorted_subs.pop(0))
             if len(higher_order_subs) > 0:
-                combined_subs = self.combine_subsystems(higher_order_subs, curr_method)
+                if len(sub_sup_kwargs) > 0:
+                    combined_subs = self.combine_subsystems(higher_order_subs, curr_method, fs_kwargs=sub_sup_kwargs[0])
+                else:
+                    combined_subs = self.combine_subsystems(higher_order_subs, curr_method)
+
                 sub_list.append(combined_subs)
             curr_sup_kwargs['env_order'] = curr_order
             supersystem = ClusterSuperSystem(sub_list, curr_method, **curr_sup_kwargs)
@@ -44,13 +50,13 @@ class InteractionMediator:
         return supersystems
 
 
-    def combine_subsystems(self, subsystems, env_method, kwargs=None):
+    def combine_subsystems(self, subsystems, env_method, fs_kwargs=None):
         mol = cluster_supersystem.concat_mols(subsystems)
         sub_order = subsystems[0].env_order
         sub_unrestricted = False
-        for sub in subsystems:
-            if sub.unrestricted:
-                sub_unrestricted = True
+        if fs_kwargs is not None:
+            if 'fs_unrestricted' in fs_kwargs.keys():
+                sub_unrestricted = fs_kwargs['fs_unrestricted']
         #Need a way of specifying the settings of the implied subsystem somehow.
         return ClusterEnvSubSystem(mol, env_method, env_order=sub_order, unrestricted=sub_unrestricted)
 
@@ -63,8 +69,9 @@ class InteractionMediator:
             curr_sup.update_ext_pot(ext_potential)
             curr_sup.freeze_and_thaw()
             new_ext_pot = curr_sup.get_ext_pot() #This method formats the external potential for the next super system
+            ext_potential = new_ext_pot
 
-    def get_embedding_energy(self):
+    def get_emb_energy(self):
         #Add all the components together to get an energy summary.
         pass
 
