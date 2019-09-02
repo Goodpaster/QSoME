@@ -11,7 +11,7 @@ import os
 from os.path import expanduser, expandvars, abspath, splitext
 
 import inp_reader, cluster_subsystem, cluster_supersystem
-import periodic_subsystem
+#import periodic_subsystem
 
 
 def main():
@@ -34,16 +34,17 @@ def main():
             if not "pmem" in env_kwargs.keys():
                 env_kwargs['pmem'] = pmem
             if not "scr_dir" in env_kwargs.keys():
-                env_kwargs['scr_dir'] = scr_dir
-            active_method = in_obj.active_subsystem_kwargs.pop('hl_method')
-            active_kwargs = in_obj.active_subsystem_kwargs
-            active_kwargs.update(env_kwargs)
-            subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method,  **active_kwargs)
+                env_kwargs['scrdir'] = scr_dir
+            hl_method = in_obj.hl_subsystem_kwargs[0].pop('hl_method')
+            hl_kwargs = in_obj.hl_subsystem_kwargs[0]
+            hl_kwargs.update(env_kwargs)
+            subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method,  **hl_kwargs)
 
-            if in_obj.periodic:
-                kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-                subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                            **in_obj.periodic_kwargs)
+            #if in_obj.periodic:
+            #    pass
+                #kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
+                #subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
+                #            **in_obj.periodic_kwargs)
 
             subsystems.append(subsys)
 
@@ -53,49 +54,50 @@ def main():
             env_kwargs = in_obj.env_subsystem_kwargs[i]
             subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
 
-            if in_obj.periodic:
+            #if in_obj.periodic:
+            #    pass
                 #kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-                subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                                                                 **in_obj.periodic_kwargs)
+                #subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
+                #                                                 **in_obj.periodic_kwargs)
 
             subsystems.append(subsys)
 
-    fs_method = in_obj.supersystem_kwargs.pop('fs_method')
-    supersystem_kwargs = in_obj.supersystem_kwargs
+    fs_method = subsystems[0].env_method
+    supersystem_kwargs = in_obj.supersystem_kwargs[0]
     if not "pmem" in supersystem_kwargs.keys():
         supersystem_kwargs['pmem'] = pmem
     if not "scr_dir" in supersystem_kwargs.keys():
         supersystem_kwargs['scr_dir'] = scr_dir
 
-    if not in_obj.periodic: # RUN CLUSTER CALCULATION IF NOT PERIODIC
-        supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, 
-            fs_method, **supersystem_kwargs)
+    #if not in_obj.periodic: # RUN CLUSTER CALCULATION IF NOT PERIODIC
+    supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, **supersystem_kwargs)
 
-    else:
-        from periodic_supersystem import PeriodicSuperSystem
-        if 'grid_level' in in_obj.periodic_kwargs:
-            temp = in_obj.periodic_kwargs.pop('grid_level')
+    #else:
+    #    pass
+        #from periodic_supersystem import PeriodicSuperSystem
+        #if 'grid_level' in in_obj.periodic_kwargs:
+        #    temp = in_obj.periodic_kwargs.pop('grid_level')
             
-        supersystem = PeriodicSuperSystem(subsystems, env_method, kpoints=kpts,
-                  **in_obj.cell_kwargs, **in_obj.periodic_kwargs,
-                  **in_obj.supersystem_kwargs)
+       # supersystem = PeriodicSuperSystem(subsystems, env_method, kpoints=kpts,
+       #           **in_obj.cell_kwargs, **in_obj.periodic_kwargs,
+       #           **in_obj.supersystem_kwargs)
 
-        super_energy = supersystem.get_supersystem_energy()
+       # super_energy = supersystem.get_supersystem_energy()
 
     supersystem.freeze_and_thaw()
-    supersystem.env_in_env_energy()
+    #supersystem.env_in_env_energy()
 
-    if in_obj.periodic:
-        supersystem.periodic_to_cluster(active_method, **active_kwargs)
+    #if in_obj.periodic:
+    #    supersystem.periodic_to_cluster(active_method, **active_kwargs)
 
-    supersystem.get_active_energy()
-    #supersystem.get_env_energy()
+    supersystem.get_hl_energy()
+    supersystem.get_env_energy()
     super_energy = supersystem.get_supersystem_energy()
 
-    if not in_obj.periodic: # TODO: does not work for periodic embedding
-        supersystem.get_dft_diff_parameters()
+    #if not in_obj.periodic: # TODO: does not work for periodic embedding
+        #supersystem.get_dft_diff_parameters()
 
-    total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].active_energy
+    total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].hl_energy
 
     print("".center(80, '*'))
     print(f"Total Embedding Energy:     {total_energy}")

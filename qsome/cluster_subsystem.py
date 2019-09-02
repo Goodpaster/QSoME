@@ -4,7 +4,7 @@
 
 import re
 from qsome import subsystem, custom_pyscf_methods, molpro_calc, comb_diis
-from pyscf import gto, scf, dft, cc, mcscf, tools, mp
+from pyscf import gto, scf, dft, cc, mcscf, tools, mp, fci
 from pyscf.cc import ccsd_t, uccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
@@ -1132,13 +1132,25 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hf_aliases = ['hf', 'uhf', 'rhf']
         cc_aliases = ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']
         mp_aliases = ['mp2']
-        known_methods = hf_aliases + cc_aliases + mp_aliases
+        fci_aliases = ['fci']
+        fcidump_aliases = ['fcidump']
+        known_methods = hf_aliases + cc_aliases + mp_aliases + fci_aliases + fcidump_aliases
         if hl_sr_method is None:
             if hl_method not in known_methods:
                 hl_sr_method = hl_method
 
         if self.hl_ext is not None:
             print ("use external method for hl calculation")
+            if hl_method in fcidump_aliases:
+                mod_hcore = (self.env_scf.get_hcore() 
+                             + ((emb_pot[0] + emb_pot[1])/2.
+                             + (proj_pot[0] + proj_pot[1])/2.))
+                energy = molpro_calc.molpro_energy(
+                          mol, mod_hcore, hl_method, self.filename, 
+                          self.hl_save_orbs, scr_dir=self.scr_dir, 
+                          nproc=self.nproc, pmem=self.pmem)
+                hl_energy = energy[0]
+
         else:
             print ('determine whether to use hf or dft for initial guess')
             if (hl_sr_method is None or hl_sr_method in hf_aliases):
@@ -1253,6 +1265,31 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 self.hl_energy = hl_energy
                 return hl_energy
 
+            elif hl_method in fci_aliases:
+                mod_hcore = ((self.env_scf.get_hcore() 
+                             + (emb_pot[0] + emb_pot[1])/2.
+                             + (proj_pot[0] + proj_pot[1])/2.))
+                cisolver = fci.FCI(mol, hl_sr_scf.mo_coeff)
+                hl_energy_tot = cisolver.kernel(h1e=mod_hcore)
+                self.hl_energy = hl_energy_tot[0]
+                return hl_energy
+
+            elif hl_method in fcidump_aliases:
+                mod_hcore = ((self.env_scf.get_hcore() 
+                             + (emb_pot[0] + emb_pot[1])/2.
+                             + (proj_pot[0] + proj_pot[1])/2.))
+                hl_sr_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+                hl_energy = hl_sr_scf.kernel(dm0=(self.get_dmat()))
+                fcidump_filename = (os.path.splitext(self.filename)[0] 
+                                    + '.fcidump')
+                print (f"FCIDUMP GENERATED AT {fcidump_filename}")
+                tools.fcidump.from_scf(hl_sr_scf, (
+                    os.path.splitext(self.filename)[0] + '.fcidump'), 
+                    tol=1e-200)
+
+                self.hl_energy = hl_energy
+                return hl_energy
+
             #dft as high level
             #Assume used for the initial starting orbital guess.
             else:
@@ -1351,7 +1388,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                           self.hl_save_orbs, self.active_orbs, self.avas,
                           self.localize_orbitals, scr_dir=self.scr_dir, 
                           nproc=self.nproc, pmem=self.pmem)
-                active_energy = energy[0]
+                hl_energy = energy[0]
             elif hl_method == 'fcidump':
                 energy = molpro_calc.molpro_energy(
                           mol, mod_hcore, active_method, self.filename, 
@@ -1634,7 +1671,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if mol is None:
             mol = self.mol
         if scf_obj is None:
-            scf_obj = self.active_scf
+            scf_obj = self.hl_scf
 
         grad_obj = scf_obj.nuc_grad_method() 
         self.active_sub_nuc_grad = grad_obj.grad_elec(scf_obj.mo_energy, scf_obj.mo_coeff, scf_obj.mo_occ)

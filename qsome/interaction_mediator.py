@@ -73,6 +73,31 @@ class InteractionMediator:
 
     def get_emb_energy(self):
         #Add all the components together to get an energy summary.
+        #E_tot = E_sup1 - Esup1.subsystems[-1] + E_sup2 - Esup2.subsystems[-1] ... - EsupN.subsystems_env_energy + EsupN.subsystems_hl_energy
+        E_tot = 0
+        for i in range(len(self.supersystems) - 1):
+            sup = self.supersystems[i]
+            sup_e = sup.get_supersystem_energy()
+            sup_e = sup.get_env_energy()
+            sub_e = sup.subsystems[-1].env_energy
+            print (f"Supersystem {i + 1} Energy: {sup_e}")
+            print (f"Higher level subsystem Energy: {sub_e}")
+            E_tot += sup_e - sub_e
+
+        sup = self.supersystems[-1]
+        sup_e = sup.get_supersystem_energy()
+        sup_e = sup.get_active_energy()
+        sup_e = sup.get_env_energy()
+        E_tot += sup_e
+        for sub in sup.subsystems:
+            if isinstance(sub, cluster_subsystem.ClusterHLSubSystem):
+                E_tot -= sub.env_energy
+                E_tot += sub.active_energy
+
+    print("".center(80, '*'))
+    print(f"Total Embedding Energy:     {E_tot}")
+    print("".center(80,'*'))
+
         pass
 
     

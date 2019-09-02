@@ -238,7 +238,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
 
     def __init__(self, subsystems, fs_method, env_order=1., fs_smearsigma=0.,
                  fs_initguess=None, fs_conv=None, fs_grad=None, fs_cycles=None,
-                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=None, 
+                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=4, 
                  fs_rhocutoff=None, fs_verbose=None, fs_unrestricted=False, 
                  fs_density_fitting=False, compare_density=False, chkfile_index=None,
                  fs_save_orbs=False, fs_save_density=False, ft_cycles=100, 
@@ -407,7 +407,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         self.save_chkfile()
 
         # There are other diis methods but these don't work with out method due to subsystem projection.
-        if ft_diis == 0:
+        if ft_diis is None:
             self.ft_diis = None
         else:
             self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
@@ -1170,28 +1170,33 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     subsystem_2.env_energy += (emb_exc_comb_2 - emb_exc_2) * 2.
 
     @time_method("Active Energy")
-    def get_active_energy(self):
-        """Determines the active energy.
+    def get_hl_energy(self):
+        """Determines the hl energy.
         
         """
         #This is crude. Later iterations should be more sophisticated and account for more than 2 subsystems.
         print ("".center(80,'*'))
-        print("  Active Subsystem Calculation  ".center(80))
+        print("  HL Subsystems Calculation  ".center(80))
         print ("".center(80,'*'))
         s2s = self.sub2sup
-        FAA = [None, None]
-        FAA[0] = self.fock[0][np.ix_(s2s[0], s2s[0])]
-        FAA[1] = self.fock[1][np.ix_(s2s[0], s2s[0])]
-        self.subsystems[0].update_emb_fock(FAA)
-        self.subsystems[0].active_in_env_energy()
-        print (f"Uncorrected Energy: {self.subsystems[0].active_energy:>.8f}")
-        #CORRECT ACTIVE SETTINGS.
-        #act_elec_e = self.correct_active_energy()
-        act_elec_e = 0.0
-        self.subsystems[0].active_energy += act_elec_e
-        act_e = self.subsystems[0].active_energy
-        print(f"Energy:{act_e:>73.8f}")
-        print("".center(80,'*'))
+        for i in range(len(self.subsystems)):
+            sub = self.subsystems[i]
+            #Check if subsystem is HLSubSystem but rightnow it is being difficult.
+            if i == 0:
+                print ("INIT")
+                FAA = [None,None]
+                FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
+                FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
+                sub.update_emb_fock(FAA)
+                sub.hl_in_env_energy()
+                #print (f"Uncorrected Energy: {sub.active_energy:>.8f}")
+                #CORRECT ACTIVE SETTINGS.
+                #act_elec_e = self.correct_active_energy()
+                #act_elec_e = 0.0
+                #sub.active_energy += act_elec_e
+                act_e = sub.hl_energy
+                print(f"Energy:{act_e:>73.8f}")
+                print("".center(80,'*'))
 
     @time_method("Env Energy")
     def get_env_energy(self):
@@ -1201,23 +1206,23 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         print ("".center(80,'*'))
         print("  Env Subsystem Calculation  ".center(80))
         print ("".center(80,'*'))
-        self.subsystems[0].update_fock()
-        s2s = self.sub2sup
-        FAA = [None, None]
-        FAA[0] = self.fock[0][np.ix_(s2s[0], s2s[0])]
-        FAA[1] = self.fock[1][np.ix_(s2s[0], s2s[0])]
-        froz_veff = [None, None]
-        froz_veff[0] = (FAA[0] - self.subsystems[0].env_hcore - self.subsystems[0].env_V[0])
-        froz_veff[1] = (FAA[1] - self.subsystems[0].env_hcore - self.subsystems[0].env_V[1])
-        self.subsystems[0].update_emb_pot(froz_veff)
-        self.subsystems[0].get_env_energy()
-        print (f"Uncorrected Energy:{self.subsystems[0].active_energy:>61.8f}")
-        #CORRECT ACTIVE SETTINGS.
-        #act_elec_e = self.correct_active_energy()
-        env_elec_e = 0.0
-        self.subsystems[0].env_energy += env_elec_e
-        env_e = self.subsystems[0].env_energy
-        print(f"Energy:{env_e:>73.8f}")
+        for i in range(len(self.subsystems)):
+            sub = self.subsystems[i]
+            sub.update_subsys_fock()
+            s2s = self.sub2sup
+            FAA = [None, None]
+            FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
+            FAA[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
+            sub.update_emb_fock(FAA)
+            froz_veff = [None, None]
+            sub.get_env_energy()
+            #print (f"Uncorrected Energy:{self.subsystems[0].active_energy:>61.8f}")
+            #CORRECT ACTIVE SETTINGS.
+            #act_elec_e = self.correct_active_energy()
+            #env_elec_e = 0.0
+            #self.subsystems[0].env_energy += env_elec_e
+            env_e = sub.env_energy
+            print(f"Energy Subsystem {i}:{env_e:>73.8f}")
         print("".center(80,'*'))
 
     @time_method("Correct Exc Energy")
