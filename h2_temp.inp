@@ -6,6 +6,7 @@ C         -3.45687        1.05827        1.06624
 H         -1.20639        2.37281       -1.20490
 H         -1.00693        1.03550       -0.07679
 charge -2
+hl_method_num 1
 end
 
 subsystem
@@ -20,16 +21,20 @@ H         -3.15709        1.50051        2.02031
 charge +2
 end
 
-active_method cas[2,2]
-active_settings
- save_orbs
+
+
+hl_method_settings
+ hl_order 1
+ hl_method ccsd(t)
 end
 
-embed
- huzinaga
+env_method_settings
  env_method m06
- cycles 50
+ embed_settings
+  cycles 10
+ end
 end
+
 
 basis
  default cc-pVDZ

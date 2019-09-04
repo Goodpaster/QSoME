@@ -104,7 +104,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
 
 
     def __init__(self, mol, env_method, env_order=1, env_smearsigma=0,
-                 initguess=None, conv=1e-8, damp=0., shift=0., subcycles=1, 
+                 initguess='readchk', conv=1e-8, damp=0., shift=0., subcycles=1, 
                  setfermi=None, diis=0, unrestricted=False, density_fitting=False, 
                  freeze=False, save_orbs=False, save_density=False,
                  verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
@@ -319,7 +319,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                 initguess = self.env_initguess
 
             if initguess == 'readchk':
-                is_chkfile = self.read_chkfile()
+                try:
+                    is_chkfile = self.read_chkfile()
+                except AssertionError:
+                    is_chkfile = False
                 if is_chkfile:
                     if (np.any(self.env_mo_coeff) 
                       and np.any(self.env_mo_occ)):
@@ -329,25 +332,28 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                         dmat[1] = np.dot((self.env_mo_coeff[1] * self.env_mo_occ[1]),
                                           self.env_mo_coeff[1].T.conjugate())
                     else:
-                        self.env_initguess = 'supmol'
+                        initguess = 'supmol'
+                        dmat = scf_obj.get_init_guess()
                 else:
-                    self.env_initguess = 'supmol'
+                    initguess = 'supmol'
+                    dmat = scf_obj.get_init_guess()
+   
 
-
-            if initguess in ['atom', '1e', 'minao']:
+            elif initguess in ['atom', '1e', 'minao']:
                 dmat = scf_obj.get_init_guess(key=initguess)
             elif initguess == 'submol':
                 scf_obj.kernel()
                 dmat = scf_obj.make_rdm1()
             else:
                 dmat = scf_obj.get_init_guess()
+
             if self.flip_ros:
                 temp_dmat = copy(dmat)
                 dmat[0] = temp_dmat[1]
                 dmat[1] = temp_dmat[0]
 
             #Dmat always stored [alpha, beta]
-            if dmat.ndim == 2:
+            if np.array(dmat).ndim == 2:
                 dmat = [dmat/2., dmat/2.]
             self.dmat = dmat
             return dmat
@@ -623,7 +629,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     sub_sys_data.create_dataset('mo_energy', data=self.env_mo_energy)
             except KeyError:
                 print ("Missing subsystem data in chkfile".center(80))
-                with h5py.File(filename, 'w') as hf:
+                with h5py.File(filename, 'a') as hf:
                     sub_sys_data = hf.create_group(f'subsystem:{chk_index}')
                     sub_sys_data.create_dataset('mo_coeff', data=self.env_mo_coeff)
                     sub_sys_data.create_dataset('mo_occ', data=self.env_mo_occ)
@@ -653,6 +659,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                     self.env_mo_occ = subsys_occ[:]
                     subsys_energy = hf[f'subsystem:{chk_index}/mo_energy']
                     self.env_mo_energy = subsys_energy[:]
+                return True
             except TypeError:
                 print ("chkfile improperly formatted".center(80))
                 return False
@@ -852,6 +859,7 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
                                    env_mo_coeff[0].transpose().conjugate())
             self.dmat[1] = np.dot((env_mo_coeff[1] * mo_occ[1]), 
                                    env_mo_coeff[1].transpose().conjugate())
+            self.save_chkfile()
 
             return self.dmat
 
@@ -1244,6 +1252,14 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     hl_cc.max_cycle = hl_cycles
                 ecc, t1, t2 = hl_cc.kernel()
                 hl_energy += ecc
+                if "(t)" in hl_method:
+                    eris = hl_cc.ao2mo()
+                    if self.hl_unrestricted:
+                        ecc_t = uccsd_t.kernel(hl_cc, eris)
+                    else:
+                        ecc_t = ccsd_t.kernel(hl_cc, eris)
+                    hl_energy += ecc_t
+
                 self.hl_energy = hl_energy
                 return hl_energy
 

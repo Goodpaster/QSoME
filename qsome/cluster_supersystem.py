@@ -1553,7 +1553,7 @@ class ClusterSuperSystem(supersystem.SuperSystem):
                     sup_mol.create_dataset('mo_energy', data=self.mo_energy)
             except KeyError:
                 print ("Updating existing chkfile".center(80))
-                with h5py.File(filename, 'w') as hf:
+                with h5py.File(filename, 'a') as hf:
                     sup_mol = hf.create_group('supersystem:{chk_index}')
                     sup_mol.create_dataset('mo_coeff', data=self.mo_coeff)
                     sup_mol.create_dataset('mo_occ', data=self.mo_occ)
