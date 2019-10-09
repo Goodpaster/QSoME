@@ -1,7 +1,9 @@
 
-Allow for specification of different starting single reference methods (dft or hf) for later hl calculations. Need to allow for input parameter for this too.
+
 
 Finish writing tests for Interaction Mediator
+In order to prevent writing before the chkfile index is set, need to wait to initialize densities, or not save to chkfile when initializing densities.
+Add the external methods for at least molpro
 Be sure to account for saving densities properly and loading the saved densities for each supersystem separately.
 
 

@@ -3,7 +3,7 @@
 
 from qsome.cluster_subsystem import ClusterEnvSubSystem, ClusterHLSubSystem
 from qsome.cluster_supersystem import ClusterSuperSystem
-from qsome import cluster_supersystem
+from qsome import cluster_supersystem, cluster_subsystem
 
 class InteractionMediator:
 
@@ -17,6 +17,8 @@ class InteractionMediator:
         self.pmem = pmem
         self.scrdir = scrdir
         self.supersystems = self.gen_supersystems()
+        self.set_chkfile_index()
+        self.init_density()
 
     def gen_supersystems(self):
         sup_kwargs = self.supersystem_kwargs
@@ -32,6 +34,7 @@ class InteractionMediator:
                 sub_sup_kwargs = [x for x in sup_kwargs if x['env_order'] == (curr_order + 1)]
                 assert len(match_sup_kwargs) < 2,'Ambigious supersystem settings'
                 curr_sup_kwargs = match_sup_kwargs[0]
+                curr_sup_kwargs.pop('fs_method', None)
             higher_order_subs = [x for x in sorted_subs if x.env_order > curr_order]
             sub_list = []
             while len(sorted_subs) > 0 and sorted_subs[0].env_order == curr_order:
@@ -44,11 +47,21 @@ class InteractionMediator:
 
                 sub_list.append(combined_subs)
             curr_sup_kwargs['env_order'] = curr_order
+            curr_sup_kwargs['filename'] = self.filename
             supersystem = ClusterSuperSystem(sub_list, curr_method, **curr_sup_kwargs)
             supersystems.append(supersystem)
 
         return supersystems
 
+    def set_chkfile_index(self, index=0):
+        self.chkfile_index = index
+        for i in range(len(self.supersystems)):
+            sup = self.supersystems[i]
+            sup.set_chkfile_index(i)
+
+    def init_density(self):
+        for sup in self.supersystems:
+            sup.init_density()
 
     def combine_subsystems(self, subsystems, env_method, fs_kwargs=None):
         mol = cluster_supersystem.concat_mols(subsystems)
@@ -66,10 +79,11 @@ class InteractionMediator:
         ext_potential = [0., 0.]
         for i in range(len(self.supersystems)):
             curr_sup = self.supersystems[i]
-            curr_sup.update_ext_pot(ext_potential)
+            curr_sup.ext_pot = ext_potential
             curr_sup.freeze_and_thaw()
-            new_ext_pot = curr_sup.get_ext_pot() #This method formats the external potential for the next super system
-            ext_potential = new_ext_pot
+            #There is an issue here.
+            #new_ext_pot = curr_sup.get_emb_ext_pot() #This method formats the external potential for the next super system
+            #ext_potential = new_ext_pot
 
     def get_emb_energy(self):
         #Add all the components together to get an energy summary.
@@ -78,7 +92,7 @@ class InteractionMediator:
         for i in range(len(self.supersystems) - 1):
             sup = self.supersystems[i]
             sup_e = sup.get_supersystem_energy()
-            sup_e = sup.get_env_energy()
+            sup.get_env_energy()
             sub_e = sup.subsystems[-1].env_energy
             print (f"Supersystem {i + 1} Energy: {sup_e}")
             print (f"Higher level subsystem Energy: {sub_e}")
@@ -86,18 +100,17 @@ class InteractionMediator:
 
         sup = self.supersystems[-1]
         sup_e = sup.get_supersystem_energy()
-        sup_e = sup.get_active_energy()
-        sup_e = sup.get_env_energy()
+        sup.get_hl_energy()
+        sup.get_env_energy()
         E_tot += sup_e
         for sub in sup.subsystems:
-            if isinstance(sub, cluster_subsystem.ClusterHLSubSystem):
+            #THIS IS VERY HACKY. NEED TO COME UP WITH A BETTER WAY TO GET SUBSYSTEM STUFF.
+            if 'hl_energy' in vars(sub):
                 E_tot -= sub.env_energy
-                E_tot += sub.active_energy
+                E_tot += sub.hl_energy
 
-    print("".center(80, '*'))
-    print(f"Total Embedding Energy:     {E_tot}")
-    print("".center(80,'*'))
+        print("".center(80, '*'))
+        print(f"Total Embedding Energy:     {E_tot}")
+        print("".center(80,'*'))
+        return E_tot
 
-        pass
-
-    

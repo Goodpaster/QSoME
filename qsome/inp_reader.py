@@ -517,7 +517,9 @@ class InpReader:
                 'unrestricted', 'density_fitting', 'use_ext']
 
         for subsystem in inp.subsystem:
-            if subsystem.hl_method_num is not None:
+            if subsystem.hl_method_num is None:
+                hl_kwargs.append(None)
+            else:
                 hl_method_settings = {'hl_order': subsystem.hl_method_num}
                 method_num = subsystem.hl_method_num
                 params_found = False

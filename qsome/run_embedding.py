@@ -10,7 +10,9 @@ import sys
 import os
 from os.path import expanduser, expandvars, abspath, splitext
 
-import inp_reader, cluster_subsystem, cluster_supersystem
+import inp_reader, cluster_subsystem, interaction_mediator
+import numpy as np
+from copy import deepcopy as copy
 #import periodic_subsystem
 
 
@@ -27,81 +29,26 @@ def main():
     in_obj = inp_reader.InpReader(file_path)
     subsystems = []
     for i in range(len(in_obj.subsys_mols)):
-        if i == 0:
-            mol = in_obj.subsys_mols[i]
-            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
-            env_kwargs = in_obj.env_subsystem_kwargs[i]
-            if not "pmem" in env_kwargs.keys():
-                env_kwargs['pmem'] = pmem
-            if not "scr_dir" in env_kwargs.keys():
-                env_kwargs['scrdir'] = scr_dir
-            hl_method = in_obj.hl_subsystem_kwargs[0].pop('hl_method')
-            hl_kwargs = in_obj.hl_subsystem_kwargs[0]
+        mol = in_obj.subsys_mols[i]
+        env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
+        env_kwargs = in_obj.env_subsystem_kwargs[i]
+        if not "pmem" in env_kwargs.keys():
+            env_kwargs['pmem'] = pmem
+        if not "scr_dir" in env_kwargs.keys():
+            env_kwargs['scrdir'] = scr_dir
+        if in_obj.hl_subsystem_kwargs[i] is not None:
+            hl_method = in_obj.hl_subsystem_kwargs[i].pop('hl_method')
+            hl_kwargs = in_obj.hl_subsystem_kwargs[i]
             hl_kwargs.update(env_kwargs)
             subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method,  **hl_kwargs)
-
-            #if in_obj.periodic:
-            #    pass
-                #kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-                #subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                #            **in_obj.periodic_kwargs)
-
-            subsystems.append(subsys)
-
         else:
-            mol = in_obj.subsys_mols[i]
-            env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
-            env_kwargs = in_obj.env_subsystem_kwargs[i]
             subsys = cluster_subsystem.ClusterEnvSubSystem(mol, env_method, **env_kwargs)
 
-            #if in_obj.periodic:
-            #    pass
-                #kpts, nkpts = periodic_subsystem.InitKpoints(mol, **in_obj.kpoints_kwargs)
-                #subsys = periodic_subsystem.PeriodicEnvSubSystem(mol, env_method, kpts,
-                #                                                 **in_obj.periodic_kwargs)
+        subsystems.append(subsys)
 
-            subsystems.append(subsys)
-
-    fs_method = subsystems[0].env_method
-    supersystem_kwargs = in_obj.supersystem_kwargs[0]
-    if not "pmem" in supersystem_kwargs.keys():
-        supersystem_kwargs['pmem'] = pmem
-    if not "scr_dir" in supersystem_kwargs.keys():
-        supersystem_kwargs['scr_dir'] = scr_dir
-
-    #if not in_obj.periodic: # RUN CLUSTER CALCULATION IF NOT PERIODIC
-    supersystem = cluster_supersystem.ClusterSuperSystem(subsystems, **supersystem_kwargs)
-
-    #else:
-    #    pass
-        #from periodic_supersystem import PeriodicSuperSystem
-        #if 'grid_level' in in_obj.periodic_kwargs:
-        #    temp = in_obj.periodic_kwargs.pop('grid_level')
-            
-       # supersystem = PeriodicSuperSystem(subsystems, env_method, kpoints=kpts,
-       #           **in_obj.cell_kwargs, **in_obj.periodic_kwargs,
-       #           **in_obj.supersystem_kwargs)
-
-       # super_energy = supersystem.get_supersystem_energy()
-
-    supersystem.freeze_and_thaw()
-    #supersystem.env_in_env_energy()
-
-    #if in_obj.periodic:
-    #    supersystem.periodic_to_cluster(active_method, **active_kwargs)
-
-    supersystem.get_hl_energy()
-    supersystem.get_env_energy()
-    super_energy = supersystem.get_supersystem_energy()
-
-    #if not in_obj.periodic: # TODO: does not work for periodic embedding
-        #supersystem.get_dft_diff_parameters()
-
-    total_energy = super_energy - supersystem.subsystems[0].env_energy + supersystem.subsystems[0].hl_energy
-
-    print("".center(80, '*'))
-    print(f"Total Embedding Energy:     {total_energy}")
-    print("".center(80,'*'))
+    int_med = interaction_mediator.InteractionMediator(subsystems, supersystem_kwargs=in_obj.supersystem_kwargs, filename=in_obj.inp.filename)
+    int_med.do_embedding()
+    total_energy = int_med.get_emb_energy()
 
     return total_energy
 
@@ -152,6 +99,7 @@ def IntroText():
     print ('Version 0.6.0'.center(80))
     print ('github.com/Goodpaster/QSoME'.center(80))
     print ('DOI: 10.5281/zenodo.3356913'.center(80))
+    print ('Program Citation: QSoME 0.5, Graham, D.S.; Chulhai, D. V.; Wen, X.; Goodpaster, J. D. University of Minnesota, Minneapolis MN, 2019.'.center(80))
     print ('')
 
     print ('Authors'.center(80))
@@ -166,6 +114,7 @@ def IntroText():
     print ('1. J. Chem. Theory Comput. 2017, 13, 1503--1508.'.ljust(50).center(80))
     print ('2. J. Chem. Theory Comput. 2018, 14, 1928--1942.'.ljust(50).center(80))
     print ('')
+
 
 if __name__=='__main__':
     main()
