@@ -194,6 +194,7 @@ class InpReader:
         embed = env_settings.add_block_key('embed_settings')
         embed.add_line_key('cycles', type=int) 
         embed.add_line_key('subcycles', type=int) 
+        embed.add_line_key('basis_tau', type=float)
         embed.add_line_key('conv', type=float)
         embed.add_line_key('grad', type=float)
         embed.add_line_key('damp', type=float)
@@ -365,6 +366,7 @@ class InpReader:
                    'save_density'    :       'fs_save_density'}
 
         ft_dict = {'cycles'          :       'ft_cycles', 
+                   'basis_tau'       :       'ft_basis_tau',
                    'conv'            :       'ft_conv',
                    'grad'            :       'ft_grad',
                    'damp'            :       'ft_damp', 

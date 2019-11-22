@@ -76,6 +76,77 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         init_dmat = scf_obj.make_rdm1()
         self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
 
+        #Test Unrestricted Open Shell.
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True)
+        subsys.init_density()
+        init_dmat = scf.uhf.get_init_guess(self.os_mol)
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='atom', unrestricted=True)
+        subsys.init_density()
+        init_dmat = scf.uhf.get_init_guess(self.os_mol, key='atom')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='1e', unrestricted=True)
+        subsys.init_density()
+        init_dmat = scf.uhf.get_init_guess(self.os_mol, key='1e')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='minao', unrestricted=True)
+        subsys.init_density()
+        init_dmat = scf.uhf.get_init_guess(self.os_mol, key='minao')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='supmol', unrestricted=True)
+        subsys.init_density()
+        init_dmat = scf.uhf.get_init_guess(self.os_mol)
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='submol', unrestricted=True)
+        subsys.init_density()
+        scf_obj = subsys.env_scf
+        scf_obj.kernel()
+        init_dmat = scf_obj.make_rdm1()
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        #Test Restricted Open Shell.
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.init_density()
+        init_dmat = scf.rhf.get_init_guess(self.os_mol)
+        init_dmat = [init_dmat/2., init_dmat/2.]
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='atom')
+        subsys.init_density()
+        init_dmat = scf.rhf.get_init_guess(self.os_mol, key='atom')
+        init_dmat = [init_dmat/2., init_dmat/2.]
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='1e')
+        subsys.init_density()
+        true_hf = scf.rohf.ROHF(self.os_mol)
+        init_dmat = true_hf.get_init_guess(key='1e')
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='minao')
+        subsys.init_density()
+        init_dmat = scf.rhf.get_init_guess(self.os_mol, key='minao')
+        init_dmat = [init_dmat/2., init_dmat/2.]
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='supmol')
+        subsys.init_density()
+        true_hf = scf.rohf.ROHF(self.os_mol)
+        init_dmat = true_hf.get_init_guess(self.os_mol)
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, initguess='submol')
+        subsys.init_density()
+        scf_obj = subsys.env_scf
+        scf_obj.kernel()
+        init_dmat = scf_obj.make_rdm1()
+        self.assertTrue(np.allclose(init_dmat, subsys.get_dmat()))
+
     #@unittest.skip
     def test_update_density(self):
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method)
@@ -93,6 +164,26 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         subsys.init_density()
         subsys_dmat = subsys.get_dmat()
         sub_scf = dft.RKS(self.cs_mol)
+        sub_scf.xc = self.env_method
+        true_fock = sub_scf.get_fock(dm=subsys_dmat)
+        true_fock = [true_fock, true_fock]
+        self.assertTrue(np.allclose(subsys.subsys_fock, true_fock))
+
+        #Unrestricted
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True)
+        subsys.init_density()
+        subsys_dmat = subsys.get_dmat()
+        sub_scf = dft.UKS(self.os_mol)
+        sub_scf.xc = self.env_method
+        true_fock = sub_scf.get_fock(dm=subsys_dmat)
+        true_fock = [true_fock, true_fock]
+        self.assertTrue(np.allclose(subsys.subsys_fock, true_fock))
+
+        #Restricted Open Shell
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.init_density()
+        subsys_dmat = subsys.get_dmat()
+        sub_scf = dft.ROKS(self.os_mol)
         sub_scf.xc = self.env_method
         true_fock = sub_scf.get_fock(dm=subsys_dmat)
         true_fock = [true_fock, true_fock]
@@ -136,6 +227,25 @@ class TestEnvSubsystemMethods(unittest.TestCase):
 
         # Unrestricted Open Shell
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True)
+        subsys.init_density()
+        sub_dmat = subsys.get_dmat()
+        # With 0 potential.
+        no_proj_e = subsys.get_env_proj_e()
+        self.assertEqual(no_proj_e, 0.0)
+        # With potential
+        dim0 = subsys.emb_pot[0].shape[0]
+        dim1 = subsys.emb_pot[1].shape[1]
+        proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        test_proj_e = np.einsum('ij,ji', proj_potent[0],
+                                 sub_dmat[0]).real
+        test_proj_e += np.einsum('ij,ji', proj_potent[1],
+                                 sub_dmat[1]).real
+        subsys.proj_pot = proj_potent
+        proj_e = subsys.get_env_proj_e()
+        self.assertEqual(test_proj_e, proj_e)
+
+        # Restricted Open Shell
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
         subsys.init_density()
         sub_dmat = subsys.get_dmat()
         # With 0 potential.
@@ -197,6 +307,26 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         embed_e = subsys.get_env_emb_e()
         self.assertEqual(true_emb_e, embed_e)
 
+        # Restricted Open Shell
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.init_density()
+        sub_dmat = subsys.get_dmat()
+        # With 0 potential.
+        no_embed_e = subsys.get_env_emb_e()
+        self.assertEqual(no_embed_e, 0.0)
+        # With potential
+        dim0 = subsys.emb_pot[0].shape[0]
+        dim1 = subsys.emb_pot[1].shape[1]
+        emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        emb_pot = emb_fock - subsys.subsys_fock
+        true_emb_e = np.einsum('ij,ji', emb_pot[0],
+                                 sub_dmat[0]).real
+        true_emb_e += np.einsum('ij,ji', emb_pot[1],
+                                 sub_dmat[1]).real
+        subsys.emb_fock = emb_fock
+        embed_e = subsys.get_env_emb_e()
+        self.assertEqual(true_emb_e, embed_e)
+
     #@unittest.skip
     def test_get_env_elec_energy(self):
 
@@ -225,7 +355,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         def_emb_e = def_elec_e_embed - def_elec_e
         self.assertAlmostEqual(test_embed_e, def_emb_e, delta=1e-10)
         
-        # With just projeciton potential
+        # With just projection potential
         proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
         test_proj_e = np.einsum('ij,ji', (proj_potent[0] + proj_potent[1])/2.,
                                  (sub_dmat)).real
@@ -299,6 +429,58 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         def_proj_emb_e = def_elec_e_tot - def_elec_e
         self.assertAlmostEqual(test_proj_e + test_embed_e, def_proj_emb_e, delta=1e-10)
 
+        # Restricted Open Shell 
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.init_density()
+        # Default test
+        def_elec_e = subsys.get_env_elec_energy()
+        sub_dmat = subsys.env_dmat
+        test_scf = dft.ROKS(self.os_mol)
+        test_scf.xc = self.env_method
+        test_elec_e = test_scf.energy_elec(dm=sub_dmat)
+        self.assertAlmostEqual(test_elec_e[0], def_elec_e, delta=1e-10)
+
+        # With just embedding potential
+        dim0 = subsys.emb_pot[0].shape[0]
+        dim1 = subsys.emb_pot[1].shape[1]
+        emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        emb_pot = emb_fock - subsys.subsys_fock
+        test_embed_e = np.einsum('ij,ji', emb_pot[0],
+                                 sub_dmat[0]).real
+        test_embed_e += np.einsum('ij,ji', emb_pot[1],
+                                 sub_dmat[1]).real
+        
+        def_elec_e_embed = subsys.get_env_elec_energy(emb_pot=emb_pot)
+        def_emb_e = def_elec_e_embed - def_elec_e
+        self.assertAlmostEqual(test_embed_e, def_emb_e, delta=1e-10)
+        
+        # With just projeciton potential
+        proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        test_proj_e = np.einsum('ij,ji', proj_potent[0],
+                                 sub_dmat[0]).real
+        test_proj_e += np.einsum('ij,ji', proj_potent[1],
+                                 sub_dmat[1]).real
+        def_elec_e_proj = subsys.get_env_elec_energy(proj_pot=proj_potent)
+        def_proj_e = def_elec_e_proj - def_elec_e
+        self.assertAlmostEqual(test_proj_e, def_proj_e, delta=1e-10)
+       
+        # With both. 
+        emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        emb_pot = emb_fock - subsys.subsys_fock
+        proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        test_proj_e = np.einsum('ij,ji', proj_potent[0],
+                                 sub_dmat[0]).real
+        test_proj_e += np.einsum('ij,ji', proj_potent[1],
+                                 sub_dmat[1]).real
+        test_embed_e = np.einsum('ij,ji', emb_pot[0],
+                                 sub_dmat[0]).real
+        test_embed_e += np.einsum('ij,ji', emb_pot[1],
+                                 sub_dmat[1]).real
+
+        def_elec_e_tot = subsys.get_env_elec_energy(emb_pot=emb_pot, proj_pot=proj_potent)
+        def_proj_emb_e = def_elec_e_tot - def_elec_e
+        self.assertAlmostEqual(test_proj_e + test_embed_e, def_proj_emb_e, delta=1e-10)
+
     #@unittest.skip
     def test_get_env_energy(self):
 
@@ -316,6 +498,56 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         true_embed_e = np.einsum('ij,ji', (emb_pot[0] + emb_pot[1])/2.,
                                  (sub_dmat)).real
         true_scf = dft.RKS(self.cs_mol)
+        true_scf.xc = self.env_method
+        true_subsys_e = true_scf.energy_tot(dm=sub_dmat)
+        subsys_e_tot = subsys.get_env_energy(emb_pot=emb_pot, proj_pot=proj_potent)
+        true_e_tot = true_subsys_e + true_proj_e + true_embed_e
+        self.assertAlmostEqual(true_e_tot, subsys_e_tot, delta=1e-10)
+
+        #Unrestricted
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True)
+        subsys.init_density()
+        sub_dmat = subsys.get_dmat()
+        dim0 = subsys.emb_pot[0].shape[0]
+        dim1 = subsys.emb_pot[1].shape[1]
+        emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        emb_pot = [emb_fock[0] - subsys.subsys_fock[0],
+                   emb_fock[1] - subsys.subsys_fock[1]]
+        proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        true_proj_e = np.einsum('ij,ji', proj_potent[0],
+                                 sub_dmat[0].real)
+        true_proj_e += np.einsum('ij,ji', proj_potent[1],
+                                 sub_dmat[1].real)
+        true_embed_e = np.einsum('ij,ji', emb_pot[0],
+                                 (sub_dmat[0]).real)
+        true_embed_e += np.einsum('ij,ji', emb_pot[1],
+                                 (sub_dmat[1]).real)
+        true_scf = dft.UKS(self.os_mol)
+        true_scf.xc = self.env_method
+        true_subsys_e = true_scf.energy_tot(dm=sub_dmat)
+        subsys_e_tot = subsys.get_env_energy(emb_pot=emb_pot, proj_pot=proj_potent)
+        true_e_tot = true_subsys_e + true_proj_e + true_embed_e
+        self.assertAlmostEqual(true_e_tot, subsys_e_tot, delta=1e-10)
+
+        #Restricted Open Shell
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.init_density()
+        sub_dmat = subsys.get_dmat()
+        dim0 = subsys.emb_pot[0].shape[0]
+        dim1 = subsys.emb_pot[1].shape[1]
+        emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        emb_pot = [emb_fock[0] - subsys.subsys_fock[0],
+                   emb_fock[1] - subsys.subsys_fock[1]]
+        proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
+        true_proj_e = np.einsum('ij,ji', proj_potent[0],
+                                 sub_dmat[0].real)
+        true_proj_e += np.einsum('ij,ji', proj_potent[1],
+                                 sub_dmat[1].real)
+        true_embed_e = np.einsum('ij,ji', emb_pot[0],
+                                 (sub_dmat[0]).real)
+        true_embed_e += np.einsum('ij,ji', emb_pot[1],
+                                 (sub_dmat[1]).real)
+        true_scf = dft.ROKS(self.os_mol)
         true_scf.xc = self.env_method
         true_subsys_e = true_scf.energy_tot(dm=sub_dmat)
         subsys_e_tot = subsys.get_env_energy(emb_pot=emb_pot, proj_pot=proj_potent)
@@ -426,6 +658,20 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         test_dmat = test_scf.make_rdm1()
         self.assertTrue(np.allclose(test_dmat[0], subsys.env_dmat[0]))
         self.assertTrue(np.allclose(test_dmat[1], subsys.env_dmat[1]))
+
+        # Restricted Open Shell
+        # Unsure how to test this with embedding potential or projection pot.
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
+        subsys.chkfile_index = '0'
+        subsys.init_density()
+        subsys.diagonalize()
+        test_scf = dft.ROKS(self.os_mol)
+        test_scf.max_cycle = 1
+        test_scf.xc = self.env_method
+        test_scf.kernel()
+        test_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(test_dmat[0], subsys.env_dmat[0]))
+        self.assertTrue(np.allclose(test_dmat[1], subsys.env_dmat[1]))
     
     #Check this test for use.
     @unittest.skip
@@ -437,10 +683,6 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         sub_dmat = subsys.dmat
         test_scf = dft.RKS(mol)
         test_scf.xc = env_method
-        #grids = dft.gen_grid.Grids(mol)
-        #grids.level = subsys.grid_level
-        #grids.build()
-        #test_scf.grids = grids
         test_fock = test_scf.get_fock(dm=sub_dmat)
         test_hcore = test_scf.get_hcore()
         test_veff = test_scf.get_veff(dm=sub_dmat)
@@ -457,10 +699,6 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         sub_dmat = subsys.dmat
         test_scf = dft.UKS(mol)
         test_scf.xc = env_method
-        #grids = dft.gen_grid.Grids(mol)
-        #grids.level = subsys.grid_level
-        #grids.build()
-        #test_scf.grids = grids
         test_fock = test_scf.get_fock(dm=sub_dmat)
         test_hcore = test_scf.get_hcore()
         test_veff = test_scf.get_veff(dm=sub_dmat)
@@ -539,6 +777,88 @@ class TestHLSubsystemMethods(unittest.TestCase):
         correct_dmat = test_scf.make_rdm1()
         self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
 
+        #Unrestricted Open Shell
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="1e", hl_unrestricted=True)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.UHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="1e")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="minao", hl_unrestricted=True)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.UHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="minao")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="atom", hl_unrestricted=True)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.UHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="atom")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        #Use the embedded density as the hl guess.
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="ft", hl_unrestricted=True)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.UHF(self.os_mol)
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=subsys.get_dmat())
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        #Restricted Open Shell
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="1e")
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.ROHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="1e")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="minao")
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.ROHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="minao")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="atom")
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.ROHF(self.os_mol)
+        correct_dmat = test_scf.get_init_guess(key="atom")
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=correct_dmat)
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_conv=conv_param, hl_cycles=0, hl_initguess="ft")
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        test_scf = scf.ROHF(self.os_mol)
+        test_scf.max_cycle = 0
+        test_scf.kernel(dm0=subsys.get_dmat())
+        correct_dmat = test_scf.make_rdm1()
+        self.assertTrue(np.allclose(correct_dmat, subsys.hl_sr_scf.make_rdm1()))
+
+
     #@unittest.skip
     def test_hf_in_env_energy(self):
 
@@ -551,12 +871,21 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_e = true_scf.kernel()
         self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
 
-        # Open shell
+        # Unrestricted Open shell
         hl_method = 'hf'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_unrestricted=True)
         subsys.init_density()
         subsys_hl_e = subsys.get_hl_in_env_energy()
         true_scf = scf.UHF(self.os_mol)
+        true_e = true_scf.kernel()
+        self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
+
+        # Restricted Open shell
+        hl_method = 'hf'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        true_scf = scf.ROHF(self.os_mol)
         true_e = true_scf.kernel()
         self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
 
@@ -573,12 +902,22 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_e = true_scf.kernel()
         self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
 
-        # Open shell
+        # Unrestricted Open shell
         hl_method = 'm06'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_unrestricted=True)
         subsys.init_density()
         subsys_hl_e = subsys.get_hl_in_env_energy()
         true_scf = scf.UKS(self.os_mol)
+        true_scf.xc = 'm06'
+        true_e = true_scf.kernel()
+        self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
+
+        # Restricted Open shell
+        hl_method = 'm06'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method)
+        subsys.init_density()
+        subsys_hl_e = subsys.get_hl_in_env_energy()
+        true_scf = scf.ROKS(self.os_mol)
         true_scf.xc = 'm06'
         true_e = true_scf.kernel()
         self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
@@ -596,7 +935,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_cc_e = true_cc.kernel()[0]
         self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
 
-        # Open shell
+        # Unrestricted Open shell
         hl_method = 'ccsd'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method, hl_unrestricted=True)
         subsys.init_density()
@@ -606,6 +945,17 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_cc = cc.UCCSD(true_scf)
         true_cc_e = true_cc.kernel()[0]
         self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
+
+        # Restricted Open shell
+        #hl_method = 'ccsd'
+        #subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol, self.env_method, hl_method)
+        #subsys.init_density()
+        #subsys_hl_e = subsys.get_hl_in_env_energy()
+        #true_scf = scf.ROHF(self.os_mol)
+        #true_hf_e = true_scf.kernel()
+        #true_cc = cc.UCCSD(true_scf)
+        #true_cc_e = true_cc.kernel()[0]
+        #self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
 
     def test_ccsdt_in_env_energy(self):
 
@@ -668,7 +1018,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_hf_e = true_scf.kernel()
         true_casscf = mcscf.CASSCF(true_scf, 2, 2)
         true_casscf_e = true_casscf.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, true_casscf_e, delta=1e-9)
+        self.assertAlmostEqual(subsys_hl_e, true_casscf_e, delta=1e-8)
 
     def test_ci_in_env_energy(self):
         pass
@@ -730,30 +1080,6 @@ class TestHLSubsystemMethods(unittest.TestCase):
             test_fci_val = float(test_fcidump[i].split()[0])
             true_fci_val = float(true_fcidump[i].split()[0])
             self.assertAlmostEqual(test_fci_val, true_fci_val)
-
-    @unittest.skip
-    def test_active_proj_energy(self):
-        pass
-        #mol = gto.Mole()
-        #mol.verbose = 3
-        #mol.atom = '''
-        #O 0.0 0.0 0.0
-        #H 0. -2.757 2.857
-        #H 0. 2.757 2.857'''
-        #mol.basis = 'aug-cc-pVDZ'
-        #mol.build()
-        #env_method = 'm06'
-        #active_method  = 'mp2'
-        #subsys = cluster_subsystem.ClusterActiveSubSystem(mol, env_method, active_method)
-        #sub_dmat = subsys.dmat[0] + subsys.dmat[1]
-        #dim0 = subsys.emb_pot[0].shape[0]
-        #dim1 = subsys.emb_pot[1].shape[1]
-        #proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
-        #test_proj_e = np.einsum('ij,ji', (proj_potent[0] + proj_potent[1])/2.,
-        #                         (sub_dmat)).real
-        #subsys.update_proj_pot(proj_potent)
-        #proj_e = subsys.active_proj_energy()
-        #self.assertEqual(test_proj_e, proj_e)
 
     @unittest.skip
     def test_hl_in_env_energy(self):

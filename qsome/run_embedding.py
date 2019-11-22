@@ -32,6 +32,8 @@ def main():
         mol = in_obj.subsys_mols[i]
         env_method = in_obj.env_subsystem_kwargs[i].pop('env_method')
         env_kwargs = in_obj.env_subsystem_kwargs[i]
+        if not "nproc" in env_kwargs.keys():
+            env_kwargs['nproc'] = nproc
         if not "pmem" in env_kwargs.keys():
             env_kwargs['pmem'] = pmem
         if not "scr_dir" in env_kwargs.keys():

@@ -546,12 +546,16 @@ class TestKwargCreation(unittest.TestCase):
                                       'fs_method': 'pbe',
                                       'filename': path + def_filename}
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
-        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 1)
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
         for n in in_obj.env_subsystem_kwargs:
             self.assertDictEqual(n, correct_env_kwargs)
-        for n in in_obj.hl_subsystem_kwargs:
-            self.assertDictEqual(n, correct_hl_kwargs)
+        for i in range(len(in_obj.hl_subsystem_kwargs)):
+            n = in_obj.hl_subsystem_kwargs[i]
+            if i == 0:
+                self.assertDictEqual(n, correct_hl_kwargs)
+            else:
+                self.assertEqual(n, None)
         for n in in_obj.supersystem_kwargs:
             self.assertDictEqual(n, correct_supersystem_kwargs)
 
@@ -612,9 +616,13 @@ class TestKwargCreation(unittest.TestCase):
                              'cas_initguess': 'rhf',
                              'cas_active_orbs': [3,4,5,6,7],
                              'cas_avas': ['1d']}
-        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 1)
-        for n in in_obj.hl_subsystem_kwargs:
-            self.assertDictEqual(n, correct_hl_kwargs)
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
+        for i in range(len(in_obj.hl_subsystem_kwargs)):
+            n = in_obj.hl_subsystem_kwargs[i]
+            if i == 0:
+                self.assertDictEqual(n, correct_hl_kwargs)
+            else:
+                self.assertEqual(n, None)
 
     def test_subsys_env_settings(self):
         path = os.getcwd() + temp_inp_dir 
@@ -740,7 +748,7 @@ class TestKwargCreation(unittest.TestCase):
                                 
         correct_hl_kwargs_2 = {'hl_order': 2,
                                'hl_method': 'rhf'}
-        hl_list = [correct_hl_kwargs_1, correct_hl_kwargs_2]
+        hl_list = [correct_hl_kwargs_1, correct_hl_kwargs_2, None, None, None]
         correct_sup_kwargs_1 = {'env_order': 1,
                                 'fs_method': 'lda',
                                 'fs_smearsigma': 0.1,
@@ -789,15 +797,16 @@ class TestKwargCreation(unittest.TestCase):
                                 'scrdir': '/path/to/scratch/dir'}
         sup_list = [correct_sup_kwargs_1, correct_sup_kwargs_2, correct_sup_kwargs_3]
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 5)
-        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 2)
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 5)
         self.assertEqual(len(in_obj.supersystem_kwargs), 3)
         for i in range(len(in_obj.env_subsystem_kwargs)):
             test = in_obj.env_subsystem_kwargs[i]
             self.assertDictEqual(test, env_list[i])
             print (f"ENV SUBSYSTEM {i} GOOD")
         for i in range(len(in_obj.hl_subsystem_kwargs)):
+
             test = in_obj.hl_subsystem_kwargs[i]
-            self.assertDictEqual(test, hl_list[i])
+            self.assertEqual(test, hl_list[i])
             print (f"HL SUBSYSTEM {i} GOOD")
         for i in range(len(in_obj.supersystem_kwargs)):
             test = in_obj.supersystem_kwargs[i]
