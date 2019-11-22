@@ -1,3 +1,5 @@
 pyscf
 numpy
+input_reader
+nosetests (for testing)
 

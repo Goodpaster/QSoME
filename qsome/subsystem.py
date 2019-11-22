@@ -18,10 +18,6 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def update_emb_pot(self, new_emb_pot):
-        pass
-
-    @abstractmethod
     def update_emb_fock(self):
         pass
 
@@ -30,5 +26,5 @@ class SubSystem(ABC):
         pass
 
     @abstractmethod
-    def save_orbitals(self):
+    def save_orbital_file(self):
         pass

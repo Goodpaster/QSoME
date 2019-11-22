@@ -18,7 +18,7 @@ class SuperSystem(ABC):
         pass
 
     @abstractmethod
-    def get_active_energy(self):
+    def get_hl_energy(self):
         pass
 
     @abstractmethod

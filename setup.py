@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="QSoME",
-    version='0.1.0',
+    version='0.6.0',
     author="Daniel Graham",
     author_email="graha682@umn.edu",
     description="Quantum Solid state Method Embedding",
