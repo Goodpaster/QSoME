@@ -7,7 +7,9 @@ from pyscf import gto, scf, dft, cc, mcscf, tools
 from pyscf.cc import ccsd_t, uccsd_t, ccsd_t_rdm_slow, ccsd_t_lambda_slow
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
+
 import os
+import random
 
 from functools import reduce
 
@@ -415,6 +417,10 @@ class ClusterEnvSubSystem(subsystem.SubSystem):
         if mol is None:
             mol = self.mol
         self.env_energy = self.get_env_elec_energy() + mol.energy_nuc()
+        if self.save_density:
+            print ('Writing Density')
+            cubename = os.path.splitext(self.filename)[0] + '_' + str(random.randint(0,10)) + '_dftden.cube'
+            tools.cubegen.density(mol, cubename, self.dmat[0] + self.dmat[1])
         return self.env_energy
 
     def get_env_nuc_grad(self, mol=None, scf_obj=None):
@@ -1120,7 +1126,7 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                             active_energy += ecc_t
                             #l1, l2 = ccsd_t_lambda_slow.kernel(self.active_cc, new_eris, t1, t2,)[1:]
                             # this slows down execution.
-                            self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
+                            #self.active_dmat = ccsd_t_rdm_slow.make_rdm1(self.active_cc, t1, t2, l1, l2, eris=new_eris)
                         else:
                             pass
                             # this slows down execution.
@@ -1208,8 +1214,8 @@ class ClusterActiveSubSystem(ClusterEnvSubSystem):
                     #Slows down execution
                     self.active_dmat = self.active_scf.make_rdm1()
 
-                temp_dmat = copy(self.active_dmat)
-                self.active_dmat = [temp_dmat/2., temp_dmat/2.]
+                #temp_dmat = copy(self.active_dmat)
+                #self.active_dmat = [temp_dmat/2., temp_dmat/2.]
         self.active_energy = active_energy 
 
         if self.active_save_density:

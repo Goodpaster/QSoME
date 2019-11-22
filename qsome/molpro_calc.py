@@ -66,7 +66,7 @@ def molpro_energy(mol, h0, method, in_file='temp', output_orbs=False, active_orb
     pword = pmem / 8.0
     username = getpass.getuser()
     if scr_dir is None:
-        scr_dir = '/scratch.local/'+username+'/temp_molpro'
+        scr_dir = '/scratch.global/'+username+'/temp_molpro'
     if not os.path.exists(scr_dir):
         os.makedirs(scr_dir)
 

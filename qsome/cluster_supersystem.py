@@ -1735,10 +1735,10 @@ class ClusterSuperSystem(supersystem.SuperSystem):
         e_diff = self.fs_energy - self.env_energy
         print (f"Energy Difference of KS-DFT to DFT-in-DFT:{e_diff:>38.8f}")
 
-        trace_diff = (0.5 * np.trace(self.dmat[0] - self.dftindft_dmat[0]) 
-                     + 0.5 * np.trace(self.dmat[1] - self.dftindft_dmat[1]))
+        #trace_diff = (0.5 * np.trace(self.dmat[0] - self.dftindft_dmat[0]) 
+        #             + 0.5 * np.trace(self.dmat[1] - self.dftindft_dmat[1]))
 
-        print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}") 
+        #print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}") 
 
     def get_embedding_nuc_grad(self):
         sup_nuc_grad = self.get_supersystem_nuc_grad().grad()
