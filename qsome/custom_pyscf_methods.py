@@ -96,19 +96,9 @@ def rohf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None,
 # To Get orbital energy in get_occ, we saved alpha and beta fock, because
 # Roothaan effective Fock cannot provide correct orbital energy with `eig`
 # TODO, check other treatment  J. Chem. Phys. 133, 141102
-    print ('dm')
-    print (dm)
     focka = h1e + vhf[0] + emb_pot[0] + proj_pot[0]#Add embedding potential
     fockb = h1e + vhf[1] + emb_pot[1] + proj_pot[1]#Add embedding potential
-    print ("HERE")
-    print (focka)
-    print (vhf[0])
-    print ("h1e")
-    print (h1e)
-    print ("comb")
-    print (h1e + emb_pot[0] + proj_pot[0])
     f = rohf.get_roothaan_fock((focka,fockb), dm, s1e)
-    print (f)
     if cycle < 0 and diis is None:  # Not inside the SCF iteration
         return f
 
@@ -207,11 +197,12 @@ def uhf_energy_elec(mf, emb_pot=None, proj_pot=None, dm=None, h1e=None, vhf=None
         vhf = mf.get_veff(mf.mol, dm)
     e1 = np.einsum('ij,ij', h1e.conj(), dm[0]+dm[1])
 
-    vhf[0] = vhf[0] + 2.*(emb_pot[0] + proj_pot[0])
-    vhf[1] = vhf[1] + 2.*(emb_pot[1] + proj_pot[1])
+    new_vhf = [None, None]
+    new_vhf[0] = vhf[0] + 2.*(emb_pot[0] + proj_pot[0])
+    new_vhf[1] = vhf[1] + 2.*(emb_pot[1] + proj_pot[1])
 
-    e_coul =(np.einsum('ij,ji', vhf[0], dm[0]) +
-             np.einsum('ij,ji', vhf[1], dm[1])).real * .5
+    e_coul =(np.einsum('ij,ji', new_vhf[0], dm[0]) +
+             np.einsum('ij,ji', new_vhf[1], dm[1])).real * .5
     return e1+e_coul, e_coul
 
 #RKS Methods

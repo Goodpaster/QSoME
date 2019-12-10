@@ -1309,22 +1309,21 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             #          self.hl_save_orbs, scr_dir=self.scr_dir, 
             #          nproc=self.nproc, pmem=self.pmem)
             #self.hl_energy = energy[0]
-
             
-
             emb_pot = [(emb_pot[0] + emb_pot[1])/2., (emb_pot[0] + emb_pot[1])/2.]
             proj_pot = [(proj_pot[0] + proj_pot[1])/2., (proj_pot[0] + proj_pot[1])/2.]
-            hl_sr_scf = scf.ROHF(mol)
+            hl_sr_scf = scf.ROHF(gto.mole.copy(mol))
             hl_sr_scf.get_fock = lambda *args, **kwargs: (
                 custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
                 emb_pot, proj_pot, *args, **kwargs))
             hl_sr_scf.energy_elec = lambda *args, **kwargs: (
                 custom_pyscf_methods.rohf_energy_elec(hl_sr_scf, 
                 emb_pot, proj_pot, *args, **kwargs))
-            print (hl_sr_scf.kernel(dm0=self.env_dmat))
+            temp = np.copy(self.env_dmat)
+            print (hl_sr_scf.kernel(dm0=copy(self.env_dmat)))
             y = hl_sr_scf.get_fock()
 
-            hl_sr_scf = scf.ROHF(mol)
+            hl_sr_scf = scf.ROHF(gto.mole.copy(mol))
             emb_pot = [0., 0.]
             proj_pot = [0., 0.]
             mod_hcore = hcore + (emb_proj_pot[0] + emb_proj_pot[1])/2.
@@ -1332,7 +1331,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_sr_scf.get_fock = lambda *args, **kwargs: (
                 custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
                 emb_pot, proj_pot, *args, **kwargs))
-            print (hl_sr_scf.kernel(dm0=self.env_dmat))
+            print (hl_sr_scf.kernel(dm0=copy(self.env_dmat)))
             x = hl_sr_scf.get_fock()
             print (np.max(np.subtract(x,y)))
             self.hl_sr_scf = scf.UHF(mol)
