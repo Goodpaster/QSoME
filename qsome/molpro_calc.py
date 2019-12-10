@@ -345,7 +345,9 @@ def pyscf2molpro_geom(mol):
             symb = mol.ghosts[gh_num] + str(gh_num + 1)
             gh_num += 1
         coord = mol.atom_coord(ia)
+        print (coord)
         coord[:] = [ x * lib.param.BOHR for x in coord ]
+        print (coord)
         data[ia][0]=symb
         data[ia][1]=str(coord[0])
         data[ia][2]=str(coord[1])

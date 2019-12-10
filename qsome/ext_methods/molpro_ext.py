@@ -4,7 +4,86 @@ from string import Template
 import re
 import numpy as np
 import os
+import subprocess
 
+
+_Molpro2PyscfBasisPermSph = {
+   0: [0],
+   1: [0, 1, 2],
+   #  0  1   2   3   4
+   # D0 D-2 D+1 D+2 D-1
+   2: [1, 4, 0, 2, 3],
+   #  0   1   2  3   4   5   6
+   # F+1 F-1 F0 F+3 F-2 F-3 F+2
+   3: [5, 4, 1, 2, 0, 6, 3],
+   #  0   1   2   3   4   5   6   7   8
+   # G0 G-2 G+1 G+4 G-1 G+2 G-4 G+3 G-3
+   4: [6, 8, 1, 4, 0, 2, 5, 7, 3],
+   #  0   1   2   3   4   5   6   7   8  9   10
+   # H+1 H-1 H+2 H+3 H-4 H-3 H+4 H-5 H0 H+5 H-2
+   5: [7, 4, 5, 10, 1, 8, 0, 2, 3, 6, 9],
+   #  0   1   2   3   4   5   6   7   8   9  10  11  12
+   # I+6 I-2 I+5 I+4 I-5 I+2 I-6 I+3 I-4 I0 I-3 I-1 I+1
+   6: [6, 4, 8, 10, 1, 11, 9, 12, 5, 7, 3, 2, 0],
+}
+
+_Pyscf2MolproBasisPermSph = {
+   0: [0],
+   1: [0, 1, 2],
+   #  0  1   2   3   4
+   # D0 D-2 D+1 D+2 D-1
+   2: [2, 0, 3, 4, 1],
+   #  0   1   2  3   4   5   6
+   # F+1 F-1 F0 F+3 F-2 F-3 F+2
+   3: [4, 2, 3, 6, 1, 0, 5],
+   #  0   1   2   3   4   5   6   7   8
+   # G0 G-2 G+1 G+4 G-1 G+2 G-4 G+3 G-3
+   4: [4, 2, 5, 8, 3, 6, 0, 7, 1],
+   #  0   1   2   3   4   5   6   7   8  9   10
+   # H+1 H-1 H+2 H+3 H-4 H-3 H+4 H-5 H0 H+5 H-2
+   5: [6, 4, 7, 8, 1, 2, 9, 0, 5, 10, 3],
+   #  0   1   2   3   4   5   6   7   8   9  10  11  12
+   # I+6 I-2 I+5 I+4 I-5 I+2 I-6 I+3 I-4 I0 I-3 I-1 I+1
+   6: [12, 4, 11, 10, 1, 8, 0, 9, 2, 6, 3, 5, 7],
+}
+def ShPyscf2Molpro(mol):
+    ###################################################################
+    ###   create a index list with the size of AO basis 9/13/17     ###
+    ###################################################################
+    I_PyscfToMolpro = []
+    iOff = 0
+    # Must be the total atoms, not the basis keys.
+    symbol_list = []
+    ghost = 1
+    for ia in range(mol.natm):
+       
+        symb = mol.atom_pure_symbol(ia)
+        if symb == 'Ghost':
+            symb = symb + ':' + str(ghost)
+            ghost += 1
+        symbol_list.append(symb)
+
+    for basis_symb in symbol_list:
+        index = []
+        # pass 1: comment line
+        ls = [bs[0] for bs in mol._basis[basis_symb]]
+        nprims = [len(bs[1:]) for bs in mol._basis[basis_symb]]
+        nctrs = [len(bs[1])-1 for bs in mol._basis[basis_symb]]
+        prim_to_ctr = {}
+        for i, l in enumerate(ls):
+            if l in prim_to_ctr:
+                prim_to_ctr[l][0] += nprims[i]
+                prim_to_ctr[l][1] += nctrs[i]
+            else:
+                prim_to_ctr[l] = [nprims[i], nctrs[i]]
+        for l in set(ls): 
+            for i in range(prim_to_ctr[l][1]): 
+                index.append(l)
+        for l in index:
+            I_PyscfToMolpro += [(o + iOff) for o in _Pyscf2MolproBasisPermSph[l]] 
+            iOff += 2*l + 1
+    I_PyscfToMolpro = np.array(I_PyscfToMolpro)  
+    return I_PyscfToMolpro
 
 def convert_basis_to_molpro(symb, basis):
     '''Convert the internal basis format to Molpro format string'''
@@ -84,7 +163,8 @@ charge=$CHARGE
 spin=$SPIN
 
 {matrop                   !read the modified core hamiltonian
-read,h01,type=h0,file=$HMAT
+read,h01,type=h0,
+$HMAT
 save,h01,7500.1,h0}
 
 $METHOD
@@ -138,38 +218,31 @@ class MolproExt:
                 self.cas_active_orbs = cas_settings['cas_active_orbs']
             if 'cas_avas' in cas_settings.keys():
                 self.cas_avas = cas_settings['cas_avas']
-        self.generate_molpro_input()
+        #self.generate_molpro_input()
 
     def generate_molpro_input(self):
-   
+  
         #Need to figure out the H0
-        h0_name = self.filename[-2:] + "_h0.mat"
-        h0_scr = self.scr_dir + "/" + h0_name
-        file_mod = 1
-        base_name = h0_name
-        while (os.path.isfile(h0_scr)):
-            h0_name = str(file_mod) + "_" + base_name[2:]
-            h0_scr = self.scr_dir + "/" + h0_name
-            file_mod += 1
-
-        fname = h0_scr
-        self.h0_name = fname
         nao = self.mol.nao_nr()
         emb_ham = self.core_ham + (self.ext_pot[0] + self.ext_pot[1])/2.
+        #print (self.ext_pot[0])
+        #print (self.ext_pot[1])
+        I_PyscfMolpro = ShPyscf2Molpro(self.mol)
+        emb_ham = emb_ham[I_PyscfMolpro, :]
+        emb_ham = emb_ham[: ,I_PyscfMolpro]
         h0 = emb_ham.reshape(nao,nao)
-        with open(fname, 'w') as fin:
-            fin.write('BEGIN_DATA,\n')
-            fin.write('# MATRIX H0                 H0    SYMMETRY=1\n')
-            for x in range(nao):
-                i=0
-                for y in h0[x]:
-                    i += 1
-                    fin.write('%15.8f,' % y)
-                    if i % 5 == 0: 
-                        fin.write('\n') 
-                if nao % 5 != 0:
-                    fin.write('\n')
-            fin.write('END_DATA,\n')
+        h0_string = "BEGIN_DATA,\n"
+        h0_string += "# MATRIX H0                 H0    SYMMETRY=1\n"
+        for x in range(nao):
+           i=0
+           for y in h0[x]:
+               i += 1
+               h0_string += "%15.8f," % y
+               if i % 5 == 0: 
+                   h0_string += "\n"
+           if nao % 5 != 0:
+               h0_string += "\n"
+        h0_string += "END_DATA,\n"
 
 
         method_string = ""
@@ -185,7 +258,7 @@ class MolproExt:
             method_string = '{hf;noenest}\n'
             method_string += '{fci;core;dump}\n'
         elif self.method == 'rohf/rccsd(t)':
-            method_string = '{rhf;\n'
+            method_string = '{rhf;noenest;\n'
             num_elec = self.mol.tot_electrons()
             method_string += 'wf,' + str(num_elec) + ',1,' + str(np.abs(self.mol.spin)) + ';}\n'
             method_string += 'rccsd(t)'
@@ -242,7 +315,7 @@ class MolproExt:
         pword = self.pmem / 8.
         inp_str = molpro_template.substitute(MEMORY=str(pword), SYMMETRY="nosym",
                       BASIS=mol_basis, GEOM=mol_geom, DUMMY=dummy_atoms, CHARGE=self.mol.charge,
-                      SPIN=self.mol.spin, HMAT=os.path.split(self.h0_name)[-1], METHOD=method_string) 
+                      SPIN=self.mol.spin, HMAT=h0_string, METHOD=method_string) 
         return inp_str
 
     def pyscf2molpro_geom(self):
@@ -285,9 +358,12 @@ class MolproExt:
             f.write(input_file)
         ##Run molpro
         file_path = self.work_dir + '/' + self.filename + '_molpro.com'
+        print (file_path)
+        print (self.scr_dir)
         cmd = ' '.join(("molpro" + ' -n ' + str(self.nproc) + ' -d ' + self.scr_dir, file_path))
-        #proc_results = subprocess.getoutput(cmd)
-        #print (proc_results)
+        print (cmd)
+        proc_results = subprocess.getoutput(cmd)
+        print (proc_results)
         if self.method == 'fcidump':
             copyfile(self.scr_dir + '/FCIDUMP', self.work_dir + '/' + self.filename + '.fcidump')
 

@@ -430,7 +430,7 @@ class ClusterEnvSubSystem:
             self.subsys_fock = [temp_fock, temp_fock]
         else:
             self.subsys_fock = hcore + self.env_scf.get_veff(dm=dmat)
-
+        #print (self.subsys_fock)
         return True
 
 
@@ -866,7 +866,8 @@ class ClusterEnvSubSystem:
 
                 #2. The overall WF is not spin 0 and is treated using an RO method. In this case, things get much more complicated.
                 else:
-                    emb_proj_fock = fock[0] + proj_pot[0] + fock[1] + proj_pot[1]
+                    emb_proj_fock = fock[0] + proj_pot[0] 
+                    emb_proj_fock += fock[1] + proj_pot[1]
                     emb_proj_fock /= 2.
                     #emb_proj_fock = [None, None]
                     #emb_proj_fock[0] = fock[0] + proj_pot[0]
@@ -1235,8 +1236,13 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     emb_pot = (self.emb_fock[0] - fock[0], 
                                self.emb_fock[1] - fock[1])
                 elif mol.spin != 0:
-                    #RO
-                    pass
+                    self.fock = self.env_scf.get_fock(dm=dmat)
+                    fock = self.fock
+                    emb_pot = (self.emb_ro_fock[1] - fock.focka, 
+                               self.emb_ro_fock[2] - fock.fockb)
+                    print ("DIFF")
+                    print (np.subtract(emb_pot[0], emb_pot[1]))
+                    print (np.amax(np.subtract(emb_pot[0], emb_pot[1])))
                 else:
                     self.fock = (self.env_scf.get_hcore() 
                         + self.env_scf.get_veff(dm=(dmat[0] + dmat[1])))
@@ -1285,15 +1291,52 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if self.hl_ext is not None:
             print ("use external method for hl calculation")
             hcore = self.env_scf.get_hcore()
+            emb_pot_ro = self.emb_ro_fock[0] - self.fock
             emb_proj_pot = [emb_pot[0] + proj_pot[0], emb_pot[1] + proj_pot[1]]
-            ext_factory = ExtFactory()
-            print (self.filename)
-            name_no_path = os.path.split(self.filename)[-1]
-            name_no_ext = os.path.splitext(name_no_path)[0]
-            file_path = os.path.split(self.filename)[0]
-            ext_obj = ext_factory.get_ext_obj(self.hl_ext, self.mol, hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=file_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, cas_settings={'cas_loc_orbs':self.cas_loc_orbs, 'cas_init_guess':self.cas_init_guess, 'cas_active_orbs':self.cas_active_orbs, 'cas_avas':self.cas_avas})
-            energy = ext_obj.get_energy()
-            print (energy)
+            #ext_factory = ExtFactory()
+            #name_no_path = os.path.split(self.filename)[-1]
+            #name_no_ext = os.path.splitext(name_no_path)[0]
+            #file_path = os.path.split(self.filename)[0]
+            #scr_path = self.scr_dir
+            #ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(mol), hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, cas_settings={'cas_loc_orbs':self.cas_loc_orbs, 'cas_init_guess':self.cas_init_guess, 'cas_active_orbs':self.cas_active_orbs, 'cas_avas':self.cas_avas})
+            #energy = ext_obj.get_energy()
+            #print (energy)
+            #mod_hcore = (self.env_scf.get_hcore() 
+            #          + ((emb_pot[0] + emb_pot[1])/2.
+            #          + (proj_pot[0] + proj_pot[1])/2.))
+            #energy = molpro_calc.molpro_energy(
+            #          mol, mod_hcore, hl_method, self.filename, 
+            #          self.hl_save_orbs, scr_dir=self.scr_dir, 
+            #          nproc=self.nproc, pmem=self.pmem)
+            #self.hl_energy = energy[0]
+
+            
+
+            emb_pot = [(emb_pot[0] + emb_pot[1])/2., (emb_pot[0] + emb_pot[1])/2.]
+            proj_pot = [(proj_pot[0] + proj_pot[1])/2., (proj_pot[0] + proj_pot[1])/2.]
+            hl_sr_scf = scf.ROHF(mol)
+            hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
+                emb_pot, proj_pot, *args, **kwargs))
+            hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+                custom_pyscf_methods.rohf_energy_elec(hl_sr_scf, 
+                emb_pot, proj_pot, *args, **kwargs))
+            print (hl_sr_scf.kernel(dm0=self.env_dmat))
+            y = hl_sr_scf.get_fock()
+
+            hl_sr_scf = scf.ROHF(mol)
+            emb_pot = [0., 0.]
+            proj_pot = [0., 0.]
+            mod_hcore = hcore + (emb_proj_pot[0] + emb_proj_pot[1])/2.
+            hl_sr_scf.get_hcore = lambda *args, **kwargs: mod_hcore
+            hl_sr_scf.get_fock = lambda *args, **kwargs: (
+                custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
+                emb_pot, proj_pot, *args, **kwargs))
+            print (hl_sr_scf.kernel(dm0=self.env_dmat))
+            x = hl_sr_scf.get_fock()
+            print (np.max(np.subtract(x,y)))
+            self.hl_sr_scf = scf.UHF(mol)
+            return self.hl_energy
 
         else:
             print ('determine whether to use hf or dft for initial guess')
@@ -1320,6 +1363,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                         proj_pot[1] = temp_proj_pot[0]
                     hl_sr_scf = scf.ROHF(mol)
                     #Update the fock and electronic energies to use custom methods.
+                    #print (hl_sr_scf.get_hcore())
+                    #print (emb_pot[0] + proj_pot[0])
+                    #print (emb_pot[1] + proj_pot[1])
                     hl_sr_scf.get_fock = lambda *args, **kwargs: (
                         custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))

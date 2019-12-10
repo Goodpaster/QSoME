@@ -275,7 +275,7 @@ class ClusterSuperSystem:
         self.ext_pot = np.array([0., 0.])
         #self.update_hl_basis_tau()
         self.mol = concat_mols(self.subsystems)
-        self.update_hl_basis_tau()
+        #self.update_hl_basis_tau()
         self.gen_sub2sup()
         self.init_scf()
 
@@ -1061,6 +1061,9 @@ class ClusterSuperSystem:
         print("  HL Subsystems Calculation  ".center(80))
         print ("".center(80,'*'))
         s2s = self.sub2sup
+        #ONLY DO FOR THE RO SYSTEM. THIS IS KIND OF A TEST.
+        if self.mol.spin != 0 and not self.fs_unrestricted:
+            self.update_ro_fock()
         for i in range(len(self.subsystems)):
             sub = self.subsystems[i]
             #Check if subsystem is HLSubSystem but rightnow it is being difficult.
@@ -1084,7 +1087,7 @@ class ClusterSuperSystem:
         print ("".center(80,'*'))
         for i in range(len(self.subsystems)):
             sub = self.subsystems[i]
-            sub.update_subsys_fock()
+            #sub.update_subsys_fock()
             s2s = self.sub2sup
             FAA = np.array([None, None])
             FAA[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
@@ -1193,6 +1196,34 @@ class ClusterSuperSystem:
         print("".center(80,'*'))
         return self.env_energy
 
+    def update_ro_fock(self):
+        """Updates the full system fock  for restricted open shell matrix.
+
+        Parameters
+        ----------
+        diis : bool
+            Whether to use the diis method.
+        """
+        # Optimization: Rather than recalculate the full V, only calculate the V for densities which changed. 
+        # get 2e matrix
+        nS = self.mol.nao_nr()
+        dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+        sub_openshell = False
+        for i in range(len(self.subsystems)):
+            dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].env_dmat[0])
+            dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].env_dmat[1])
+        temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dm)
+        self.fock = [temp_fock, temp_fock]
+
+        s2s = self.sub2sup
+        for i in range(len(self.subsystems)):
+            subsystem = self.subsystems[i]
+            sub_fock_ro = self.fock[0][np.ix_(s2s[i], s2s[i])]
+            sub_fock_0 = self.fock[0].focka[np.ix_(s2s[i], s2s[i])]
+            sub_fock_1 = self.fock[0].fockb[np.ix_(s2s[i], s2s[i])]
+            subsystem.emb_ro_fock = [sub_fock_ro, sub_fock_0, sub_fock_1]
+
+        return True
 
     def update_fock(self, diis=True):
         """Updates the full system fock matrix.

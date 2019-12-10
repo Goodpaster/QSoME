@@ -82,7 +82,7 @@ class arguments():
         self.ppn = args.ppn
         self.pmem = args.pmem
         self.inp_file = args.input_file[0]
-        self.scf_dir = args.scr
+        self.scr_dir = args.scr
 
 
 def IntroText():
