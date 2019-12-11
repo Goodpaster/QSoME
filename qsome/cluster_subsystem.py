@@ -1238,11 +1238,13 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 elif mol.spin != 0:
                     self.fock = self.env_scf.get_fock(dm=dmat)
                     fock = self.fock
-                    emb_pot = (self.emb_ro_fock[1] - fock.focka, 
-                               self.emb_ro_fock[2] - fock.fockb)
-                    print ("DIFF")
-                    print (np.subtract(emb_pot[0], emb_pot[1]))
-                    print (np.amax(np.subtract(emb_pot[0], emb_pot[1])))
+                    #emb_pot = (self.emb_ro_fock[1] - fock.focka, 
+                    #           self.emb_ro_fock[2] - fock.fockb)
+                    #print ("DIFF")
+                    #print (np.subtract(emb_pot[0], emb_pot[1]))
+                    #print (np.amax(np.subtract(emb_pot[0], emb_pot[1])))
+                    emb_pot = [self.emb_fock[0] - fock,
+                               self.emb_fock[1] - fock]
                 else:
                     self.fock = (self.env_scf.get_hcore() 
                         + self.env_scf.get_veff(dm=(dmat[0] + dmat[1])))

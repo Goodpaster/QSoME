@@ -1205,7 +1205,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
             C                 -1.74853900    0.51173600    0.00000300
             H                 -1.78059900    1.17041100    0.87438300
             H                 -1.78060000    1.17041500   -0.87437400'''
-        mol.basis = '3-21g'
+        mol.basis = '6-31g'
         mol.spin = 1
         mol.charge = -1
         mol.build()
@@ -1229,7 +1229,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
             ghost.C                 -1.74853900    0.51173600    0.00000300
             ghost.H                 -1.78059900    1.17041100    0.87438300
             ghost.H                 -1.78060000    1.17041500   -0.87437400'''
-        mol2.basis = '3-21g'
+        mol2.basis = '6-31g'
         mol2.charge = 1
         mol2.build()
         env_method = 'm06'
@@ -1260,7 +1260,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
             H                 -2.94830300   -1.05410200    0.87975600
             H                 -3.88904200    0.14923700    0.00000400
         '''
-        mol3.basis = '3-21g'
+        mol3.basis = '6-31g'
         mol3.spin = 1
         mol3.build()
         mf = dft.ROKS(mol3)
@@ -1270,7 +1270,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mf.kernel()
         test_e = mf.energy_tot()
         sup_e = supersystem.get_env_in_env_energy()
+        print (test_e)
+        print (sup_e)
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
+        self.assertTrue(False)
 
         #Supermolecular test.
         #mol = gto.Mole()
