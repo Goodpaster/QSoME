@@ -1276,7 +1276,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         #If the method is a dft method and the sr is None, do sr as the dft method.
         #If the method is a dft method and the sr is not none, do sr and use the density to seed the method.
 
-        hf_aliases = ['hf', 'uhf', 'rhf']
+        hf_aliases = ['hf', 'uhf', 'rhf', 'rohf']
         cc_aliases = ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']
         mp_aliases = ['mp2']
         cas_regex = re.compile('cas(pt2)?(\[\d*,\d*\])?')
@@ -1291,50 +1291,28 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if self.hl_ext is not None:
             print ("use external method for hl calculation")
             hcore = self.env_scf.get_hcore()
-            emb_pot_ro = self.emb_ro_fock[0] - self.fock
+            #emb_pot_ro = self.emb_ro_fock[0] - self.fock
             emb_proj_pot = [emb_pot[0] + proj_pot[0], emb_pot[1] + proj_pot[1]]
-            #ext_factory = ExtFactory()
-            #name_no_path = os.path.split(self.filename)[-1]
-            #name_no_ext = os.path.splitext(name_no_path)[0]
-            #file_path = os.path.split(self.filename)[0]
-            #scr_path = self.scr_dir
-            #ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(mol), hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, cas_settings={'cas_loc_orbs':self.cas_loc_orbs, 'cas_init_guess':self.cas_init_guess, 'cas_active_orbs':self.cas_active_orbs, 'cas_avas':self.cas_avas})
-            #energy = ext_obj.get_energy()
-            #print (energy)
-            #mod_hcore = (self.env_scf.get_hcore() 
-            #          + ((emb_pot[0] + emb_pot[1])/2.
-            #          + (proj_pot[0] + proj_pot[1])/2.))
-            #energy = molpro_calc.molpro_energy(
-            #          mol, mod_hcore, hl_method, self.filename, 
-            #          self.hl_save_orbs, scr_dir=self.scr_dir, 
-            #          nproc=self.nproc, pmem=self.pmem)
-            #self.hl_energy = energy[0]
+            ext_factory = ExtFactory()
+            name_no_path = os.path.split(self.filename)[-1]
+            name_no_ext = os.path.splitext(name_no_path)[0]
+            file_path = os.path.split(self.filename)[0]
+            scr_path = self.scr_dir
+            ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(mol), hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, cas_settings={'cas_loc_orbs':self.cas_loc_orbs, 'cas_init_guess':self.cas_init_guess, 'cas_active_orbs':self.cas_active_orbs, 'cas_avas':self.cas_avas})
+            energy = ext_obj.get_energy()
+            print (energy)
+            self.hl_energy = energy[0]
             
-            emb_pot = [(emb_pot[0] + emb_pot[1])/2., (emb_pot[0] + emb_pot[1])/2.]
-            proj_pot = [(proj_pot[0] + proj_pot[1])/2., (proj_pot[0] + proj_pot[1])/2.]
-            hl_sr_scf = scf.ROHF(gto.mole.copy(mol))
-            hl_sr_scf.get_fock = lambda *args, **kwargs: (
-                custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
-                emb_pot, proj_pot, *args, **kwargs))
-            hl_sr_scf.energy_elec = lambda *args, **kwargs: (
-                custom_pyscf_methods.rohf_energy_elec(hl_sr_scf, 
-                emb_pot, proj_pot, *args, **kwargs))
-            temp = np.copy(self.env_dmat)
-            print (hl_sr_scf.kernel(dm0=copy(self.env_dmat)))
-            y = hl_sr_scf.get_fock()
-
-            hl_sr_scf = scf.ROHF(gto.mole.copy(mol))
-            emb_pot = [0., 0.]
-            proj_pot = [0., 0.]
-            mod_hcore = hcore + (emb_proj_pot[0] + emb_proj_pot[1])/2.
-            hl_sr_scf.get_hcore = lambda *args, **kwargs: mod_hcore
-            hl_sr_scf.get_fock = lambda *args, **kwargs: (
-                custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
-                emb_pot, proj_pot, *args, **kwargs))
-            print (hl_sr_scf.kernel(dm0=copy(self.env_dmat)))
-            x = hl_sr_scf.get_fock()
-            print (np.max(np.subtract(x,y)))
-            self.hl_sr_scf = scf.UHF(mol)
+            #hl_sr_scf = scf.ROHF(gto.mole.copy(mol))
+            #hl_sr_scf.get_fock = lambda *args, **kwargs: (
+            #    custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
+            #    emb_pot, proj_pot, *args, **kwargs))
+            #hl_sr_scf.energy_elec = lambda *args, **kwargs: (
+            #    custom_pyscf_methods.rohf_energy_elec(hl_sr_scf, 
+            #    emb_pot, proj_pot, *args, **kwargs))
+            #temp = np.copy(self.env_dmat)
+            #print (hl_sr_scf.kernel(dm0=copy(self.env_dmat)))
+            #y = hl_sr_scf.get_fock()
             return self.hl_energy
 
         else:
