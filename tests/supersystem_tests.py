@@ -1270,10 +1270,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mf.kernel()
         test_e = mf.energy_tot()
         sup_e = supersystem.get_env_in_env_energy()
-        print (test_e)
-        print (sup_e)
         self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
-        self.assertTrue(False)
 
         #Supermolecular test.
         #mol = gto.Mole()

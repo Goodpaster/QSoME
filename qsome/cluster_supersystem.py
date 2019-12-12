@@ -1508,6 +1508,7 @@ class ClusterSuperSystem:
                 sub_old_dms = [sub.get_dmat().copy() for sub in sub_list]
 
                 for j in range(len(sub_list)):
+                    #Why is this updated after every subsystem diagonalization? Why not updated once per cycle?
                     self.update_proj_pot() #could use i as input and only get for that sub.
                     sub_list[j].proj_pot = self.proj_pot[j+i]
                     sub_list[j].diagonalize()
@@ -1569,6 +1570,7 @@ class ClusterSuperSystem:
 #                self.ft_fermi[i] = subsystem.fermi
 #
         self.update_fock(diis=False)
+        #Update Proj pot?
         # print subsystem energies 
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]

@@ -28,14 +28,14 @@ def concat_mols(subsys_list):
             mol1._ecp[new_name] = mol1._ecp.pop(old_name)
             mol1._atm, mol1._ecpbas, mol1._env = mol1.make_ecp_env(mol1._atm, mol1._ecp, mol1._env)
 
-    if subsys_list[0].flip_ros:
-        mol1.spin *= -1
-        mol1.build()
+    #if subsys_list[0].flip_ros:
+    #    mol1.spin *= -1
+    #    mol1.build()
     for n in range(1, len(subsys_list)):
         mol2 = gto.mole.copy(subsys_list[n].mol)
-        if subsys_list[n].flip_ros:
-            mol2.spin *= -1
-            mol2.build()
+        #if subsys_list[n].flip_ros:
+        #    mol2.spin *= -1
+        #    mol2.build()
         for j in range(mol2.natm):
             old_name = mol2.atom_symbol(j)
             new_name = mol2.atom_symbol(j) + '-' + str(n)

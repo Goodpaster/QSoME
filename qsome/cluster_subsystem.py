@@ -425,12 +425,11 @@ class ClusterEnvSubSystem:
         if hcore is None:
             hcore = self.env_hcore
 
-        if not (self.unrestricted or self.mol.spin != 0):
-            temp_fock = hcore + self.env_scf.get_veff(dm=(dmat[0] + dmat[1]))
+        if not self.unrestricted:
+            temp_fock = self.env_scf.get_fock(h1e=hcore, dm=(dmat[0] + dmat[1]))
             self.subsys_fock = [temp_fock, temp_fock]
         else:
-            self.subsys_fock = hcore + self.env_scf.get_veff(dm=dmat)
-        #print (self.subsys_fock)
+            self.subsys_fock = self.env_scf.get_fock(h1e=hcore, dm=dmat)
         return True
 
 
@@ -600,6 +599,9 @@ class ClusterEnvSubSystem:
                 emb_pot = [self.emb_fock[0] - self.subsys_fock[0], 
                            self.emb_fock[1] - self.subsys_fock[1]]
 
+        #print ("HERE")
+        #print (emb_pot)
+        #print (dmat)
         e_emb = (np.einsum('ij,ji', emb_pot[0], dmat[0]) + 
                  np.einsum('ij,ji', emb_pot[1], dmat[1])).real
 
@@ -1229,28 +1231,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             if self.emb_fock[0] is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
-                if self.unrestricted:
-                    self.fock = (self.env_scf.get_hcore() 
-                                 + self.env_scf.get_veff(dm=dmat))
-                    fock = self.fock
-                    emb_pot = (self.emb_fock[0] - fock[0], 
-                               self.emb_fock[1] - fock[1])
-                elif mol.spin != 0:
-                    self.fock = self.env_scf.get_fock(dm=dmat)
-                    fock = self.fock
-                    #emb_pot = (self.emb_ro_fock[1] - fock.focka, 
-                    #           self.emb_ro_fock[2] - fock.fockb)
-                    #print ("DIFF")
-                    #print (np.subtract(emb_pot[0], emb_pot[1]))
-                    #print (np.amax(np.subtract(emb_pot[0], emb_pot[1])))
-                    emb_pot = [self.emb_fock[0] - fock,
-                               self.emb_fock[1] - fock]
-                else:
-                    self.fock = (self.env_scf.get_hcore() 
-                        + self.env_scf.get_veff(dm=(dmat[0] + dmat[1])))
-                    fock = self.fock
-                    emb_pot = (self.emb_fock[0] - fock, 
-                               self.emb_fock[1] - fock)
+                self.update_subsys_fock()
+                fock = self.subsys_fock
+                emb_pot = (self.emb_fock[0] - fock[0], 
+                           self.emb_fock[1] - fock[1])
         if proj_pot is None:
             proj_pot = self.proj_pot 
         if hl_method is None:
@@ -1345,6 +1329,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     #print (hl_sr_scf.get_hcore())
                     #print (emb_pot[0] + proj_pot[0])
                     #print (emb_pot[1] + proj_pot[1])
+                    #print ("POTS")
+                    #print (emb_pot)
+                    #print (proj_pot)
                     hl_sr_scf.get_fock = lambda *args, **kwargs: (
                         custom_pyscf_methods.rohf_get_fock(hl_sr_scf, 
                         emb_pot, proj_pot, *args, **kwargs))

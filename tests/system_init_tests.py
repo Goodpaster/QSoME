@@ -67,7 +67,7 @@ class TestEnvSubsystem(unittest.TestCase):
 
     def test_restrictedos_subsystem(self):
         mol = self.cs_mol.copy()
-        mol.spin = -2
+        mol.spin = 2
         mol.build()
         subsys = cluster_subsystem.ClusterEnvSubSystem(mol, self.env_method)
         subsys.init_density()
@@ -279,6 +279,8 @@ class TestSuperSystem(unittest.TestCase):
         scf_obj = supersystem.fs_scf
         comp_scf_obj = dft.RKS(gto.mole.conc_mol(mol, mol2))
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
+        for i in range(len(comp_scf_obj.mol._atom)):
+            self.assertEqual(comp_scf_obj.mol._atom[i][1], supersystem.mol._atom[i][1])
         self.assertEqual(scf_obj.xc, 'm06')
 
     def test_unrestricted_supersystem(self):
