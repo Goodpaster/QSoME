@@ -108,7 +108,7 @@ class ClusterEnvSubSystem:
     def __init__(self, mol, env_method, env_order=1, env_smearsigma=0,
                  initguess=None, conv=1e-8, damp=0., shift=0., subcycles=1, 
                  setfermi=None, diis=0, unrestricted=False, density_fitting=False, 
-                 freeze=False, save_orbs=False, save_density=False,
+                 freeze=False, save_orbs=False, save_density=False, save_spin_density=False,
                  verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
         """
         Parameters
@@ -173,6 +173,7 @@ class ClusterEnvSubSystem:
         self.freeze = freeze
         self.save_orbs = save_orbs
         self.save_density = save_density
+        self.save_spin_density = save_spin_density
 
         self.verbose = verbose
         self.filename = filename
@@ -599,9 +600,6 @@ class ClusterEnvSubSystem:
                 emb_pot = [self.emb_fock[0] - self.subsys_fock[0], 
                            self.emb_fock[1] - self.subsys_fock[1]]
 
-        #print ("HERE")
-        #print (emb_pot)
-        #print (dmat)
         e_emb = (np.einsum('ij,ji', emb_pot[0], dmat[0]) + 
                  np.einsum('ij,ji', emb_pot[1], dmat[1])).real
 
@@ -628,8 +626,31 @@ class ClusterEnvSubSystem:
         if density is None:
             density = self.get_dmat()
         print(f'Writing Subsystem {self.chkfile_index} Density'.center(80))
-        cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv.cube'
-        cubegen.density(self.mol, cubegen_fn, density)
+        if self.mol.spin != 0 or self.unrestricted:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_a.cube'
+            cubegen.density(self.mol, cubegen_fn, density[0])
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_b.cube'
+            cubegen.density(self.mol, cubegen_fn, density[1])
+        else:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv.cube'
+            cubegen.density(self.mol, cubegen_fn, density)
+
+    def save_spin_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            if self.filename is None:
+                print ("Cannot save density because no filename")
+                return False
+            else:
+                filename = self.filename
+        if density is None:
+            density = self.get_dmat()
+        if self.mol.spin != 0 or self.unrestricted:
+            print(f'Writing Subsystem {self.chkfile_index} Spin Density'.center(80))
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_spinden.cube'
+            cubegen.density(self.mol, cubegen_fn, np.subtract(density[0],density[1]))
+        else:
+            print(f'Cannot write spin density for a closed shell system.'.center(80))
     
     def save_orbital_file(self, filename=None, scf_obj=None, mo_occ=None, mo_coeff=None, mo_energy=None):
         from pyscf.tools import molden
@@ -1117,7 +1138,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                  hl_spin=None, hl_conv=None, hl_grad=None, hl_cycles=None, 
                  hl_damp=0., hl_shift=0., hl_freeze_orbs=None, hl_ext=None, 
                  hl_unrestricted=False, hl_compress_approx=False, 
-                 hl_density_fitting=False, hl_save_orbs=False, hl_save_density=False,
+                 hl_density_fitting=False, hl_save_orbs=False, hl_save_density=False, hl_save_spin_density=False,
                  cas_loc_orbs=False, cas_init_guess=None, cas_active_orbs=None,
                  cas_avas=None, shci_mpi_prefix=None, shci_sweep_iter=None, 
                  shci_sweep_epsilon=None, shci_nPTiter=None, 
@@ -1172,6 +1193,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_density_fitting = hl_density_fitting
         self.hl_save_orbs = hl_save_orbs
         self.hl_save_density = hl_save_density
+        self.hl_save_spin_density = hl_save_spin_density
 
         self.cas_loc_orbs = cas_loc_orbs
         self.cas_init_guess = cas_init_guess

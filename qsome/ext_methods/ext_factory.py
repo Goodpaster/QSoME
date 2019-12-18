@@ -1,5 +1,5 @@
-from ext_methods.molpro_ext import MolproExt
-from ext_methods.openmolcas_ext import OpenMolCASExt
+from qsome.ext_methods.molpro_ext import MolproExt
+from qsome.ext_methods.openmolcas_ext import OpenMolCASExt
 #from ext_methods.bagel_ext import BagelExt
 
 class ExtFactory:

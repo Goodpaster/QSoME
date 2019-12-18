@@ -131,10 +131,10 @@ class ClusterSuperSystem:
                  fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=None, 
                  fs_rhocutoff=None, fs_verbose=None, fs_unrestricted=False, 
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
-                 fs_save_orbs=False, fs_save_density=False, ft_cycles=100, ft_basis_tau=1.,
-                 ft_conv=1e-8, ft_grad=None, ft_damp=0., ft_diis=0, ft_setfermi=None,
-                 ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
-                 ft_save_orbs=False, ft_save_density=False, ft_proj_oper='huz',
+                 fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
+                 ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None, 
+                 ft_damp=0., ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
+                 ft_save_orbs=False, ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
 
         """
@@ -248,6 +248,7 @@ class ClusterSuperSystem:
         self.compare_density = compare_density
         self.fs_save_orbs = fs_save_orbs
         self.fs_save_density = fs_save_density
+        self.fs_save_spin_density = fs_save_spin_density
 
 
         # freeze and thaw settings
@@ -263,6 +264,7 @@ class ClusterSuperSystem:
         self.ft_unrestricted = ft_unrestricted
         self.ft_save_orbs = ft_save_orbs
         self.ft_save_density = ft_save_density
+        self.ft_save_spin_density = ft_save_spin_density
         self.proj_oper = ft_proj_oper
 
         self.nproc = nproc
@@ -781,6 +783,9 @@ class ClusterSuperSystem:
             if self.fs_save_density:
                 self.save_fs_density_file()
 
+            if self.fs_save_spin_density:
+                self.save_fs_spin_density_file()
+
             if self.fs_save_orbs:
                 self.save_fs_orbital_file()
            
@@ -1076,6 +1081,12 @@ class ClusterSuperSystem:
                 act_e = sub.hl_energy
                 print(f"Energy:{act_e:>73.8f}")
                 print("".center(80,'*'))
+                if sub.hl_save_density:
+                    pass
+                if sub.hl_save_spin_density:
+                    pass
+                if sub.hl_save_orbs:
+                    pass
 
     @time_method("Env Energy")
     def get_env_energy(self):
@@ -1433,10 +1444,32 @@ class ClusterSuperSystem:
         if filename is None:
             filename = self.filename
         if density is None:
-            density = self.fs_dmat[0] + self.fs_dmat[1]
+            density = self.fs_dmat
+
         print('Writing Full System Density'.center(80))
-        cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs.cube'
-        cubegen.density(self.mol, cubegen_fn, density)
+        if self.mol.spin != 0 or self.fs_unrestricted:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_a.cube'
+            cubegen.density(self.mol, cubegen_fn, density[0])
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_b.cube'
+            cubegen.density(self.mol, cubegen_fn, density[1])
+        else:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs.cube'
+            cubegen.density(self.mol, cubegen_fn, (density[0] + density[1]))
+
+    def save_fs_spin_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            filename = self.filename
+        if density is None:
+            density = self.fs_dmat
+
+        if self.mol.spin != 0 or self.fs_unrestricted:
+            print('Writing Full System Spin Density'.center(80))
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_spinden.cube'
+            cubegen.density(self.mol, cubegen_fn, np.subtract(density[0], density[1]))
+        else:
+            print('Cannot write spin density for a closed shell system.'.center(80))
+
 
     def save_ft_density_file(self, filename=None, density=None):
         from pyscf.tools import cubegen
@@ -1446,15 +1479,43 @@ class ClusterSuperSystem:
             nS = self.mol.nao_nr()
             dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
             for i in range(len(self.subsystems)):
-                if self.subsystems[i].unrestricted:
+                if self.subsystems[i].unrestricted or self.subsystems[i].mol.spin != 0:
                     dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[0]
                     dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[1]
                 else:
                     dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
                     dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
         print('Writing DFT-in-DFT Density'.center(80))
-        cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft.cube'
-        cubegen.density(self.mol, cubegen_fn, (dm[0] + dm[1]))
+        if self.mol.spin != 0 or self.ft_unrestricted:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_a.cube'
+            cubegen.density(self.mol, cubegen_fn, dm[0])
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_b.cube'
+            cubegen.density(self.mol, cubegen_fn, dm[1])
+        else:
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft.cube'
+            cubegen.density(self.mol, cubegen_fn, (dm[0] + dm[1]))
+
+    def save_ft_spin_density_file(self, filename=None, density=None):
+        from pyscf.tools import cubegen
+        if filename is None:
+            filename = self.filename
+        if density is None:
+            nS = self.mol.nao_nr()
+            dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
+            for i in range(len(self.subsystems)):
+                if self.subsystems[i].unrestricted or self.subsystems[i].mol.spin != 0:
+                    dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[0]
+                    dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += self.subsystems[i].get_dmat()[1]
+                else:
+                    dm[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
+                    dm[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += (self.subsystems[i].get_dmat()/2.)
+        if self.mol.spin != 0 or self.ft_unrestricted:
+            print('Writing DFT-in-DFT Density'.center(80))
+            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_spinden.cube'
+            cubegen.density(self.mol, cubegen_fn, np.subtract(dm[0], dm[1]))
+        else:
+            print('Cannot write spin density for a closed shell system.'.center(80))
+
 
     def save_fs_orbital_file(self, filename=None, scf_obj=None, mo_occ=None, mo_coeff=None, mo_energy=None):
         from pyscf.tools import molden
@@ -1487,13 +1548,13 @@ class ClusterSuperSystem:
          
         s2s = self.sub2sup
         ft_err = 1.
-        ft_iter = 0 
+        self.ft_iter = 0 
         last_cycle = False
 
-        while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
+        while((ft_err > self.ft_conv) and (self.ft_iter < self.ft_cycles)):
             # cycle over subsystems
             ft_err = 0
-            ft_iter += 1
+            self.ft_iter += 1
             #Correct for DIIS 
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
             multi_cycle = (len(self.subsystems) - self.ft_updatefock)
@@ -1542,7 +1603,7 @@ class ClusterSuperSystem:
                         self.ft_fermi[i+k] = [subsystem.fermi, subsystem.fermi]
 
                     # print output to console.
-                    print(f"iter:{ft_iter:>3d}:{i+k:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
+                    print(f"iter:{self.ft_iter:>3d}:{i+k:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
                 self.save_chkfile()
 
         print("".center(80))
@@ -1586,6 +1647,10 @@ class ClusterSuperSystem:
                 print(f'Writing Subsystem {i} Env Density'.center(80))
                 subsystem.save_density_file()
 
+            if subsystem.save_spin_density:
+                print(f'Writing Subsystem {i} Env Spin Density'.center(80))
+                subsystem.save_spin_density_file()
+
             if subsystem.save_orbs:
                 print(f'Writing Subsystem {i} Env orbitals'.center(80))
                 subsystem.save_orbital_file()
@@ -1593,6 +1658,10 @@ class ClusterSuperSystem:
         if self.ft_save_density:
             print(f'Writing Supersystem FT density'.center(80))
             self.save_ft_density_file()
+
+        if self.ft_save_spin_density:
+            print(f'Writing Supersystem FT spin density'.center(80))
+            self.save_ft_spin_density_file()
             
     def get_dft_diff_parameters(self, fs_dmat=None, fs_scf=None, dftindft_dmat=None):
         

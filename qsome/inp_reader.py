@@ -131,6 +131,7 @@ class InpReader:
         sub_env_settings.add_boolean_key('freeze')
         sub_env_settings.add_boolean_key('save_orbs')
         sub_env_settings.add_boolean_key('save_density')
+        sub_env_settings.add_boolean_key('save_spin_density')
 
         # Override default high level method settings
         sub_hl_settings = subsys.add_block_key('hl_method_settings')
@@ -147,6 +148,9 @@ class InpReader:
         sub_hl_settings.add_boolean_key('unrestricted')
         sub_hl_settings.add_boolean_key('compress_approx')
         sub_hl_settings.add_boolean_key('density_fitting')
+        sub_hl_settings.add_boolean_key('save_orbs')
+        sub_hl_settings.add_boolean_key('save_density')
+        sub_hl_settings.add_boolean_key('save_spin_density')
 
         sub_cas_settings = sub_hl_settings.add_block_key('cas_settings')
         sub_cas_settings.add_boolean_key('loc_orbs')
@@ -189,6 +193,7 @@ class InpReader:
         env_settings.add_boolean_key('compare_density')
         env_settings.add_boolean_key('save_orbs')
         env_settings.add_boolean_key('save_density')
+        env_settings.add_boolean_key('save_spin_density')
         
         # Freeze and thaw settings
         embed = env_settings.add_block_key('embed_settings')
@@ -210,6 +215,7 @@ class InpReader:
         # Output subsystem orbitals after F&T cycles
         embed.add_boolean_key('save_orbs') 
         embed.add_boolean_key('save_density') 
+        embed.add_boolean_key('save_spin_density') 
 
         # This section needs work. Should be uniform option for setting op.
         operator = embed.add_mutually_exclusive_group(dest='proj_oper', 
@@ -265,6 +271,9 @@ class InpReader:
         hl_settings.add_boolean_key('compress_approx')
         hl_settings.add_boolean_key('unrestricted')
         hl_settings.add_boolean_key('density_fitting')
+        hl_settings.add_boolean_key('save_orbs')
+        hl_settings.add_boolean_key('save_density')
+        hl_settings.add_boolean_key('save_spin_density')
         hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
             'molcas', 'openmolcas'))
 
@@ -346,38 +355,40 @@ class InpReader:
         supersystem_kwargs = []
         # Setup supersystem method
 
-        fs_dict = {'env_order'       :       'env_order', 
-                   'env_method'      :       'fs_method',
-                   'smearsigma'      :       'fs_smearsigma',
-                   'initguess'       :       'fs_initguess',
-                   'conv'            :       'fs_conv',
-                   'grad'            :       'fs_grad',
-                   'cycles'          :       'fs_cycles',
-                   'damp'            :       'fs_damp', 
-                   'shift'           :       'fs_shift', 
-                   'diis'            :       'fs_diis', 
-                   'grid'            :       'fs_grid_level',
-                   'rhocutoff'       :       'fs_rhocutoff', 
-                   'verbose'         :       'fs_verbose', 
-                   'unrestricted'    :       'fs_unrestricted', 
-                   'density_fitting' :       'fs_density_fitting',
-                   'compare_density' :       'compare_density',
-                   'save_orbs'       :       'fs_save_orbs', 
-                   'save_density'    :       'fs_save_density'}
+        fs_dict = {'env_order'            :       'env_order', 
+                   'env_method'           :       'fs_method',
+                   'smearsigma'           :       'fs_smearsigma',
+                   'initguess'            :       'fs_initguess',
+                   'conv'                 :       'fs_conv',
+                   'grad'                 :       'fs_grad',
+                   'cycles'               :       'fs_cycles',
+                   'damp'                 :       'fs_damp', 
+                   'shift'                :       'fs_shift', 
+                   'diis'                 :       'fs_diis', 
+                   'grid'                 :       'fs_grid_level',
+                   'rhocutoff'            :       'fs_rhocutoff', 
+                   'verbose'              :       'fs_verbose', 
+                   'unrestricted'         :       'fs_unrestricted', 
+                   'density_fitting'      :       'fs_density_fitting',
+                   'compare_density'      :       'compare_density',
+                   'save_orbs'            :       'fs_save_orbs', 
+                   'save_density'         :       'fs_save_density',
+                   'save_spin_density'    :       'fs_save_spin_density'}
 
-        ft_dict = {'cycles'          :       'ft_cycles', 
-                   'basis_tau'       :       'ft_basis_tau',
-                   'conv'            :       'ft_conv',
-                   'grad'            :       'ft_grad',
-                   'damp'            :       'ft_damp', 
-                   'diis'            :       'ft_diis', 
-                   'setfermi'        :       'ft_setfermi', 
-                   'updatefock'      :       'ft_updatefock',
-                   'initguess'       :       'ft_initguess', 
-                   'unrestricted'    :       'ft_unrestricted', 
-                   'save_orbs'       :       'ft_save_orbs', 
-                   'save_density'    :       'ft_save_density',
-                   'proj_oper'        :      'ft_proj_oper'}
+        ft_dict = {'cycles'               :       'ft_cycles', 
+                   'basis_tau'            :       'ft_basis_tau',
+                   'conv'                 :       'ft_conv',
+                   'grad'                 :       'ft_grad',
+                   'damp'                 :       'ft_damp', 
+                   'diis'                 :       'ft_diis', 
+                   'setfermi'             :       'ft_setfermi', 
+                   'updatefock'           :       'ft_updatefock',
+                   'initguess'            :       'ft_initguess', 
+                   'unrestricted'         :       'ft_unrestricted', 
+                   'save_orbs'            :       'ft_save_orbs', 
+                   'save_density'         :       'ft_save_density',
+                   'save_spin_density'    :       'ft_save_spin_density',
+                   'proj_oper'            :      'ft_proj_oper'}
 
         for supersystem in inp.env_method_settings:
             sup_settings_dict = vars(supersystem)
@@ -499,6 +510,9 @@ class InpReader:
                     'shift' : 'hl_shift',
                     'compress_approx': 'hl_compress_approx',
                     'unrestricted': 'hl_unrestricted',
+                    'save_orbs': 'hl_save_orbs',
+                    'save_density': 'hl_save_density',
+                    'save_spin_density': 'hl_save_spin_density',
                     'density_fitting': 'hl_density_fitting',
                     'use_ext': 'hl_ext',
                     'loc_orbs': 'cas_loc_orbs',
