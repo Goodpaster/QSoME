@@ -1,0 +1,11 @@
+Simple Damping
+Graduated Damping
+DIIS
+EDIIS
+Optimal Damping Algorithm (ODA)
+ADIIS
+Trust Region SCF
+Quadratic Convergence
+RH/DIIS
+RM/DIIS
+

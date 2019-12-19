@@ -347,6 +347,18 @@ def density_damping():
                         write_string = f"  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
                         with open(output_filename, 'a') as fout:
                             fout.write(write_string)
+                        if x[0].spin != 0 or x[1].spin != 0:
+                            sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
+                            sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
+                            sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=1000, ft_initguess=ig, ft_updatefock=fud, fs_unrestricted=True, ft_unrestricted=True)
+                            sup.init_density()
+                            start_time = time.time()
+                            sup.freeze_and_thaw()
+                            end_time = time.time()
+                            elapsed_time = end_time - start_time
+                            cycles = sup.ft_iter
+                            write_string = f"Unrestricted\n  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
+
         num += 2
         x = next(moliter) 
         print ("Progress")

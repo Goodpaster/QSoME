@@ -1,0 +1,618 @@
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: lda
+fock_update: 0
+  FT cycles: 24
+  Elapsed Time: 4.418628454208374
+  Average time per cycle: 0.1841095189253489
+  Sub1 E: -500.8610686159513
+  Sub2 E: -183.52754168041102
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: lda
+fock_update: 1
+  FT cycles: 150
+  Elapsed Time: 48.55634546279907
+  Average time per cycle: 0.3237089697519938
+  Sub1 E: -500.8610686161507
+  Sub2 E: -183.52754167798807
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 8.731715679168701
+  Average time per cycle: 0.396896167234941
+  Sub1 E: -504.34286461473886
+  Sub2 E: -187.6306295979184
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 156
+  Elapsed Time: 108.22441387176514
+  Average time per cycle: 0.6937462427677252
+  Sub1 E: -504.34286461338655
+  Sub2 E: -187.6306295932499
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 9.481685638427734
+  Average time per cycle: 0.43098571083762427
+  Sub1 E: -504.5203901878162
+  Sub2 E: -187.8542965256925
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 86
+  Elapsed Time: 64.04754376411438
+  Average time per cycle: 0.7447388809780742
+  Sub1 E: -504.52039019020566
+  Sub2 E: -187.8542965088847
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: m06
+fock_update: 0
+  FT cycles: 23
+  Elapsed Time: 31.900331020355225
+  Average time per cycle: 1.386970913928488
+  Sub1 E: -504.5651048981484
+  Sub2 E: -187.89407881092112
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: atom
+xc_fun: m06
+fock_update: 1
+  FT cycles: 83
+  Elapsed Time: 201.31689715385437
+  Average time per cycle: 2.425504784986197
+  Sub1 E: -504.56510489413614
+  Sub2 E: -187.89407881618766
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: lda
+fock_update: 0
+  FT cycles: 27
+  Elapsed Time: 5.2841973304748535
+  Average time per cycle: 0.19571101223980938
+  Sub1 E: -500.86106861460877
+  Sub2 E: -183.52754167796
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: lda
+fock_update: 1
+  FT cycles: 160
+  Elapsed Time: 51.89547896385193
+  Average time per cycle: 0.32434674352407455
+  Sub1 E: -500.86106861527304
+  Sub2 E: -183.5275416797863
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 30
+  Elapsed Time: 11.601972341537476
+  Average time per cycle: 0.38673241138458253
+  Sub1 E: -504.34286461434834
+  Sub2 E: -187.63062959537214
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 156
+  Elapsed Time: 107.87225151062012
+  Average time per cycle: 0.6914887917347443
+  Sub1 E: -504.3428646166564
+  Sub2 E: -187.63062959696217
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 21
+  Elapsed Time: 8.9937264919281
+  Average time per cycle: 0.4282726900918143
+  Sub1 E: -504.52039018935176
+  Sub2 E: -187.85429651729228
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 210
+  Elapsed Time: 145.22006797790527
+  Average time per cycle: 0.6915241332281203
+  Sub1 E: -504.52039019085754
+  Sub2 E: -187.85429650790005
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: m06
+fock_update: 0
+  FT cycles: 23
+  Elapsed Time: 29.395878791809082
+  Average time per cycle: 1.2780816866003948
+  Sub1 E: -504.56510489043666
+  Sub2 E: -187.89407883034275
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 2
+initguess: h1e
+xc_fun: m06
+fock_update: 1
+  FT cycles: 126
+  Elapsed Time: 283.66871547698975
+  Average time per cycle: 2.251339011722141
+  Sub1 E: -504.56510489510384
+  Sub2 E: -187.8940788139125
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: lda
+fock_update: 0
+  FT cycles: 24
+  Elapsed Time: 4.5627851486206055
+  Average time per cycle: 0.1901160478591919
+  Sub1 E: -500.861073436327
+  Sub2 E: -183.52754043405636
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: lda
+fock_update: 1
+  FT cycles: 109
+  Elapsed Time: 36.792482137680054
+  Average time per cycle: 0.3375457076851381
+  Sub1 E: -500.86107344477006
+  Sub2 E: -183.52754043490157
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 11.210860252380371
+  Average time per cycle: 0.5095845569263805
+  Sub1 E: -504.342869384571
+  Sub2 E: -187.63062870794417
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 93
+  Elapsed Time: 82.55308890342712
+  Average time per cycle: 0.887667622617496
+  Sub1 E: -504.3428693822961
+  Sub2 E: -187.6306287104761
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 12.065812110900879
+  Average time per cycle: 0.5484460050409491
+  Sub1 E: -504.52039565129695
+  Sub2 E: -187.85429736700914
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 66
+  Elapsed Time: 63.91180396080017
+  Average time per cycle: 0.9683606660727299
+  Sub1 E: -504.52039566008847
+  Sub2 E: -187.8542973508249
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: m06
+fock_update: 0
+  FT cycles: 24
+  Elapsed Time: 45.969095945358276
+  Average time per cycle: 1.9153789977232616
+  Sub1 E: -504.5650871441099
+  Sub2 E: -187.8938538281407
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: atom
+xc_fun: m06
+fock_update: 1
+  FT cycles: 138
+  Elapsed Time: 471.32603120803833
+  Average time per cycle: 3.4154060232466548
+  Sub1 E: -504.5650871390275
+  Sub2 E: -187.89385382592448
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: lda
+fock_update: 0
+  FT cycles: 27
+  Elapsed Time: 5.044306755065918
+  Average time per cycle: 0.1868261761135525
+  Sub1 E: -500.8610734349882
+  Sub2 E: -183.52754043159675
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: lda
+fock_update: 1
+  FT cycles: 204
+  Elapsed Time: 67.47817420959473
+  Average time per cycle: 0.33077536377252315
+  Sub1 E: -500.86107343058455
+  Sub2 E: -183.5275404292025
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 30
+  Elapsed Time: 14.612761735916138
+  Average time per cycle: 0.4870920578638713
+  Sub1 E: -504.3428693841873
+  Sub2 E: -187.63062870548342
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 132
+  Elapsed Time: 115.77541303634644
+  Average time per cycle: 0.877086462396564
+  Sub1 E: -504.3428693841749
+  Sub2 E: -187.63062870378346
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 21
+  Elapsed Time: 11.597232103347778
+  Average time per cycle: 0.5522491477784657
+  Sub1 E: -504.5203956528422
+  Sub2 E: -187.85429735854981
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 158
+  Elapsed Time: 147.97898244857788
+  Average time per cycle: 0.9365758382821385
+  Sub1 E: -504.5203956514143
+  Sub2 E: -187.85429734868288
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: m06
+fock_update: 0
+  FT cycles: 23
+  Elapsed Time: 44.20775556564331
+  Average time per cycle: 1.9220763289410134
+  Sub1 E: -504.56508713875434
+  Sub2 E: -187.8938538425942
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 3
+initguess: h1e
+xc_fun: m06
+fock_update: 1
+  FT cycles: 165
+  Elapsed Time: 561.3567750453949
+  Average time per cycle: 3.4021622730023933
+  Sub1 E: -504.56508713858517
+  Sub2 E: -187.89385384360034
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: lda
+fock_update: 0
+  FT cycles: 24
+  Elapsed Time: 7.091318130493164
+  Average time per cycle: 0.2954715887705485
+  Sub1 E: -500.86106516781757
+  Sub2 E: -183.5275386102695
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: lda
+fock_update: 1
+  FT cycles: 124
+  Elapsed Time: 64.23217058181763
+  Average time per cycle: 0.5180013756598195
+  Sub1 E: -500.86106516580634
+  Sub2 E: -183.5275386098073
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 18.02349019050598
+  Average time per cycle: 0.8192495541139082
+  Sub1 E: -504.3428621688951
+  Sub2 E: -187.63062946761053
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 144
+  Elapsed Time: 203.8415331840515
+  Average time per cycle: 1.4155662026670244
+  Sub1 E: -504.34286216825654
+  Sub2 E: -187.63062946687378
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 22
+  Elapsed Time: 19.447112560272217
+  Average time per cycle: 0.8839596618305553
+  Sub1 E: -504.5203901579412
+  Sub2 E: -187.85429688778763
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 148
+  Elapsed Time: 225.11355781555176
+  Average time per cycle: 1.5210375528077822
+  Sub1 E: -504.520390159633
+  Sub2 E: -187.85429687467442
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: m06
+fock_update: 0
+  FT cycles: 23
+  Elapsed Time: 75.60976505279541
+  Average time per cycle: 3.287381089251974
+  Sub1 E: -504.5651463449594
+  Sub2 E: -187.89357414854285
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: atom
+xc_fun: m06
+fock_update: 1
+  FT cycles: 61
+  Elapsed Time: 361.7520046234131
+  Average time per cycle: 5.930360731531362
+  Sub1 E: -504.56514634011165
+  Sub2 E: -187.89357415889393
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: lda
+fock_update: 0
+  FT cycles: 27
+  Elapsed Time: 7.816917896270752
+  Average time per cycle: 0.28951547763965746
+  Sub1 E: -500.8610651664614
+  Sub2 E: -183.52753860780203
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: lda
+fock_update: 1
+  FT cycles: 176
+  Elapsed Time: 91.46309757232666
+  Average time per cycle: 0.5196766907518561
+  Sub1 E: -500.86106516563774
+  Sub2 E: -183.52753860944418
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: pbe
+fock_update: 0
+  FT cycles: 30
+  Elapsed Time: 23.54256772994995
+  Average time per cycle: 0.7847522576649983
+  Sub1 E: -504.3428621685435
+  Sub2 E: -187.63062946479877
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: pbe
+fock_update: 1
+  FT cycles: 115
+  Elapsed Time: 164.42977166175842
+  Average time per cycle: 1.4298241014065949
+  Sub1 E: -504.3428621675852
+  Sub2 E: -187.63062946581098
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 0
+  FT cycles: 21
+  Elapsed Time: 18.6475350856781
+  Average time per cycle: 0.8879778612227667
+  Sub1 E: -504.52039015948566
+  Sub2 E: -187.85429687934842
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: b3lyp
+fock_update: 1
+  FT cycles: 255
+  Elapsed Time: 386.1703655719757
+  Average time per cycle: 1.514393590478336
+  Sub1 E: -504.5203901606797
+  Sub2 E: -187.854296873631
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: m06
+fock_update: 0
+  FT cycles: 23
+  Elapsed Time: 75.66597819328308
+  Average time per cycle: 3.289825138838395
+  Sub1 E: -504.56514633774356
+  Sub2 E: -187.89357416627954
+
+molnum: 0
+basis: 3-21g
+charge: -1
+gridsize: 4
+initguess: h1e
+xc_fun: m06
+fock_update: 1
