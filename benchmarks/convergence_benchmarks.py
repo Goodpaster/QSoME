@@ -264,9 +264,11 @@ charges_cs = [-1, 1, -1, 1, -2, 2, -2, 2, -2, 1, -2, 1, 2, -2, -6, 6]
 charges_os = [0, 0, 0, 0, 0, 0, 0, 0, -1, 1, -1, 1, 2, -2, -6, 6]
 spin_os = [1, -1, 1, -1, 0, 0, 0, 0, 1, 0, 1, 0, 4, 0, 4, 0]
 
-grid_points = [2,3,4,5]
+grid_points = [3,4]
 init_guess = ['atom', 'h1e']#, 'super', 'sub', 'localsuper']
 xc_fun = ['lda', 'pbe', 'b3lyp', 'm06']
+
+simple_damping_values = [0.1, 0.2, 0.5, 0.8, 0.9]
 
 class MolObjects:
     def __iter__(self):
@@ -320,9 +322,8 @@ class MolObjects:
         self.subs = (mol1, mol2)
         return x
 
-def density_damping():
-    output_filename = 'density_damping_results.out'
-    tempfile = "temp.out"
+def simple_density_damping():
+    output_filename = 'simple_density_damping_results.out'
     molO = MolObjects()
     moliter = iter(molO)
     x = next(moliter)
@@ -332,38 +333,88 @@ def density_damping():
             for ig in init_guess:
                 for xc in xc_fun:
                     for fud in range(2):
-                        header_string = f"molnum: {num}\nbasis: {x[0].basis}\ncharge: {x[0].charge}\ngridsize: {gp}\ninitguess: {ig}\nxc_fun: {xc}\nfock_update: {fud}\n"
-                        with open(output_filename, 'a') as fout:
-                            fout.write(header_string)
-                        sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc)
-                        sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc)
-                        sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=1000, ft_initguess=ig, ft_updatefock=fud)
-                        sup.init_density()
-                        start_time = time.time()
-                        sup.freeze_and_thaw()
-                        end_time = time.time()
-                        elapsed_time = end_time - start_time
-                        cycles = sup.ft_iter
-                        write_string = f"  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
-                        with open(output_filename, 'a') as fout:
-                            fout.write(write_string)
-                        if x[0].spin != 0 or x[1].spin != 0:
-                            sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
-                            sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
-                            sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=1000, ft_initguess=ig, ft_updatefock=fud, fs_unrestricted=True, ft_unrestricted=True)
+                        for pud in range(fud, 2):
+                            for dp in simple_damping_values:
+                                header_string = f"molnum: {num}\nbasis: {x[0].basis}\ncharge: {x[0].charge}\ngridsize: {gp}\ninitguess: {ig}\nxc_fun: {xc}\nfock_update: {fud}\nproj_update: {pud}\ndamping: {dp}\n"
+                                with open(output_filename, 'a') as fout:
+                                    fout.write(header_string)
+                                sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc)
+                                sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc)
+                                sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, ft_diis=None, ft_damp=dp)
+                                sup.init_density()
+                                start_time = time.time()
+                                sup.freeze_and_thaw()
+                                end_time = time.time()
+                                elapsed_time = end_time - start_time
+                                cycles = sup.ft_iter
+                                write_string = f"  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
+                                with open(output_filename, 'a') as fout:
+                                    fout.write(write_string)
+                                if x[0].spin != 0 or x[1].spin != 0:
+                                    sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
+                                    sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
+                                    sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_damp=dp)
+                                    sup.init_density()
+                                    start_time = time.time()
+                                    sup.freeze_and_thaw()
+                                    end_time = time.time()
+                                    elapsed_time = end_time - start_time
+                                    cycles = sup.ft_iter
+                                    write_string = f"Unrestricted\n  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
+
+        num += 2
+        x = next(moliter) 
+        print ("Progress")
+        print (f"{num/2} Done Total")
+
+def optimal_density_damping():
+    output_filename = 'optimal_density_damping_results.out'
+    molO = MolObjects()
+    moliter = iter(molO)
+    x = next(moliter)
+    num = 0
+    while x is not None:
+        for gp in grid_points:
+            for ig in init_guess:
+                for xc in xc_fun:
+                    for fud in range(2):
+                        for pud in range(fud, 2):
+                            header_string = f"molnum: {num}\nbasis: {x[0].basis}\ncharge: {x[0].charge}\ngridsize: {gp}\ninitguess: {ig}\nxc_fun: {xc}\nfock_update: {fud}\nproj_update: {pud}\n"
+                            with open(output_filename, 'a') as fout:
+                                fout.write(header_string)
+                            sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc)
+                            sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc)
+                            sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, ft_diis=None, ft_damp=dp)
                             sup.init_density()
                             start_time = time.time()
                             sup.freeze_and_thaw()
                             end_time = time.time()
                             elapsed_time = end_time - start_time
                             cycles = sup.ft_iter
-                            write_string = f"Unrestricted\n  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
+                            write_string = f"  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
+                            with open(output_filename, 'a') as fout:
+                                fout.write(write_string)
+                            if x[0].spin != 0 or x[1].spin != 0:
+                                sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
+                                sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
+                                sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_damp=dp)
+                                sup.init_density()
+                                start_time = time.time()
+                                sup.freeze_and_thaw()
+                                end_time = time.time()
+                                elapsed_time = end_time - start_time
+                                cycles = sup.ft_iter
+                                write_string = f"Unrestricted\n  FT cycles: {cycles}\n  Elapsed Time: {elapsed_time}\n  Average time per cycle: {elapsed_time/float(cycles)}\n  Sub1 E: {sub1.get_env_energy()}\n  Sub2 E: {sub2.get_env_energy()}\n\n"
 
         num += 2
         x = next(moliter) 
         print ("Progress")
         print (f"{num/2} Done Total")
     
-density_damping()
+simple_density_damping()
+
+
+    
+simple_density_damping()
 
 

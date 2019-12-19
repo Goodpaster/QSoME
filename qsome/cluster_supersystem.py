@@ -133,7 +133,7 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None, 
-                 ft_damp=0., ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_initguess=None, ft_unrestricted=False, 
+                 ft_damp=0., ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1, ft_initguess=None, ft_unrestricted=False, 
                  ft_save_orbs=False, ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
 
@@ -260,6 +260,7 @@ class ClusterSuperSystem:
         self.ft_diis_num = ft_diis
         self.ft_setfermi = ft_setfermi
         self.ft_updatefock = ft_updatefock
+        self.ft_updateproj = ft_updateproj
         self.ft_initguess = ft_initguess
         self.ft_unrestricted = ft_unrestricted
         self.ft_save_orbs = ft_save_orbs
@@ -1557,54 +1558,43 @@ class ClusterSuperSystem:
             self.ft_iter += 1
             #Correct for DIIS 
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
-            multi_cycle = (len(self.subsystems) - self.ft_updatefock)
-            for i in range(0, len(self.subsystems), multi_cycle):
-               
-                self.update_fock(diis=True)
-                sub_list = [sub for sub in self.subsystems[i:i+multi_cycle] if not sub.freeze]
-                #this will slow down calculation. 
-                #if self.analysis:
-                #    self.get_emb_subsys_elec_energy()
-                #    sub_old_e = subsystem.get_env_energy()
-                sub_old_dms = [sub.get_dmat().copy() for sub in sub_list]
+            self.update_fock(diis=True)
+            self.update_proj_pot()
+            for i in range(0, len(self.subsystems)):
+              
+                sub = self.subsystems[i] 
+                sub_old_dm = sub.get_dmat().copy()
+                sub.proj_pot = self.proj_pot[i]
+                sub.diagonalize()
 
-                for j in range(len(sub_list)):
-                    #Why is this updated after every subsystem diagonalization? Why not updated once per cycle?
-                    self.update_proj_pot() #could use i as input and only get for that sub.
-                    sub_list[j].proj_pot = self.proj_pot[j+i]
-                    sub_list[j].diagonalize()
-                    #self.update_fock(diis=False)
-                    #self.update_proj_pot()
+                new_dm = [None, None]
+                if sub.unrestricted or sub.mol.spin != 0:
+                    new_dm[0] = ((1 - self.ft_damp) * sub.get_dmat()[0] + (self.ft_damp * sub_old_dm[0]))
+                    new_dm[1] = ((1 - self.ft_damp) * sub.get_dmat()[1] + (self.ft_damp * sub_old_dm[1]))
 
-                #This is where to do multiprocess.  
-                #pool = Pool(processes=multi_cycle)
-               # result = parmap(sub_diag, sub_list)
-                
-                for k in range(len(sub_list)):
-                    subsystem = sub_list[k]
-                    new_dm = [None, None]
-                    if subsystem.unrestricted or subsystem.mol.spin != 0:
-                        new_dm[0] = ((1 - self.ft_damp) * subsystem.get_dmat()[0] + (self.ft_damp * sub_old_dms[k][0]))
-                        new_dm[1] = ((1 - self.ft_damp) * subsystem.get_dmat()[1] + (self.ft_damp * sub_old_dms[k][1]))
+                    sub.env_dmat = new_dm
+                    ddm = sp.linalg.norm(sub.get_dmat()[0] - sub_old_dm[0])
+                    ddm += sp.linalg.norm(sub.get_dmat()[1] - sub_old_dm[1])
+                    proj_e = np.trace(np.dot(sub.get_dmat()[0], self.proj_pot[i][0]))
+                    proj_e += np.trace(np.dot(sub.get_dmat()[1], self.proj_pot[i][1]))
+                    ft_err += ddm
+                    self.ft_fermi[i] = sub.fermi
+                else:
+                    new_dm = ((1. - self.ft_damp) * sub.get_dmat() + (self.ft_damp * sub_old_dm))
+                    sub.env_dmat = np.array([new_dm/2., new_dm/2.])
+                    ddm = sp.linalg.norm(sub.get_dmat() - sub_old_dm)
+                    proj_e = np.trace(np.dot(sub.get_dmat(), self.proj_pot[i][0]))
+                    ft_err += ddm
+                    self.ft_fermi[i] = [sub.fermi, sub.fermi]
 
-                        subsystem.env_dmat = new_dm
-                        ddm = sp.linalg.norm(subsystem.get_dmat()[0] - sub_old_dms[k][0])
-                        ddm += sp.linalg.norm(subsystem.get_dmat()[1] - sub_old_dms[k][1])
-                        proj_e = np.trace(np.dot(subsystem.get_dmat()[0], self.proj_pot[i+k][0]))
-                        proj_e += np.trace(np.dot(subsystem.get_dmat()[1], self.proj_pot[i+k][1]))
-                        ft_err += ddm
-                        self.ft_fermi[i+k] = subsystem.fermi
-                    else:
-                        new_dm = ((1. - self.ft_damp) * subsystem.get_dmat() + (self.ft_damp * sub_old_dms[k]))
-                        subsystem.env_dmat = np.array([new_dm/2., new_dm/2.])
-                        ddm = sp.linalg.norm(subsystem.get_dmat() - sub_old_dms[k])
-                        proj_e = np.trace(np.dot(subsystem.get_dmat(), self.proj_pot[i+k][0]))
-                        ft_err += ddm
-                        self.ft_fermi[i+k] = [subsystem.fermi, subsystem.fermi]
-
-                    # print output to console.
-                    print(f"iter:{self.ft_iter:>3d}:{i+k:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
-                self.save_chkfile()
+                # print output to console.
+                print(f"iter:{self.ft_iter:>3d}:{i:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
+                #Check if need to update fock or proj pot.
+                if self.ft_updatefock > 0 and ((i + 1) % self.ft_updatefock) == 0:
+                    self.update_fock(diis=True)
+                if self.ft_updateproj > 0 and ((i + 1) % self.ft_updateproj) == 0:
+                    self.update_proj_pot()
+            self.save_chkfile()
 
         print("".center(80))
         self.is_ft_conv = True
@@ -1612,24 +1602,6 @@ class ClusterSuperSystem:
             print("".center(80))
             print("Freeze-and-Thaw NOT converged".center(80))
         
-        # cycle over subsystems
-#        self.update_fock(diis=False)
-#        for i in range(len(self.subsystems)):
-#            subsystem = self.subsystems[i]
-#            if not subsystem.freeze:
-#
-#                self.update_proj_pot() #could use i as input and only get for that sub.
-#                SAA = self.smat[np.ix_(s2s[i], s2s[i])]
-#                #I don't think this changes. Could probably set in the initialize.
-#                subsystem.proj_pot = self.proj_pot[i]
-#                subsystem.diagonalize()
-#                proj_e = np.trace(np.dot(subsystem.get_dmat()[0], self.proj_pot[i][0]))
-#                proj_e += np.trace(np.dot(subsystem.get_dmat()[1], self.proj_pot[i][1]))
-#                print (proj_e)
-#                # save to file. could be done in larger cycles.
-#                self.save_chkfile()
-#                self.ft_fermi[i] = subsystem.fermi
-#
         self.update_fock(diis=False)
         #Update Proj pot?
         # print subsystem energies 
