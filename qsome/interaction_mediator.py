@@ -48,6 +48,7 @@ class InteractionMediator:
                 sub_list.append(combined_subs)
             curr_sup_kwargs['env_order'] = curr_order
             curr_sup_kwargs['filename'] = self.filename
+            curr_sup_kwargs['scr_dir'] = self.scrdir
             supersystem = ClusterSuperSystem(sub_list, curr_method, **curr_sup_kwargs)
             supersystems.append(supersystem)
 

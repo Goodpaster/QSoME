@@ -5,6 +5,7 @@ import re
 import numpy as np
 import os
 import subprocess
+from shutil import copyfile
 
 
 _Molpro2PyscfBasisPermSph = {
@@ -255,8 +256,9 @@ class MolproExt:
             method_string = '{hf;noenest}\n'
             method_string += 'rccsd(t)'
         elif self.method == 'fcidump':
+            dump_filename = 'FCIDUMP'
             method_string = '{hf;noenest}\n'
-            method_string += '{fci;core;dump}\n'
+            method_string += '''{fci,dump=''' + dump_filename + ''';core;}\n'''
         elif self.method == 'rohf/rccsd(t)':
             method_string = '{rhf;noenest;\n'
             num_elec = self.mol.tot_electrons()
@@ -364,13 +366,32 @@ class MolproExt:
         print (cmd)
         proc_results = subprocess.getoutput(cmd)
         print (proc_results)
-        if self.method == 'fcidump':
-            copyfile(self.scr_dir + '/FCIDUMP', self.work_dir + '/' + self.filename + '.fcidump')
 
         #Open and extract from output.
         outfile = self.work_dir + '/' + self.filename + '_molpro.out'
         with open(outfile, 'r') as fin:
             dat = fin.read()
+
+            #Copy fcidump to the correct location.
+            if self.method == 'fcidump':
+                #fcidump_loc = dat.find('Transformed integrals will be written to file')
+                #fcidump_end = dat.find('FCIDUMP', fcidump_loc)
+                #fcidump_path = dat[fcidump_loc:fcidump_end].split()[-1] + 'FCIDUMP'
+                curr_num = -1
+                curr_path = self.scr_dir
+                while os.path.exists(curr_path):
+                    curr_num += 1
+                    curr_path = curr_path.rsplit('-', 1)[0]
+                    curr_path += '-' + str(curr_num)
+                path_num = curr_num - 1
+                path_name = self.scr_dir
+                if path_num >= 0:
+                    path_name = path_name + '-' + str(path_num)
+                fcidump_path = path_name + '/fcidump'
+                print (fcidump_path)
+                copyfile(fcidump_path, self.work_dir + '/' + self.filename + '.fcidump')
+                os.remove(fcidump_path)
+
             dat1 = dat.splitlines()
             nums = []
             elec_e = []
