@@ -302,6 +302,7 @@ class ClusterEnvSubSystem:
         elif mol.spin != 0:
             #Constrained Unrestricted Calculation.
             if mol.spin < 0:
+                #This doesn't work properly. As long as only setting spin above 0 should be fine.
                 self.flip_ros = True
                 mol.spin *= -1
                 mol.build()
@@ -426,11 +427,14 @@ class ClusterEnvSubSystem:
         if hcore is None:
             hcore = self.env_hcore
 
-        if not self.unrestricted:
-            temp_fock = self.env_scf.get_fock(h1e=hcore, dm=(dmat[0] + dmat[1]))
+        if self.unrestricted:
+            self.subsys_fock = self.env_scf.get_fock(h1e=hcore, dm=dmat)
+        elif self.mol.spin != 0:
+            temp_fock = self.env_scf.get_fock(h1e=hcore, dm=dmat)
             self.subsys_fock = [temp_fock, temp_fock]
         else:
-            self.subsys_fock = self.env_scf.get_fock(h1e=hcore, dm=dmat)
+            temp_fock = self.env_scf.get_fock(h1e=hcore, dm=(dmat[0] + dmat[1]))
+            self.subsys_fock = [temp_fock, temp_fock]
         return True
 
 

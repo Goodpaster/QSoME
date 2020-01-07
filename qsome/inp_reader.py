@@ -215,7 +215,7 @@ class InpReader:
         # 0 is after F&T cycle, otherwise after every n subsystem cycles
         embed.add_line_key('updatefock', type=int)
         embed.add_line_key('updateproj', type=int)
-        embed.add_line_key('mod', type('fock', 'density'))
+        embed.add_line_key('matacc', type=('fock', 'density'))
         # Initial guess for the subsystem embedding calculation
         embed.add_line_key('initguess', type=(
             'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))

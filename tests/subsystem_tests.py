@@ -318,7 +318,8 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         dim0 = subsys.emb_pot[0].shape[0]
         dim1 = subsys.emb_pot[1].shape[1]
         emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
-        emb_pot = emb_fock - subsys.subsys_fock
+        emb_pot = [emb_fock[0] - subsys.subsys_fock[0],
+                   emb_fock[1] - subsys.subsys_fock[1]]
         true_emb_e = np.einsum('ij,ji', emb_pot[0],
                                  sub_dmat[0]).real
         true_emb_e += np.einsum('ij,ji', emb_pot[1],
@@ -444,7 +445,8 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         dim0 = subsys.emb_pot[0].shape[0]
         dim1 = subsys.emb_pot[1].shape[1]
         emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
-        emb_pot = emb_fock - subsys.subsys_fock
+        emb_pot = [emb_fock[0] - subsys.subsys_fock[0],
+                   emb_fock[1] - subsys.subsys_fock[1]]
         test_embed_e = np.einsum('ij,ji', emb_pot[0],
                                  sub_dmat[0]).real
         test_embed_e += np.einsum('ij,ji', emb_pot[1],
@@ -466,7 +468,8 @@ class TestEnvSubsystemMethods(unittest.TestCase):
        
         # With both. 
         emb_fock = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
-        emb_pot = emb_fock - subsys.subsys_fock
+        emb_pot = [emb_fock[0] - subsys.subsys_fock[0],
+                   emb_fock[1] - subsys.subsys_fock[1]]
         proj_potent = [np.random.rand(dim0, dim1), np.random.rand(dim0, dim1)]
         test_proj_e = np.einsum('ij,ji', proj_potent[0],
                                  sub_dmat[0]).real
