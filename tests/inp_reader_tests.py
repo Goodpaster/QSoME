@@ -42,7 +42,6 @@ end
 basis
  default 3-21g
 end
-
 """
 
 env_settings_filename = 'env_settings.inp'
@@ -65,18 +64,22 @@ env_method_settings
  compare_density
  save_orbs
  save_density
+ save_spin_density
  embed_settings
   cycles 12
   subcycles 2
+  basis_tau 0.2
   conv 1e-4
   grad 1e-2
   damp 0.5
   diis 3
   setfermi 0.35
   updatefock 3
+  updateproj 2
   initguess readchk
   save_orbs
   save_density
+  save_spin_density
   huzfermi
  end
 end"""
@@ -100,12 +103,15 @@ hl_method_settings
  compress_approx
  unrestricted
  density_fitting
+ save_orbs
+ save_density
+ save_spin_density
  use_ext openmolcas
  cas_settings
   loc_orbs
   cas_initguess rhf
-  active_orbs [3,4,5,6,7]
-  avas ['1d']
+  active_orbs 3,4,5,6,7
+  avas 1d
  end
 end"""
 
@@ -126,8 +132,12 @@ env_method_settings
  subcycles 10
  setfermi 1.112
  diis 6
- freeze 
  unrestricted
+ density_fitting
+ freeze 
+ save_orbs
+ save_density
+ save_spin_density
 end"""
 
 subsys_env_set_str = env_settings_str.replace("""
@@ -152,10 +162,15 @@ hl_method_settings
  shift 0.002
  use_ext molpro
  unrestricted
+ compress_approx
+ density_fitting
+ save_orbs
+ save_density
+ save_spin_density
  cas_settings
   cas_initguess ci
-  active_orbs [5,6,7,8,9]
-  avas ['3d']
+  active_orbs 5,6,7,8,9
+  avas 3d
  end
 end
 """
@@ -360,8 +375,8 @@ hl_method_settings
  cas_settings
   loc_orbs
   cas_initguess rhf
-  active_orbs [1,2,3]
-  avas ['1d']
+  active_orbs 1,2,3
+  avas 1d
  end
 end
 end
@@ -402,6 +417,7 @@ env_method_settings
  freeze
  save_orbs
  save_density
+ save_spin_density
 end
 end
 
@@ -444,6 +460,7 @@ env_method_settings
  compare_density
  save_orbs
  save_density
+ save_spin_density
  embed_settings
   cycles 100
   subcycles 2
@@ -490,6 +507,7 @@ end
 hl_method_settings
  hl_order 2
  hl_method rhf
+ save_spin_density
 end
 
 unit angstrom
@@ -550,12 +568,11 @@ class TestKwargCreation(unittest.TestCase):
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
         for n in in_obj.env_subsystem_kwargs:
             self.assertDictEqual(n, correct_env_kwargs)
-        for i in range(len(in_obj.hl_subsystem_kwargs)):
-            n = in_obj.hl_subsystem_kwargs[i]
+        for i, n in enumerate(in_obj.hl_subsystem_kwargs):
             if i == 0:
                 self.assertDictEqual(n, correct_hl_kwargs)
             else:
-                self.assertEqual(n, None)
+                self.assertIsNone(n)
         for n in in_obj.supersystem_kwargs:
             self.assertDictEqual(n, correct_supersystem_kwargs)
 
@@ -580,7 +597,10 @@ class TestKwargCreation(unittest.TestCase):
                                       'compare_density': True,
                                       'fs_save_orbs': True,
                                       'fs_save_density': True,
+                                      'fs_save_spin_density': True,
                                       'ft_cycles': 12,
+                                      'ft_subcycles': 2,
+                                      'ft_basis_tau': 0.2,
                                       'ft_conv': 1e-4,
                                       'ft_grad': 1e-2,
                                       'ft_damp': 0.5,
@@ -590,6 +610,7 @@ class TestKwargCreation(unittest.TestCase):
                                       'ft_initguess': 'readchk',
                                       'ft_save_orbs': True,
                                       'ft_save_density': True,
+                                      'ft_save_spin_density': True,
                                       'ft_proj_oper': 'huzfermi',
                                       'filename': path + env_settings_filename}
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
@@ -612,6 +633,9 @@ class TestKwargCreation(unittest.TestCase):
                              'hl_unrestricted': True,
                              'hl_compress_approx': True,
                              'hl_density_fitting': True,
+                             'hl_save_orbs': True,
+                             'hl_save_density': True,
+                             'hl_save_spin_density': True,
                              'cas_loc_orbs': True,
                              'cas_initguess': 'rhf',
                              'cas_active_orbs': [3,4,5,6,7],
@@ -637,8 +661,12 @@ class TestKwargCreation(unittest.TestCase):
                                 'subcycles': 10,
                                 'setfermi': 1.112,
                                 'diis': 6,
-                                'freeze': True,
                                 'unrestricted': True,
+                                'density_fitting': True,
+                                'freeze': True,
+                                'save_orbs':True,
+                                'save_density':True,
+                                'save_spin_density':True,
                                 'filename': path + subsys_env_set_filename}
         self.assertDictEqual(in_obj.env_subsystem_kwargs[1], correct_env_kwargs_1)
 
@@ -648,8 +676,8 @@ class TestKwargCreation(unittest.TestCase):
         correct_hl_kwargs_1 = {'hl_order': 1,
                                'hl_method': 'caspt2[10,10]',
                                'hl_initguess': 'minao',
-                               'hl_conv': 1e-3,
                                'hl_spin': 4,
+                               'hl_conv': 1e-3,
                                'hl_grad': 1e1,
                                'hl_cycles': 4,
                                'hl_damp': 0.001,
@@ -658,6 +686,9 @@ class TestKwargCreation(unittest.TestCase):
                                'hl_unrestricted': True,
                                'hl_compress_approx': True,
                                'hl_density_fitting': True,
+                               'hl_save_orbs': True,
+                               'hl_save_density': True,
+                               'hl_save_spin_density': True,
                                'cas_initguess': 'ci',
                                'cas_active_orbs': [5,6,7,8,9],
                                'cas_avas':['3d']}
@@ -709,6 +740,7 @@ class TestKwargCreation(unittest.TestCase):
                                 'freeze': True,
                                 'save_orbs': True,
                                 'save_density': True,
+                                'save_spin_density': True,
                                 'filename': path + explicit_filename, 
                                 'ppmem': 2500, 
                                 'nproc': 3, 
@@ -747,7 +779,8 @@ class TestKwargCreation(unittest.TestCase):
                                'cas_avas':['1d']}
                                 
         correct_hl_kwargs_2 = {'hl_order': 2,
-                               'hl_method': 'rhf'}
+                               'hl_method': 'rhf',
+                               'hl_save_spin_density': True}
         hl_list = [correct_hl_kwargs_1, correct_hl_kwargs_2, None, None, None]
         correct_sup_kwargs_1 = {'env_order': 1,
                                 'fs_method': 'lda',
@@ -767,7 +800,9 @@ class TestKwargCreation(unittest.TestCase):
                                 'compare_density': True,
                                 'fs_save_orbs': True,
                                 'fs_save_density': True,
+                                'fs_save_spin_density': True,
                                 'ft_cycles': 100,
+                                'ft_subcycles': 2,
                                 'ft_conv': 1e-4,
                                 'ft_grad': 1e4,
                                 'ft_damp': 0.1,

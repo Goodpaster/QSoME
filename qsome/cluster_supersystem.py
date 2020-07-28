@@ -133,7 +133,7 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None, 
-                 ft_damp=0., ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1, ft_initguess=None, ft_unrestricted=False, 
+                 ft_damp=0, ft_diis=None, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1, ft_initguess=None, ft_unrestricted=False, 
                  ft_save_orbs=False, ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
 
@@ -1569,24 +1569,31 @@ class ClusterSuperSystem:
 
                 new_dm = [None, None]
                 if sub.unrestricted or sub.mol.spin != 0:
-                    new_dm[0] = ((1 - self.ft_damp) * sub.get_dmat()[0] + (self.ft_damp * sub_old_dm[0]))
-                    new_dm[1] = ((1 - self.ft_damp) * sub.get_dmat()[1] + (self.ft_damp * sub_old_dm[1]))
-
-                    sub.env_dmat = new_dm
                     ddm = sp.linalg.norm(sub.get_dmat()[0] - sub_old_dm[0])
                     ddm += sp.linalg.norm(sub.get_dmat()[1] - sub_old_dm[1])
                     proj_e = np.trace(np.dot(sub.get_dmat()[0], self.proj_pot[i][0]))
                     proj_e += np.trace(np.dot(sub.get_dmat()[1], self.proj_pot[i][1]))
                     ft_err += ddm
                     self.ft_fermi[i] = sub.fermi
+
+                    damp = [self.ft_damp, self.ft_damp]
+                    if damp[0] < 0:
+                        #GeT ODA DAMPING parameters.
+                        pass
+                    new_dm[0] = ((1 - damp[0]) * sub.get_dmat()[0] + (damp[0] * sub_old_dm[0]))
+                    new_dm[1] = ((1 - damp[1]) * sub.get_dmat()[1] + (damp[1] * sub_old_dm[1]))
+                    sub.env_dmat = new_dm
                 else:
-                    new_dm = ((1. - self.ft_damp) * sub.get_dmat() + (self.ft_damp * sub_old_dm))
-                    sub.env_dmat = np.array([new_dm/2., new_dm/2.])
+                    damp = self.ft_damp
                     ddm = sp.linalg.norm(sub.get_dmat() - sub_old_dm)
                     proj_e = np.trace(np.dot(sub.get_dmat(), self.proj_pot[i][0]))
                     ft_err += ddm
                     self.ft_fermi[i] = [sub.fermi, sub.fermi]
-
+                    if damp < 0:
+                        #GET ODA DAMPING PARAMETER.
+                        pass
+                    new_dm = ((1. - damp) * sub.get_dmat() + (damp * sub_old_dm))
+                    sub.env_dmat = np.array([new_dm/2., new_dm/2.])
                 # print output to console.
                 print(f"iter:{self.ft_iter:>3d}:{i:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
                 #Check if need to update fock or proj pot.

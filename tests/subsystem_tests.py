@@ -162,6 +162,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
     def test_update_subsys_fock(self):
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method)
         subsys.init_density()
+        subsys.update_subsys_fock()
         subsys_dmat = subsys.get_dmat()
         sub_scf = dft.RKS(self.cs_mol)
         sub_scf.xc = self.env_method
@@ -172,6 +173,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         #Unrestricted
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True)
         subsys.init_density()
+        subsys.update_subsys_fock()
         subsys_dmat = subsys.get_dmat()
         sub_scf = dft.UKS(self.os_mol)
         sub_scf.xc = self.env_method
@@ -182,6 +184,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         #Restricted Open Shell
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method)
         subsys.init_density()
+        subsys.update_subsys_fock()
         subsys_dmat = subsys.get_dmat()
         sub_scf = dft.ROKS(self.os_mol)
         sub_scf.xc = self.env_method
@@ -193,6 +196,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
     def test_update_emb_pot(self):
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method)
         subsys.init_density()
+        subsys.update_subsys_fock()
         subsys.emb_fock[0] = subsys.subsys_fock[0]
         subsys.emb_fock[1] = subsys.subsys_fock[1]
         dim0 = subsys.emb_fock[0].shape[0]
@@ -557,27 +561,6 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         true_e_tot = true_subsys_e + true_proj_e + true_embed_e
         self.assertAlmostEqual(true_e_tot, subsys_e_tot, delta=1e-10)
 
-    #@unittest.skip
-    def test_save_density(self):
-        import tempfile
-        from pyscf.tools import cubegen
-        t_file = tempfile.NamedTemporaryFile()
-        subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, filename=t_file.name)
-        subsys.init_density()
-        subsys.chkfile_index = '0'
-        subsys.diagonalize()
-        subsys.save_density_file()
-        sub_dmat = subsys.get_dmat()
-        true_ftmp = tempfile.NamedTemporaryFile()
-        cubegen.density(self.cs_mol, true_ftmp.name, sub_dmat)
-
-        with open(t_file.name + '_' + subsys.chkfile_index + '_subenv.cube', 'r') as fin:
-            test_den_data = fin.read()
-
-        with open(true_ftmp.name, 'r') as fin:
-            true_den_data = fin.read()
-
-        self.assertEqual(test_den_data[99:], true_den_data[99:])
 
     #@unittest.skip
     def test_save_orbs(self):
@@ -603,6 +586,51 @@ class TestEnvSubsystemMethods(unittest.TestCase):
             true_den_data = fin.read()
 
         self.assertEqual(test_den_data, true_den_data)
+
+    #@unittest.skip
+    def test_save_density(self):
+        import tempfile
+        from pyscf.tools import cubegen
+        t_file = tempfile.NamedTemporaryFile()
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, filename=t_file.name)
+        subsys.init_density()
+        subsys.chkfile_index = '0'
+        subsys.diagonalize()
+        subsys.save_density_file()
+        sub_dmat = subsys.get_dmat()
+        true_ftmp = tempfile.NamedTemporaryFile()
+        cubegen.density(self.cs_mol, true_ftmp.name, sub_dmat)
+
+        with open(t_file.name + '_' + subsys.chkfile_index + '_subenv.cube', 'r') as fin:
+            test_den_data = fin.read()
+
+        with open(true_ftmp.name, 'r') as fin:
+            true_den_data = fin.read()
+
+        self.assertEqual(test_den_data[99:], true_den_data[99:])
+
+    #@unittest.skip
+    def test_save_spin_density(self):
+        import tempfile
+        from pyscf.tools import cubegen
+        t_file = tempfile.NamedTemporaryFile()
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, filename=t_file.name)
+        subsys.init_density()
+        subsys.chkfile_index = '0'
+        subsys.diagonalize()
+        subsys.save_spin_density_file()
+        sub_dmat = subsys.get_dmat()
+        true_ftmp = tempfile.NamedTemporaryFile()
+        cubegen.density(self.os_mol, true_ftmp.name, np.subtract(sub_dmat[0],sub_dmat[1]))
+
+        with open(t_file.name + '_' + subsys.chkfile_index + '_subenv_spinden.cube', 'r') as fin:
+            test_den_data = fin.read()
+
+        with open(true_ftmp.name, 'r') as fin:
+            true_den_data = fin.read()
+
+        self.assertEqual(test_den_data[99:], true_den_data[99:])
+
 
     #@unittest.skip
     def test_save_read_chkfile(self):
@@ -683,6 +711,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         t_file = tempfile.NamedTemporaryFile()
         # Closed Shell
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, filename=t_file.name)
+        subsys.init_dmat()
         sub_dmat = subsys.dmat
         test_scf = dft.RKS(mol)
         test_scf.xc = env_method
@@ -699,8 +728,26 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         # Unrestricted Open Shell
         t_file = tempfile.NamedTemporaryFile()
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, unrestricted=True, filename=t_file.name)
+        subsys.init_dmat()
         sub_dmat = subsys.dmat
         test_scf = dft.UKS(mol)
+        test_scf.xc = env_method
+        test_fock = test_scf.get_fock(dm=sub_dmat)
+        test_hcore = test_scf.get_hcore()
+        test_veff = test_scf.get_veff(dm=sub_dmat)
+        sub_fock = subsys.env_scf.get_fock(dm=sub_dmat)
+        sub_hcore = subsys.env_scf.get_hcore()
+        sub_veff = subsys.env_scf.get_veff(dm=sub_dmat)
+        self.assertTrue(np.allclose(test_hcore, sub_hcore))
+        self.assertTrue(np.allclose(test_veff, sub_veff))
+        self.assertTrue(np.allclose(test_fock, sub_fock))
+
+        # Restricted Open Shell
+        t_file = tempfile.NamedTemporaryFile()
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.os_mol, self.env_method, filename=t_file.name)
+        subsys.init_dmat()
+        sub_dmat = subsys.dmat
+        test_scf = dft.ROKS(mol)
         test_scf.xc = env_method
         test_fock = test_scf.get_fock(dm=sub_dmat)
         test_hcore = test_scf.get_hcore()
@@ -1083,55 +1130,3 @@ class TestHLSubsystemMethods(unittest.TestCase):
             test_fci_val = float(test_fcidump[i].split()[0])
             true_fci_val = float(true_fcidump[i].split()[0])
             self.assertAlmostEqual(test_fci_val, true_fci_val)
-
-    @unittest.skip
-    def test_hl_in_env_energy(self):
-
-        # Closed Shell
-        # Yet to test including embedding or projection potentials.
-        t_file = tempfile.NamedTemporaryFile()
-        mol = gto.Mole()
-        mol.verbose = 3
-        #O 0.0 0.0 0.0
-        mol.atom = '''
-        H 0. -2.757 2.857
-        H 0. 2.757 2.857'''
-        mol.basis = '3-21g'
-        mol.build()
-        env_method = 'lda'
-        hl_method  = 'ccsd'
-        conv_param = 1e-10
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_conv=conv_param, filename=t_file.name)
-        subsys_fock = subsys.env_scf.get_fock(dm=(subsys.dmat))
-        subsys_hl_e = subsys.get_hl_in_env_energy()
-        test_scf = scf.RHF(mol)
-        hf = test_scf.kernel()
-        from pyscf import cc
-        cc_calc = cc.CCSD(test_scf)
-        cc_calc.conv_tol = 1e-10
-        cc_calc.conv_tol_normt = 1e-6
-        test_hl_e = cc_calc.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, hf + test_hl_e, delta=1e-5)
-
-        #Unrestricted Open Shell
-        t_file = tempfile.NamedTemporaryFile()
-        mol = gto.Mole()
-        mol.verbose = 3
-        mol.atom = '''
-        Li 0.0 0.0 0.0
-        '''
-        mol.basis = '3-21g'
-        mol.spin = 1
-        mol.build()
-        env_method = 'lda'
-        hl_method  = 'uccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, hl_unrestricted=True, unrestricted=True, hl_conv=conv_param, filename=t_file.name)
-        subsys_fock = subsys.env_scf.get_fock(dm=subsys.dmat)
-        subsys_hl_e = subsys.get_hl_in_env_energy()
-        test_scf = scf.UHF(mol)
-        hf = test_scf.kernel()
-        from pyscf import cc
-        cc_calc = cc.UCCSD(test_scf)
-        cc_calc.conv_tol = 1e-10
-        test_hl_e = cc_calc.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, hf + test_hl_e, delta=1e-5)

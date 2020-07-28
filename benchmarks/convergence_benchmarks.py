@@ -268,7 +268,8 @@ grid_points = [3,4]
 init_guess = ['atom', 'h1e']#, 'super', 'sub', 'localsuper']
 xc_fun = ['lda', 'pbe', 'b3lyp', 'm06']
 
-simple_damping_values = [0.1, 0.2, 0.5, 0.8, 0.9]
+#simple_damping_values = [0.3, 0.4, 0.5]
+simple_damping_values = [0.4]
 
 class MolObjects:
     def __iter__(self):
@@ -353,7 +354,7 @@ def simple_density_damping():
                                 if x[0].spin != 0 or x[1].spin != 0:
                                     sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
                                     sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
-                                    sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_damp=dp)
+                                    sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_damp=dp, ft_diis=None)
                                     sup.init_density()
                                     start_time = time.time()
                                     sup.freeze_and_thaw()
@@ -382,9 +383,9 @@ def optimal_density_damping():
                             header_string = f"molnum: {num}\nbasis: {x[0].basis}\ncharge: {x[0].charge}\ngridsize: {gp}\ninitguess: {ig}\nxc_fun: {xc}\nfock_update: {fud}\nproj_update: {pud}\n"
                             with open(output_filename, 'a') as fout:
                                 fout.write(header_string)
-                            sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc)
-                            sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc)
-                            sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, ft_diis=None, ft_damp=dp)
+                            sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, damp=-1)
+                            sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, damp=-1)
+                            sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, ft_diis=None)
                             sup.init_density()
                             start_time = time.time()
                             sup.freeze_and_thaw()
@@ -395,9 +396,9 @@ def optimal_density_damping():
                             with open(output_filename, 'a') as fout:
                                 fout.write(write_string)
                             if x[0].spin != 0 or x[1].spin != 0:
-                                sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True)
-                                sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True)
-                                sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_damp=dp)
+                                sub1 = cluster_subsystem.ClusterEnvSubSystem(x[0], xc, unrestricted=True, damp=-1)
+                                sub2 = cluster_subsystem.ClusterEnvSubSystem(x[1], xc, unrestricted=True, damp=-1)
+                                sup = cluster_supersystem.ClusterSuperSystem([sub1, sub2], xc, fs_grid_level=gp, ft_cycles=100, ft_initguess=ig, ft_updatefock=fud, ft_updateproj=pud, fs_unrestricted=True, ft_unrestricted=True, ft_diis=None)
                                 sup.init_density()
                                 start_time = time.time()
                                 sup.freeze_and_thaw()
@@ -411,10 +412,5 @@ def optimal_density_damping():
         print ("Progress")
         print (f"{num/2} Done Total")
     
+#optimal_density_damping()
 simple_density_damping()
-
-
-    
-simple_density_damping()
-
-

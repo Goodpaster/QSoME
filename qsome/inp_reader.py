@@ -1,343 +1,523 @@
 #!/usr/bin/env python
-# A module to define the input reader object
-# Daniel S. Graham
-# Dhabih V. Chulhai
+"""A module to define the input reader object
+Daniel S. Graham
+Dhabih V. Chulhai
+"""
 
 from __future__ import print_function, division
 
 import input_reader
-import sys
-import re
-import pwd, os
-
+import numpy as np
 from pyscf import gto, pbc
 
-class Error(Exception):
-    #Base Error Class
-    pass
+class InputError(Exception):
+    """Exception for an improperly designed input file.
 
-class InputError(Error):
+    Some input options conflict with each other or are nonsensical.
+    While these will not raise errors with the input reader,
+    they should raise an error.
+
+    Parameters
+    ----------
+    message : str
+        Human readable message describing details of the error.
+
+    Attributes
+    ----------
+    message : str
+        Human readable message describing details of the error.
+    """
+
 
     def __init__(self, message):
+        super().__init__()
         self.message = message
 
+def bond_dist(atom1_coord, atom2_coord):
+    """Determine the distance between two atoms in the same units as the atoms
+
+    Parameters
+    ----------
+    atom1_coord : list
+        A list of atom coordinates.
+    atom2_coord : list
+        A list of atom coordinates.
+
+    Returns
+    ------
+    float
+        The distance between two atoms.
+    """
+
+    total = 0.0
+    for atom1, atom2 in zip(atom1_coord, atom2_coord):
+        total += (atom2 - atom1) ** 2.
+    return total ** 0.5
+
+
+def gen_link_basis(atom1, atom2, basis):
+    """Generate the linking atom between two atoms.
+
+    Parameters
+    ----------
+    atom1 : list
+        atom coordinates
+    atom2 : list
+        atom coordinates
+    basis : str
+        the basis of the link atom
+
+    Returns
+    -------
+    tuple
+        A tuple of the link atom coordinate and basis
+    """
+
+    basis_atom = 'H'
+    ghost_name = f'ghost:{basis_atom}'
+    basis_x = (atom2[1][0] + atom1[1][0]) / 2.
+    basis_y = (atom2[1][1] + atom1[1][1]) / 2.
+    basis_z = (atom2[1][2] + atom1[1][2]) / 2.
+
+    atm = [ghost_name, (basis_x, basis_y, basis_z)]
+    basis = {ghost_name: gto.basis.load(basis, basis_atom)}
+    return (atm, basis)
+
+def read_input(filename):
+    """Reads a formatted input file, generates an InputReader object.
+
+    Parameters
+    ---------
+    filename : str
+        Path to input file.
+    """
+
+    reader = input_reader.InputReader(comment=['!', '#', '::', '//'],
+                                      case=False, ignoreunknown=False)
+    subsys = reader.add_block_key('subsystem', required=True, repeat=True)
+    add_subsys_settings(subsys)
+
+    # Define the environment settings and embedding ops
+    env_settings = reader.add_block_key('env_method_settings',
+                                        required=True,
+                                        repeat=True)
+    env_settings.add_line_key('env_order', type=int)
+    env_settings.add_line_key('env_method', type=str, required=True)
+    env_settings.add_line_key('grad', type=float)
+    env_settings.add_line_key('cycles', type=int)
+    env_settings.add_line_key('grid', type=int)
+    env_settings.add_line_key('rhocutoff', type=float)
+    env_settings.add_line_key('verbose', type=int)
+    env_settings.add_boolean_key('compare_density')
+    add_env_settings(env_settings)
+
+    # Freeze and thaw settings
+    embed = env_settings.add_block_key('embed_settings')
+    add_embed_settings(embed)
+
+    periodic_settings = env_settings.add_block_key('periodic_settings',
+                                                   required=False)
+    add_periodic_settings(periodic_settings)
+
+    hl_settings = reader.add_block_key('hl_method_settings', repeat=True,
+                                       required=True)
+    hl_settings.add_line_key('hl_order', type=int)
+    hl_settings.add_line_key('hl_method', type=str)
+    add_hl_settings(hl_settings)
+
+    cas_settings = hl_settings.add_block_key('cas_settings')
+    add_cas_settings(cas_settings)
+
+    shci_settings = hl_settings.add_block_key('shci_settings')
+    add_shci_settings(shci_settings)
+
+    dmrg_settings = hl_settings.add_block_key('dmrg_settings')
+    dmrg_settings.add_line_key('maxM', type=int)
+    dmrg_settings.add_line_key('num_thirds', type=int)
+
+    basis = reader.add_block_key('basis')
+    basis.add_regex_line('basis_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
+                         repeat=True)
+    ecp = reader.add_block_key('ecp')
+    ecp.add_regex_line('ecp_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
+                       repeat=True)
+    reader.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
+    reader.add_line_key('ppmem', type=(int, float)) # MB
+    reader.add_line_key('nproc', type=int) # MB
+    reader.add_line_key('scrdir', type=str)
+
+    inp = reader.read_input(filename)
+    inp.filename = filename
+
+    print("".center(80, '*'))
+    print("Input File".center(80))
+    print("".center(80, '*'))
+    with open(filename, 'r') as fout:
+        print(fout.read())
+    print("".center(80, '*'))
+    return inp
+
+def add_subsys_settings(subsys_block):
+    """Adds the subsystem settings to the block.
+
+    Parameters
+    ----------
+    subsys_block : input_reader block object
+        The subsystem block which to add options.
+    """
+
+    # Cannot use repeating patterns to shorten: input_reader uses re.
+    subsys_block.add_regex_line(
+        'atoms',
+        (r'\s*([A-Za-z.:]+[.:\-]?\d*)'
+         r'\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)'),
+        repeat=True)
+    subsys_block.add_line_key('charge', type=int)
+    subsys_block.add_line_key('spin', type=int)
+    subsys_block.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
+    subsys_block.add_boolean_key('addlinkbasis') # Add link H basis functions
+    sub_basis = subsys_block.add_block_key('basis')
+    sub_basis.add_regex_line('basis_def',
+                             r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
+                             repeat=True)
+    sub_ecp = subsys_block.add_block_key('ecp')
+    sub_ecp.add_regex_line('ecp_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
+                           repeat=True)
+    subsys_block.add_line_key('env_method_num', type=int)
+    subsys_block.add_line_key('hl_method_num', type=int)
+
+    #Override default environment method settings.
+    sub_env_settings = subsys_block.add_block_key('env_method_settings')
+    sub_env_settings.add_line_key('subcycles', type=int)
+    sub_env_settings.add_line_key('setfermi', type=float)
+    sub_env_settings.add_boolean_key('freeze')
+    add_env_settings(sub_env_settings)
+
+    # Override default high level method settings.
+    sub_hl_settings = subsys_block.add_block_key('hl_method_settings')
+    add_hl_settings(sub_hl_settings)
+
+    sub_cas_settings = sub_hl_settings.add_block_key('cas_settings')
+    add_cas_settings(sub_cas_settings)
+
+    sub_shci_settings = sub_hl_settings.add_block_key('shci_settings')
+    add_shci_settings(sub_shci_settings)
+
+    sub_dmrg_settings = sub_hl_settings.add_block_key('dmrg_settings')
+    sub_dmrg_settings.add_line_key('maxM', type=int)
+    sub_dmrg_settings.add_line_key('num_thirds', type=int)
+
+def add_periodic_settings(periodic_block):
+    """Adds periodic settings to the object.
+
+    Parameters
+    ----------
+    periodic_block : input_reader block
+        Block to add the periodic settings.
+    """
+
+    lattice = periodic_block.add_block_key('lattice_vectors', required=True)
+    lattice.add_regex_line('vector',
+                           (r'\s*(\-?\d+.?\d*)'
+                            r'\s+(\-?\d+.?\d*)'
+                            r'\s+(\-?\d+.?\d*)'),
+                           repeat=True)
+    kgroup = periodic_block.add_mutually_exclusive_group(dest='kgroup',
+                                                         required=True)
+    kgroup.add_line_key('kpoints', type=[int, int, int])
+    kscaled = kgroup.add_block_key('kgrid')
+    kscaled.add_regex_line('kpoints',
+                           (r'\s*(\-?\d+\.?\d*)'
+                            r'\s+(\-?\d+\.?\d*)'
+                            r'\s+(\-?\d+\.?\d*)'),
+                           repeat=True)
+    mesh = periodic_block.add_mutually_exclusive_group(dest='mgroup',
+                                                       required=False)
+    mesh.add_line_key('gspacing', type=float)
+    mesh.add_line_key('gs', type=[int, int, int])
+    mesh.add_line_key('mesh', type=[int, int, int])
+    periodic_block.add_line_key('dimensions', type=(0, 1, 2, 3),
+                                required=True)
+    # line keys with good defaults (shouldn't need to change these)
+    periodic_block.add_line_key('auxbasis', type=str, case=True)
+    periodic_block.add_line_key('density_fit',
+                                type=('df', 'mdf', 'pwdf', 'fftdf',
+                                      'gdf', 'aftdf'))
+    periodic_block.add_line_key('exxdiv', type=('vcut_sph', 'ewald',
+                                                'vcut_ws'))
+    periodic_block.add_line_key('precision', type=float)
+    periodic_block.add_line_key('ke_cutoff', type=float)
+    periodic_block.add_line_key('rcut', type=float)
+    periodic_block.add_line_key('exp_to_discard', type=float)
+    periodic_block.add_line_key('low_dim_ft_type', type=str)
+    periodic_block.add_boolean_key('fractional_coordinates')
+
+def add_embed_settings(embed_block):
+    """Adds the embedding settings to the input reader block.
+
+    Parameters
+    ----------
+    embed_block : input_reader block object
+        The input block to which to add embedding setting options.
+    """
+
+    embed_block.add_line_key('cycles', type=int)
+    embed_block.add_line_key('subcycles', type=int)
+    embed_block.add_line_key('basis_tau', type=float)
+    embed_block.add_line_key('conv', type=float)
+    embed_block.add_line_key('grad', type=float)
+    embed_block.add_line_key('damp', type=float)
+    embed_block.add_line_key('diis', type=int) # Use DIIS for fock. (0 for off)
+    embed_block.add_line_key('setfermi', type=float)
+    # Supersystem fock update frequency.
+    # 0 is after F&T cycle, otherwise after every n subsystem cycles
+    embed_block.add_line_key('updatefock', type=int)
+    embed_block.add_line_key('updateproj', type=int)
+    # Initial guess for the subsystem embedding calculation
+    embed_block.add_line_key('initguess', type=(
+        'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
+    embed_block.add_boolean_key('unrestricted')
+    # Output subsystem orbitals after F&T cycles
+    embed_block.add_boolean_key('save_orbs')
+    embed_block.add_boolean_key('save_density')
+    embed_block.add_boolean_key('save_spin_density')
+
+    # This section needs work. Should be uniform option for setting op.
+    operator = embed_block.add_mutually_exclusive_group(dest='proj_oper',
+                                                        required=False)
+    operator.add_line_key('mu', type=float, default=1e6)
+    operator.add_boolean_key('manby', action=1e6)
+    operator.add_boolean_key('huzinaga', action='huz')
+    # Fermi shifted
+    operator.add_boolean_key('huzinagafermi', action='huzfermi')
+    operator.add_boolean_key('huzfermi', action='huzfermi')
+
+def add_env_settings(inp_block):
+    """Adds the environment subsystem settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add environment setting options to.
+    """
+
+    inp_block.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk',
+                                              'supmol', 'submol'))
+    inp_block.add_line_key('smearsigma', type=float)
+    inp_block.add_line_key('conv', type=float)
+    inp_block.add_line_key('damp', type=float)
+    inp_block.add_line_key('shift', type=float)
+    inp_block.add_line_key('diis', type=int)
+    inp_block.add_boolean_key('unrestricted')
+    inp_block.add_boolean_key('density_fitting')
+    inp_block.add_boolean_key('save_orbs')
+    inp_block.add_boolean_key('save_density')
+    inp_block.add_boolean_key('save_spin_density')
+
+def add_hl_settings(inp_block):
+    """Adds the high level subsystem settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add high level setting options to.
+    """
+
+    inp_block.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk',
+                                              'supmol', 'submol'))
+    inp_block.add_line_key('spin', type=int)
+    inp_block.add_line_key('conv', type=float)
+    inp_block.add_line_key('grad', type=float)
+    inp_block.add_line_key('cycles', type=int)
+    inp_block.add_line_key('damp', type=float)
+    inp_block.add_line_key('shift', type=float)
+    inp_block.add_line_key('use_ext', type=('molpro', 'bagel', 'molcas',
+                                            'openmolcas'))
+    inp_block.add_boolean_key('compress_approx')
+    inp_block.add_boolean_key('unrestricted')
+    inp_block.add_boolean_key('density_fitting')
+    inp_block.add_boolean_key('save_orbs')
+    inp_block.add_boolean_key('save_density')
+    inp_block.add_boolean_key('save_spin_density')
+
+def add_cas_settings(inp_block):
+    """Adds the high level CAS settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add high level CAS setting options to.
+    """
+
+    inp_block.add_boolean_key('loc_orbs')
+    inp_block.add_line_key('cas_initguess', type=str)
+    inp_block.add_line_key('active_orbs', type=str)
+    inp_block.add_line_key('avas', type=str)
+
+def add_shci_settings(inp_block):
+    """Adds the high level SHCI settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add high level SHCI setting options to.
+    """
+
+    inp_block.add_line_key('mpi_prefix', type=str)
+    inp_block.add_line_key('sweep_iter', type=str)
+    inp_block.add_line_key('sweep_epsilon', type=str)
+    inp_block.add_line_key('nPTiter', type=int)
+    inp_block.add_boolean_key('no_stochastic')
+    inp_block.add_boolean_key('NoRDM')
+
+def cleanup_keys(settings_dict, key_correct):
+    """Removes unnessecary keys created by input_reader.
+
+    Parameters
+    ----------
+    settings_dict : dict
+        A dictionary of the system settings to be formatted
+    key_correct : dict
+        A dictionary of strings to modify the inp object keys to be kwargs.
+    """
+
+    list_keys = list(settings_dict.keys())
+    for k in list_keys:
+        if k.startswith('_'):
+            settings_dict.pop(k)
+        elif settings_dict[k] is None:
+            settings_dict.pop(k)
+
+    list_keys = list(settings_dict.keys())
+    for correct in key_correct:
+        if correct in list_keys:
+            settings_dict[key_correct[correct]] = settings_dict.pop(correct)
+
+def get_universal_keys(inp_dict):
+    """Creates the kwarg dictionary for systemwide parameters.
+
+    Parameters
+    ----------
+    inp_dict : dict
+        A dictionary of kwargs generated using input_reader.
+    """
+
+    uni_subsys_settings = {}
+    universal_settings_keys = ['filename', 'ppmem', 'nproc', 'scrdir']
+    for universal_key in universal_settings_keys:
+        if inp_dict[universal_key]:
+            uni_subsys_settings[universal_key] = inp_dict[universal_key]
+    return uni_subsys_settings
+
+def build_hl_dict(hl_settings, hl_params):
+    """Builds the high level kwarg dictionary from the input reader dict.
+
+    Parameters
+    ----------
+    hl_settings : dict
+        Dictionary of hl subsystem kwargs.
+    hl_params : dict
+        Dictionary of input_reader hl settings.
+    """
+
+    base_setting_kwargs = ['hl_method', 'initguess', 'spin', 'conv',
+                           'grad', 'cycles', 'damp', 'shift',
+                           'compress_approx', 'unrestricted',
+                           'density_fitting', 'save_orbs', 'save_density',
+                           'save_spin_density', 'use_ext']
+
+    for base_kwarg in base_setting_kwargs:
+        if base_kwarg in hl_params and hl_params[base_kwarg]:
+            hl_settings[base_kwarg] = hl_params[base_kwarg]
+    if hl_params['cas_settings']:
+        hl_settings.update(vars(hl_params['cas_settings']))
+    if hl_params['shci_settings']:
+        hl_settings.update(vars(hl_params['shci_settings']))
+    if hl_params['dmrg_settings']:
+        hl_settings.update(vars(hl_params['dmrg_settings']))
+
+def add_ghost_link(subsys_mols, sub_settings):
+    """Adds linking ghost atoms to the subsystem mol objects.
+
+    Parameters
+    ----------
+    subsys_mols : list
+        A list of mol objects for the different subsystems.
+    sub_settings : list
+        A list of subsystem settings
+    """
+
+    max_dist = 1.76
+    ghost_link = 'H-1'
+    ghost_basis = '3-21g'
+    for i, subsystem in enumerate(sub_settings):
+        gh_atms = []
+        if subsystem.addlinkbasis:
+            for j in range(i + 1, len(sub_settings)):
+                link_atoms = []
+                link_basis = {}
+                for atom1 in subsys_mols[i]._atom:
+                    for atom2 in subsys_mols[j]._atom:
+                        if bond_dist(atom1[1], atom2[1]) <= max_dist:
+                            if subsystem.basis:
+                                new_atom, new_basis = gen_link_basis(
+                                    atom1, atom2, ghost_basis)
+                            else:
+                                new_atom, new_basis = gen_link_basis(
+                                    atom1, atom2, ghost_basis)
+                            gh_atms.append(ghost_link)
+                            link_atoms.append(new_atom)
+                            link_basis.update(new_basis)
+
+                # Will not work if link atoms are explicitly defined.
+                subsys_mols[i].atom = (subsys_mols[i].atom
+                                       + link_atoms)
+                subsys_mols[i].ghosts += gh_atms
+                subsys_mols[i]._basis.update(link_basis)
 
 class InpReader:
     """
     Reads a specific form of input file for creating objects.
 
-    Takes a formatted text file and generates arg and kwarg 
+    Takes a formatted text file and generates arg and kwarg
     dictionaries to generate the specified embedding system objects.
+
+    TODO
+    ----
+    Configure periodic settings into objects.
+
+    Parameters
+    ----------
+    filename : str
+        Path to input file.
+
 
     Attributes
     ----------
-    filename : str
-        The path to the input file being read.
     inp : InputReader
         The InputReader object of the input file.
-    supersystem_kwargs : dict
-        Dictionary of settings for creating ClusterSupersystem object.
     env_subsystem_kwargs : dict
         Dictionary of settings for creating ClusterEnvSubSystem object.
-    active_settings_kwargs : dict
-        Dictionary of settings for creating ClusterActiveSubSystem object.
+    hl_settings_kwargs : dict
+        Dictionary of settings for creating ClusterHLSubSystem object.
+    supersystem_kwargs : dict
+        Dictionary of settings for creating ClusterSupersystem object.
     subsys_mols : list
         A list of subsystem pyscf Mol objects
-    
-    Methods
-    -------
-    read_input(filename)
-        Opens the file, reads the settings, 
-        and stores as an input_reader object.
-    get_supersystem_kwargs(inp=None)
-        Creates the kwarg dictionary for the supersystem.
-    get_env_subsystem_kwargs(inp=None)
-        Creates the kwarg dictionary for subsystems.
-    get_active_subsystem_kwargs(inp=None)
-        Creates the kwarg dictionary for the active subsystems.
-    gen_mols(inp=None)
-        Generate the mol objects specified in the inp files.  
     """
 
 
     def __init__(self, filename):
-        """
-        Parameters
-        ----------
-        filename : str
-            Path to input file.
-        """
 
-        self.inp = self.read_input(filename)
+        self.inp = read_input(filename)
         self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
         self.hl_subsystem_kwargs = self.get_hl_subsystem_kwargs()
-        self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.periodic_kwargs = None
+        self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.subsys_mols = self.gen_mols()
-        #self.interaction_mediator_kwargs = self.get_interaction_mediator_kwargs()
-        #self.cell_kwargs, self.kpoints_kwargs, self.periodic_kwargs \
-        #    = self.get_periodic_kwargs()
-        #if self.periodic_kwargs is not None:
-        #    self.periodic = True
-        #else:
-        #    self.periodic = False
 
-
-    def read_input(self, filename):
-        """Reads a formatted input file, generates an InputReader object.
-
-        Parameters
-        ---------
-        filename : str
-            Path to input file.
-        """
-
-        reader = input_reader.InputReader(comment=['!', '#', '::', '//'],
-                 case=False, ignoreunknown=False)
-        subsys = reader.add_block_key('subsystem', required=True, repeat=True)
-
-        # Could be shortened using repeating regex pattern.
-        # input_reader uses re which does not support repeating patterns.
-        subsys.add_regex_line(
-         'atoms',
-         '\s*([A-Za-z.:]+[.:\-]?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
-         repeat=True)
-        subsys.add_line_key('charge', type=int)     
-        subsys.add_line_key('spin', type=int)      
-        subsys.add_line_key('unit', type=('angstrom','a','bohr','b')) 
-        subsys.add_boolean_key('addlinkbasis') # Add link H basis functions
-        sub_basis = subsys.add_block_key('basis')              
-        sub_basis.add_regex_line('basis_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', 
-            repeat=True)
-
-        sub_ecp = subsys.add_block_key('ecp')              
-        sub_ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', 
-            repeat=True)
-        subsys.add_line_key('env_method_num', type=int)
-        subsys.add_line_key('hl_method_num', type=int)
-        # Override default environment settings
-        sub_ft_conv_settings = subsys.add_block_key('ft_conv_settings')
-        sub_ft_conv_settings.add_line_key('damp')
-        sub_ft_conv_settings.add_line_key('DIIS')
-        sub_ft_conv_settings.add_line_key('mod')
-
-
-        sub_env_settings = subsys.add_block_key('env_method_settings')
-        sub_env_settings.add_line_key('smearsigma', type=float)   # fermi smearing sigma
-        sub_env_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-            'readchk', 'supmol', 'submol'))
-        sub_env_settings.add_line_key('conv', type=float) # embedding convergence
-        sub_env_settings.add_line_key('damp', type=float) # subsys damping parameter
-        sub_env_settings.add_line_key('shift', type=float) # SCF level-shift parameter
-        sub_env_settings.add_line_key('subcycles', type=int) # num subsys diag. cycles
-        sub_env_settings.add_line_key('setfermi', type=float) # num subsys diag. cycles
-        sub_env_settings.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
-        sub_env_settings.add_boolean_key('unrestricted')
-        sub_env_settings.add_boolean_key('density_fitting')
-        sub_env_settings.add_boolean_key('freeze')
-        sub_env_settings.add_boolean_key('save_orbs')
-        sub_env_settings.add_boolean_key('save_density')
-        sub_env_settings.add_boolean_key('save_spin_density')
-
-        # Override default high level method settings
-        sub_hl_settings = subsys.add_block_key('hl_method_settings')
-        sub_hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-            'readchk', 'supmol', 'submol'))
-        sub_hl_settings.add_line_key('spin', type=int)       
-        sub_hl_settings.add_line_key('conv', type=float)       
-        sub_hl_settings.add_line_key('grad', type=float)       
-        sub_hl_settings.add_line_key('cycles', type=int)       
-        sub_hl_settings.add_line_key('damp', type=float)
-        sub_hl_settings.add_line_key('shift', type=float)
-        sub_hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
-            'molcas', 'openmolcas'))
-        sub_hl_settings.add_boolean_key('unrestricted')
-        sub_hl_settings.add_boolean_key('compress_approx')
-        sub_hl_settings.add_boolean_key('density_fitting')
-        sub_hl_settings.add_boolean_key('save_orbs')
-        sub_hl_settings.add_boolean_key('save_density')
-        sub_hl_settings.add_boolean_key('save_spin_density')
-
-        sub_cas_settings = sub_hl_settings.add_block_key('cas_settings')
-        sub_cas_settings.add_boolean_key('loc_orbs')
-        sub_cas_settings.add_line_key('cas_initguess', type=str) 
-        sub_cas_settings.add_line_key('active_orbs', type=str) #Could I use a tuple?
-        sub_cas_settings.add_line_key('avas', type=str) #Could I use a tuple?
-
-        sub_shci_settings = sub_hl_settings.add_block_key('shci_settings')
-        sub_shci_settings.add_line_key('mpi_prefix', type=str)
-        sub_shci_settings.add_line_key('sweep_iter', type=str)
-        sub_shci_settings.add_line_key('sweep_epsilon', type=str)
-        sub_shci_settings.add_line_key('nPTiter', type=int, default=0)
-        sub_shci_settings.add_boolean_key('no_stochastic')
-        sub_shci_settings.add_boolean_key('NoRDM')
-
-        sub_dmrg_settings = sub_hl_settings.add_block_key('dmrg_settings')
-        sub_dmrg_settings.add_line_key('maxM', type=int)
-        sub_dmrg_settings.add_line_key('num_thirds', type=int)
-
-        # Define the environment settings and embedding ops
-        env_settings = reader.add_block_key('env_method_settings', required=True, 
-                                          repeat=True)
-        env_settings.add_line_key('env_order', type=int)
-        env_settings.add_line_key('env_method', type=str, required=True)
-        env_settings.add_line_key('smearsigma', type=float)
-        # Initial guess for the supermolecular calculation
-        env_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-            'readchk', 'supmol', 'submol'))
-        env_settings.add_line_key('conv', type=float)
-        env_settings.add_line_key('grad', type=float)
-        env_settings.add_line_key('cycles', type=int)
-        env_settings.add_line_key('damp', type=float)
-        env_settings.add_line_key('shift', type=float)
-        env_settings.add_line_key('diis', type=int) # DIIS for subsystem (0 for off)
-        env_settings.add_line_key('grid', type=int)
-        env_settings.add_line_key('rhocutoff', type=float)
-        env_settings.add_line_key('verbose', type=int)
-        env_settings.add_boolean_key('unrestricted')
-        env_settings.add_boolean_key('density_fitting')
-        env_settings.add_boolean_key('compare_density')
-        env_settings.add_boolean_key('save_orbs')
-        env_settings.add_boolean_key('save_density')
-        env_settings.add_boolean_key('save_spin_density')
-        
-        # Freeze and thaw settings
-        embed = env_settings.add_block_key('embed_settings')
-        embed.add_line_key('cycles', type=int) 
-        embed.add_line_key('subcycles', type=int) 
-        embed.add_line_key('basis_tau', type=float)
-        embed.add_line_key('conv', type=float)
-        embed.add_line_key('grad', type=float)
-        embed.add_line_key('damp', type=float)
-        embed.add_line_key('diis', type=int) # Use DIIS for fock. (0 for off)
-        embed.add_line_key('setfermi', type=float)
-        # Supersystem fock update frequency. 
-        # 0 is after F&T cycle, otherwise after every n subsystem cycles
-        embed.add_line_key('updatefock', type=int)
-        embed.add_line_key('updateproj', type=int)
-        embed.add_line_key('matacc', type=('fock', 'density'))
-        # Initial guess for the subsystem embedding calculation
-        embed.add_line_key('initguess', type=(
-            'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
-        embed.add_boolean_key('unrestricted')
-        # Output subsystem orbitals after F&T cycles
-        embed.add_boolean_key('save_orbs') 
-        embed.add_boolean_key('save_density') 
-        embed.add_boolean_key('save_spin_density') 
-
-        # This section needs work. Should be uniform option for setting op.
-        operator = embed.add_mutually_exclusive_group(dest='proj_oper', 
-                                                      required=False)
-        operator.add_line_key('mu', type=float, default=1e6)
-        operator.add_boolean_key('manby', action=1e6)
-        operator.add_boolean_key('huzinaga', action='huz')
-        # Fermi shifted
-        operator.add_boolean_key('huzinagafermi', action='huzfermi')
-        operator.add_boolean_key('huzfermi', action='huzfermi')
-
-        periodic_settings = env_settings.add_block_key('periodic_settings', required=False)
-        # lattice vectors
-        lattice = periodic_settings.add_block_key('lattice_vectors', required=True)
-        lattice.add_regex_line('vector', '\s*(\-?\d+.?\d*)\s+(\-?\d+.?\d*)\s+(\-?\d+.?\d*)',
-            repeat=True)
-        # k-points by grid or num of points
-        kgroup = periodic_settings.add_mutually_exclusive_group(dest='kgroup', required=True)
-        kgroup.add_line_key('kpoints', type=[int, int, int])
-        kscaled = kgroup.add_block_key('kgrid')
-        kscaled.add_regex_line('kpoints', '\s*(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)\s+(\-?\d+\.?\d*)',
-                                repeat=True)
-        # grid/mesh points
-        mesh = periodic_settings.add_mutually_exclusive_group(dest='mgroup', required=False)
-        mesh.add_line_key('gspacing', type=float)
-        mesh.add_line_key('gs', type=[int, int, int])
-        mesh.add_line_key('mesh', type=[int, int, int])
-        # dimensions
-        periodic_settings.add_line_key('dimensions', type=(0,1,2,3), required=True)
-        # line keys with good defaults (shouldn't need to change these)
-        periodic_settings.add_line_key('auxbasis', type=str, case=True)
-        periodic_settings.add_line_key('density_fit',
-            type=('df', 'mdf', 'pwdf', 'fftdf', 'gdf', 'aftdf'))
-        periodic_settings.add_line_key('exxdiv', type=('vcut_sph', 'ewald', 'vcut_ws'))
-        periodic_settings.add_line_key('precision', type=float)
-        periodic_settings.add_line_key('ke_cutoff', type=float)
-        periodic_settings.add_line_key('rcut', type=float)
-        periodic_settings.add_line_key('exp_to_discard', type=float)
-        periodic_settings.add_line_key('low_dim_ft_type', type=str)
-        periodic_settings.add_boolean_key('fractional_coordinates') # fractional input coordinates
-
-        hl_settings = reader.add_block_key('hl_method_settings', repeat=True, required=True)
-        hl_settings.add_line_key('hl_order', type=int)
-        hl_settings.add_line_key('hl_method', type=str)
-        hl_settings.add_line_key('initguess', type=('minao', 'atom', '1e', 
-            'readchk', 'supmol', 'submol'))
-        hl_settings.add_line_key('spin', type=int)
-        hl_settings.add_line_key('conv', type=float)       
-        hl_settings.add_line_key('grad', type=float)       
-        hl_settings.add_line_key('cycles', type=int)       
-        hl_settings.add_line_key('damp', type=float)
-        hl_settings.add_line_key('shift', type=float)
-        hl_settings.add_boolean_key('compress_approx')
-        hl_settings.add_boolean_key('unrestricted')
-        hl_settings.add_boolean_key('density_fitting')
-        hl_settings.add_boolean_key('save_orbs')
-        hl_settings.add_boolean_key('save_density')
-        hl_settings.add_boolean_key('save_spin_density')
-        hl_settings.add_line_key('use_ext', type=('molpro', 'bagel',
-            'molcas', 'openmolcas'))
-
-        cas_settings = hl_settings.add_block_key('cas_settings')
-        cas_settings.add_boolean_key('loc_orbs')
-        cas_settings.add_line_key('cas_initguess', type=str) 
-        cas_settings.add_line_key('active_orbs', type=str) #Could I use a tuple?
-        cas_settings.add_line_key('avas', type=str) #Could I use a tuple?
-
-        shci_settings = hl_settings.add_block_key('shci_settings')
-        shci_settings.add_line_key('mpi_prefix', type=str)
-        shci_settings.add_line_key('sweep_iter', type=str)
-        shci_settings.add_line_key('sweep_epsilon', type=str)
-        shci_settings.add_line_key('nPTiter', type=int, default=0)
-        shci_settings.add_boolean_key('no_stochastic')
-        shci_settings.add_boolean_key('NoRDM')
-
-        dmrg_settings = hl_settings.add_block_key('dmrg_settings')
-        dmrg_settings.add_line_key('maxM', type=int)
-        dmrg_settings.add_line_key('num_thirds', type=int)
-
-        reader.add_line_key('unit', type=('angstrom','a','bohr','b')) 
-        basis = reader.add_block_key('basis')
-        basis.add_regex_line('basis_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', repeat=True)
-        ecp = reader.add_block_key('ecp')
-        ecp.add_regex_line('ecp_def', '\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+', repeat=True)
-        reader.add_line_key('ppmem', type=(int, float)) # MB
-        reader.add_line_key('nproc', type=int) # MB
-        reader.add_line_key('scrdir', type=str)
-
-        inp = reader.read_input(filename)
-        inp.filename = filename 
-
-        #Convert scratch keyword to actual scratch directory path. This is SYSTEM DEPENDENT.
-        scr_prefix = {"global":"/scratch.global/", "local":"/scratch.local/", 
-                     "ssd":"/scratch.ssd/", "ramdisk":"/dev/shm/"}
-        if inp.scrdir:
-            if inp.scrdir.lower() in scr_prefix.keys():
-                scr_path = scr_prefix[inp.scrdir.lower()]
-                username = pwd.getpwuid(os.getuid()).pw_name
-                scr_path += username
-                file_path = os.path.splitext(inp.filename)[0]
-                file_path = file_path.split(username)[1]
-                scr_path += file_path
-                inp.scrdir = scr_path
-                
-        print("".center(80, '*'))
-        print("Input File".center(80))
-        print("".center(80, '*'))
-        with open(filename, 'r') as f:
-            print(f.read())
-        print("".center(80, '*'))
-        return inp
-
-    def get_interaction_mediatior_kwargs(self, inp=None):
-        pass
+    #def get_interaction_mediatior_kwargs(self, inp=None):
+    #    pass
 
     def get_supersystem_kwargs(self, inp=None):
         """Generates a kwarg dictionary for supersystem object.
@@ -354,60 +534,57 @@ class InpReader:
 
         # universal settings
         inp_dict = vars(inp)
-        universal_settings = {}
-        universal_settings_keys = ['filename', 'ppmem', 'nproc', 'scrdir']
-        for universal_key in universal_settings_keys:
-            if inp_dict[universal_key] is not None:
-                universal_settings[universal_key] = inp_dict[universal_key]
+        universal_settings = get_universal_keys(inp_dict)
 
         supersystem_kwargs = []
         # Setup supersystem method
 
-        fs_dict = {'env_order'            :       'env_order', 
+        fs_dict = {'env_order'            :       'env_order',
                    'env_method'           :       'fs_method',
                    'smearsigma'           :       'fs_smearsigma',
                    'initguess'            :       'fs_initguess',
                    'conv'                 :       'fs_conv',
                    'grad'                 :       'fs_grad',
                    'cycles'               :       'fs_cycles',
-                   'damp'                 :       'fs_damp', 
-                   'shift'                :       'fs_shift', 
-                   'diis'                 :       'fs_diis', 
+                   'damp'                 :       'fs_damp',
+                   'shift'                :       'fs_shift',
+                   'diis'                 :       'fs_diis',
                    'grid'                 :       'fs_grid_level',
-                   'rhocutoff'            :       'fs_rhocutoff', 
-                   'verbose'              :       'fs_verbose', 
-                   'unrestricted'         :       'fs_unrestricted', 
+                   'rhocutoff'            :       'fs_rhocutoff',
+                   'verbose'              :       'fs_verbose',
+                   'unrestricted'         :       'fs_unrestricted',
                    'density_fitting'      :       'fs_density_fitting',
                    'compare_density'      :       'compare_density',
-                   'save_orbs'            :       'fs_save_orbs', 
+                   'save_orbs'            :       'fs_save_orbs',
                    'save_density'         :       'fs_save_density',
                    'save_spin_density'    :       'fs_save_spin_density'}
 
-        ft_dict = {'cycles'               :       'ft_cycles', 
+        ft_dict = {'cycles'               :       'ft_cycles',
+                   'subcycles'            :       'ft_subcycles',
                    'basis_tau'            :       'ft_basis_tau',
                    'conv'                 :       'ft_conv',
                    'grad'                 :       'ft_grad',
-                   'damp'                 :       'ft_damp', 
-                   'diis'                 :       'ft_diis', 
-                   'setfermi'             :       'ft_setfermi', 
+                   'damp'                 :       'ft_damp',
+                   'diis'                 :       'ft_diis',
+                   'setfermi'             :       'ft_setfermi',
                    'updatefock'           :       'ft_updatefock',
-                   'initguess'            :       'ft_initguess', 
-                   'unrestricted'         :       'ft_unrestricted', 
-                   'save_orbs'            :       'ft_save_orbs', 
+                   'initguess'            :       'ft_initguess',
+                   'unrestricted'         :       'ft_unrestricted',
+                   'save_orbs'            :       'ft_save_orbs',
                    'save_density'         :       'ft_save_density',
                    'save_spin_density'    :       'ft_save_spin_density',
-                   'proj_oper'            :      'ft_proj_oper'}
+                   'proj_oper'            :       'ft_proj_oper'}
 
         for supersystem in inp.env_method_settings:
             sup_settings_dict = vars(supersystem)
             sup_kwargs = {}
-            for set_key in fs_dict.keys():
+            for set_key in fs_dict:
                 if sup_settings_dict[set_key] is not None:
                     sup_kwargs[fs_dict[set_key]] = sup_settings_dict[set_key]
 
             if sup_settings_dict['embed_settings'] is not None:
                 emb_set_dict = vars(sup_settings_dict['embed_settings'])
-                for s_key in ft_dict.keys():
+                for s_key in ft_dict:
                     if emb_set_dict[s_key] is not None:
                         sup_kwargs[ft_dict[s_key]] = emb_set_dict[s_key]
 
@@ -426,73 +603,65 @@ class InpReader:
             InputReader object to extract subsystem settings from.
             (default is None)
         """
-       
+
         if inp is None:
             inp = self.inp
 
         # subsystem universal settings
         inp_dict = vars(inp)
-        universal_subsys_settings = {}
-        universal_settings_keys = ['filename', 'ppmem', 'nproc', 'scrdir']
-        for universal_key in universal_settings_keys:
-            if inp_dict[universal_key] is not None:
-                universal_subsys_settings[universal_key] = inp_dict[universal_key]
+        uni_subsys_settings = get_universal_keys(inp_dict)
 
         env_kwargs = []
-
         env_dict = {'smearsigma'    : 'env_smearsigma'}
         for subsystem in inp.subsystem:
 
-            env_method_settings = {}
+            env_settings = {}
 
             if subsystem.env_method_num is None:
                 if len(inp.env_method_settings) > 1:
                     #Throw error. Unclear which env method to use
-                    raise InputError('Multiple environment methods available. Either specify which to use in the subsystem or specify only one environment method')
-                else:
-                    env_method_settings['env_order'] = 1
-                    setattr(inp.env_method_settings[0], 'env_order', 1)
+                    raise InputError(('Multiple environment methods available.'
+                                      'Either specify which to use in the '
+                                      'subsystem or specify only one '
+                                      'environment method'))
+                env_settings['env_order'] = 1
+                setattr(inp.env_method_settings[0], 'env_order', 1)
             else:
-                env_method_settings['env_order'] = subsystem.env_method_num    
+                env_settings['env_order'] = subsystem.env_method_num
             params_found = False
-            method_num = env_method_settings['env_order']
+            method_num = env_settings['env_order']
             for env_param in inp.env_method_settings:
                 if env_param.env_order == method_num and not params_found:
                     params_found = True
-                    env_method_settings['env_method'] = env_param.env_method
-                    if (env_param.embed_settings is not None):
-                        env_method_settings['subcycles'] = env_param.embed_settings.subcycles
-                        if (env_param.embed_settings.unrestricted is not None):
-                            env_method_settings['unrestricted'] = env_param.embed_settings.unrestricted
+                    env_settings['env_method'] = env_param.env_method
+                    if env_param.embed_settings:
+                        sub_num = env_param.embed_settings.subcycles
+                        env_settings['subcycles'] = sub_num
+                        if env_param.embed_settings.unrestricted is not None:
+                            unres = env_param.embed_settings.unrestricted
+                            env_settings['unrestricted'] = unres
                 elif env_param.env_order == method_num and params_found:
                     #Ambigious environment parameter specification
-                    raise InputError('Multiple environment methods with the same order number. Each environment method should have a unique identifying number.')
+                    raise InputError(('Multiple environment methods with the '
+                                      'same order number. Each environment '
+                                      'method should have a unique identifying'
+                                      ' number.'))
             if not params_found:
                 #Parameters with the given number not found
-                raise InputError('Environment method not found with number specified in the subsystem.')
+                raise InputError(('Environment method not found with number '
+                                  'specified in the subsystem.'))
 
             if subsystem.env_method_settings is not None:
-                env_method_settings.update(vars(subsystem.env_method_settings))
+                env_settings.update(vars(subsystem.env_method_settings))
 
-            env_method_settings.update(universal_subsys_settings.copy())
+            env_settings.update(uni_subsys_settings.copy())
 
-            #Remove keys put there by input_reader and for some reason None valued keys
-            list_keys = list(env_method_settings.keys())
-            for k in list_keys:
-                if k.startswith('_'):
-                    env_method_settings.pop(k)
-                elif env_method_settings[k] is None:
-                    env_method_settings.pop(k)
-
-            list_keys = list(env_method_settings.keys())
-            for correct in env_dict.keys():
-                if correct in list_keys:
-                    env_method_settings[env_dict[correct]] = env_method_settings.pop(correct)
-                
-            env_kwargs.append(env_method_settings)
+            #Remove keys put there by input_reader
+            cleanup_keys(env_settings, env_dict)
+            env_kwargs.append(env_settings)
 
         return env_kwargs
-            
+
 
     def get_hl_subsystem_kwargs(self, inp=None):
         """Generates a kwarg dictionary for ClusterActiveSubSystem object.
@@ -510,103 +679,81 @@ class InpReader:
         hl_kwargs = []
 
         hl_dict = {'initguess': 'hl_initguess',
-                    'spin' : 'hl_spin',
-                    'conv' : 'hl_conv',
-                    'grad' : 'hl_grad',
-                    'cycles' : 'hl_cycles',
-                    'damp' : 'hl_damp',
-                    'shift' : 'hl_shift',
-                    'compress_approx': 'hl_compress_approx',
-                    'unrestricted': 'hl_unrestricted',
-                    'save_orbs': 'hl_save_orbs',
-                    'save_density': 'hl_save_density',
-                    'save_spin_density': 'hl_save_spin_density',
-                    'density_fitting': 'hl_density_fitting',
-                    'use_ext': 'hl_ext',
-                    'loc_orbs': 'cas_loc_orbs',
-                    'cas_initguess': 'cas_initguess',
-                    'active_orbs': 'cas_active_orbs',
-                    'avas' : 'cas_avas',
-                    'mpi_prefix': 'shci_mpi_prefix',
-                    'sweep_iter': 'shci_sweep_iter',
-                    'sweep_epsilon': 'shci_sweep_epsilon',
-                    'nPTiter': 'shci_nPTiter',
-                    'no_stochastic' : 'shci_no_stochastic',
-                    'NoRDM': 'shci_NoRDM',
-                    'maxM': 'dmrg_maxM',
-                    'num_thirds': 'dmrg_num_thirds'}
+                   'spin' : 'hl_spin',
+                   'conv' : 'hl_conv',
+                   'grad' : 'hl_grad',
+                   'cycles' : 'hl_cycles',
+                   'damp' : 'hl_damp',
+                   'shift' : 'hl_shift',
+                   'compress_approx': 'hl_compress_approx',
+                   'unrestricted': 'hl_unrestricted',
+                   'save_orbs': 'hl_save_orbs',
+                   'save_density': 'hl_save_density',
+                   'save_spin_density': 'hl_save_spin_density',
+                   'density_fitting': 'hl_density_fitting',
+                   'use_ext': 'hl_ext',
+                   'loc_orbs': 'cas_loc_orbs',
+                   'cas_initguess': 'cas_initguess',
+                   'active_orbs': 'cas_active_orbs',
+                   'avas' : 'cas_avas',
+                   'mpi_prefix': 'shci_mpi_prefix',
+                   'sweep_iter': 'shci_sweep_iter',
+                   'sweep_epsilon': 'shci_sweep_epsilon',
+                   'nPTiter': 'shci_nPTiter',
+                   'no_stochastic' : 'shci_no_stochastic',
+                   'NoRDM': 'shci_NoRDM',
+                   'maxM': 'dmrg_maxM',
+                   'num_thirds': 'dmrg_num_thirds'}
 
-        base_setting_kwargs = ['hl_method', 'initguess', 'spin', 'conv',
-                'grad', 'cycles', 'damp', 'shift', 'compress_approx',
-                'unrestricted', 'density_fitting', 'use_ext']
 
         for subsystem in inp.subsystem:
             if subsystem.hl_method_num is None:
                 hl_kwargs.append(None)
             else:
-                hl_method_settings = {'hl_order': subsystem.hl_method_num}
+                hl_settings = {'hl_order': subsystem.hl_method_num}
                 method_num = subsystem.hl_method_num
                 params_found = False
                 for hl_param in inp.hl_method_settings:
                     hl_param_dict = vars(hl_param)
-                    if hl_param_dict['hl_order'] == method_num and not params_found:
+                    if (hl_param_dict['hl_order'] == method_num and
+                            not params_found):
                         params_found = True
-                        for base_kwarg in base_setting_kwargs:
-                            if hl_param_dict[base_kwarg] is not None:
-                                hl_method_settings[base_kwarg] = hl_param_dict[base_kwarg]
-                        if hl_param_dict['cas_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['cas_settings']))
-                        if hl_param_dict['shci_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['shci_settings']))
-                        if hl_param_dict['dmrg_settings'] is not None:
-                            hl_method_settings.update(vars(hl_param_dict['dmrg_settings']))
+                        build_hl_dict(hl_settings, hl_param_dict)
 
-                    elif hl_param_dict['hl_order'] == method_num and params_found:
+                    elif (hl_param_dict['hl_order'] == method_num
+                          and params_found):
                         #Ambigious environment parameter specification
-                        raise InputError('Multiple high level methods with the same order number. Each hl method should have a unique identifying number.')
+                        raise InputError(('Multiple high level methods with',
+                                          'the same order number. Each hl',
+                                          'method should have a unique',
+                                          'identifying number.'))
                 if not params_found:
                     #Parameters with the given number not found
-                    raise InputError('High level method not found with number specified in the subsystem.')
+                    raise InputError(('High level method not found with',
+                                      'number specified in the subsystem.'))
 
                 #Update with the subsystem particluar settings
                 if subsystem.hl_method_settings is not None:
                     hl_param = subsystem.hl_method_settings
                     hl_param_dict = vars(hl_param)
-                    for base_kwarg in base_setting_kwargs[1:]:
-                        if hl_param_dict[base_kwarg] is not None:
-                            hl_method_settings[base_kwarg] = hl_param_dict[base_kwarg]
-                    if hl_param_dict['cas_settings'] is not None:
-                        hl_method_settings.update(vars(hl_param_dict['cas_settings']))
-                    if hl_param_dict['shci_settings'] is not None:
-                        hl_method_settings.update(vars(hl_param_dict['shci_settings']))
-                    if hl_param_dict['dmrg_settings'] is not None:
-                        hl_method_settings.update(vars(hl_param_dict['dmrg_settings']))
+                    build_hl_dict(hl_settings, hl_param_dict)
 
-                list_keys = list(hl_method_settings.keys())
-                for k in list_keys:
-                    if k.startswith('_'):
-                        hl_method_settings.pop(k)
-                    elif hl_method_settings[k] is None:
-                        hl_method_settings.pop(k)
-
-                list_keys = list(hl_method_settings.keys())
-                for correct in hl_dict.keys():
-                    if correct in list_keys:
-                        hl_method_settings[hl_dict[correct]] = hl_method_settings.pop(correct)
+                cleanup_keys(hl_settings, hl_dict)
 
                 #Evaluate the avas and active orbs
-                eval_list = ['cas_avas', 'cas_active_orbs']
-                for to_eval in eval_list:
-                    if to_eval in hl_method_settings.keys():
-                        hl_method_settings[to_eval] = eval(hl_method_settings[to_eval])
-                hl_kwargs.append(hl_method_settings)
-
+                if 'cas_active_orbs' in hl_settings:
+                    act_list = hl_settings['cas_active_orbs'].split(',')
+                    hl_settings['cas_active_orbs'] = [int(x) for x in act_list]
+                if 'cas_avas' in hl_settings:
+                    avas_list = hl_settings['cas_avas'].split(',')
+                    hl_settings['cas_avas'] = [str(x) for x in avas_list]
+                hl_kwargs.append(hl_settings)
 
         return hl_kwargs
 
 
     def get_periodic_kwargs(self, inp=None):
-        """Generates a kwarg dictionary to create PeriodicSupersystem, 
+        """Generates a kwarg dictionary to create PeriodicSupersystem,
         PeriodicEnvSubsystem, and PeriodicEnvSubsystem objects.
 
         Parameters
@@ -625,27 +772,24 @@ class InpReader:
             Other periodic keywords
         """
 
-        import numpy as np
 
         if inp is None:
             inp = self.inp
         if inp.periodic_settings is None:
             return None, None, None
-        dimensions = inp.periodic_settings.dimensions
 
         cell_kwargs = {}
         kpoints_kwargs = {}
         periodic_kwargs = {}
 
         # cell kwargs
-        cell_keys = {
-                    'dimensions'        :           'dimension',
-                    'auxbasis'          :           'auxbasis',
-                    'exxdiv'            :           'exxdiv',
-                    'precision'         :           'precision',
-                    'ke_cutoff'         :           'ke_cutoff',
-                    'rcut'              :           'rcut',
-                    'low_dim_ft_type'   :           'low_dim_ft_type',
+        cell_keys = {'dimensions'        :           'dimension',
+                     'auxbasis'          :           'auxbasis',
+                     'exxdiv'            :           'exxdiv',
+                     'precision'         :           'precision',
+                     'ke_cutoff'         :           'ke_cutoff',
+                     'rcut'              :           'rcut',
+                     'low_dim_ft_type'   :           'low_dim_ft_type',
                     }
 
         # other periodic kwargs
@@ -660,14 +804,15 @@ class InpReader:
         if inp.periodic_settings.kgroup.__class__ is tuple:
             kpoints_kwargs['kpoints'] = np.array(inp.periodic_settings.kgroup)
         else:
-            kabs = np.array([r.group(0).split() for r in inp.periodic_settings.kgroup],
-                dtype=float)
+            p_kgroup = inp.periodic_settings.kgroup
+            kabs = np.array([x.group(0).split() for x in p_kgroup])
             kpoints_kwargs['kgroup'] = kabs
 
         # lattice vectors
         lattice = []
-        for r in inp.periodic_settings.lattice_vectors.vector:
-            lattice.append(np.array([r.group(1), r.group(2), r.group(3)], dtype=float))
+        for vec in inp.periodic_settings.lattice_vectors.vector:
+            vec_array = np.array([vec.group(1), vec.group(2). vec.group(3)])
+            lattice.append(vec_array)
         cell_kwargs['a'] = np.array(lattice)
         if len(cell_kwargs['a']) < 3:
             raise Exception("LATTICE_VECTORS must be a 3x3 array!")
@@ -689,7 +834,6 @@ class InpReader:
         return cell_kwargs, kpoints_kwargs, periodic_kwargs
 
 
-    #Add link basis functions when mol objects are generated.
     def gen_mols(self, inp=None):
         """Generates the mol or cell objects specified in inp..
 
@@ -704,7 +848,6 @@ class InpReader:
             inp = self.inp
 
         subsys_mols = []
-        subsys_ghost = []
         for subsystem in inp.subsystem:
             atom_list = subsystem.atoms
             if self.periodic_kwargs is None:
@@ -713,21 +856,21 @@ class InpReader:
                 mol = pbc.gto.Cell()
             mol.atom = []
             mol.ghosts = []
-            nghost = 0
 
             for atom in atom_list:
-                if ('ghost.' in atom.group(1).lower() 
-                    or 'gh.' in atom.group(1).lower()):
+                if ('ghost.' in atom.group(1).lower()
+                        or 'gh.' in atom.group(1).lower()):
                     atom_name = atom.group(1).split('.')[1]
-                    nghost += 1
                     mol.ghosts.append(atom_name)
                     ghost_name = f'ghost:{atom_name}'
-                    mol.atom.append([ghost_name, (float(atom.group(2)), 
-                        float(atom.group(3)), float(atom.group(4)))])
+                    mol.atom.append([ghost_name, (float(atom.group(2)),
+                                                  float(atom.group(3)),
+                                                  float(atom.group(4)))])
                 else:
                     atom_name = atom.group(1)
-                    mol.atom.append([atom.group(1), (float(atom.group(2)), 
-                        float(atom.group(3)), float(atom.group(4)))])
+                    mol.atom.append([atom.group(1), (float(atom.group(2)),
+                                                     float(atom.group(3)),
+                                                     float(atom.group(4)))])
 
             if subsystem.charge:
                 mol.charge = subsystem.charge
@@ -737,20 +880,20 @@ class InpReader:
                 mol.unit = subsystem.unit
 
             described_basis = {}
-            if subsystem.basis is not None:
+            if subsystem.basis:
                 for basis in subsystem.basis.basis_def:
                     basis_str = basis.group(0)
                     split_basis = basis_str.split()
                     described_basis[split_basis[0]] = split_basis[1]
-                    
-            if inp.basis is not None:
+
+            if inp.basis:
                 for basis in inp.basis.basis_def:
                     basis_str = basis.group(0)
                     split_basis = basis_str.split()
                     if not split_basis[0] in described_basis.keys():
                         described_basis[split_basis[0]] = split_basis[1]
-            if len(described_basis.keys()) == 0:
-                print ("YOU HAVE NOT DEFINED A BASIS. USING 3-21g BY DEFAULT") 
+            if not described_basis:
+                print("YOU HAVE NOT DEFINED A BASIS. USING 3-21g BY DEFAULT")
                 described_basis['default'] = '3-21g'
 
             described_ecp = {}
@@ -766,7 +909,6 @@ class InpReader:
                     ecp_str = ecp.group(0)
                     split_ecp = ecp_str.split()
                     described_ecp[split_ecp[0]] = split_ecp[1]
-                    
 
             mol.basis = described_basis
             mol.ecp = described_ecp
@@ -782,69 +924,10 @@ class InpReader:
                     mol.precision = inp.periodic_settings.precision
                 mol.build(dump_input=False, **self.cell_kwargs)
 
-            subsys_mols.append(mol) 
-            subsys_ghost.append(nghost)
+            subsys_mols.append(mol)
 
         #Add ghost link atoms Assumes angstroms.
-        #max_bond_dist = 1.76
-        for i in range(len(inp.subsystem)):
-            subsystem = inp.subsystem[i]
-        #    ghAtms = []
-        #    ghost_link = 'H'
-        #    if subsystem.addlinkbasis:
-        #        mol1 = subsys_mols[i]
-        #        for j in range(i + 1, len(inp.subsystem)):
-        #            mol2 = subsys_mols[j]
-        #            link_atoms = []
-        #            link_basis = {}
-        #            for k in range(len(mol1.atom)):
-        #                atom1_coord = mol1.atom[k][1]
-        #                for m in range(len(mol2.atom)):
-        #                    atom2_coord = mol2.atom[m][1]
-        #                    atom_dist = bond_dist(atom1_coord, atom2_coord) 
-        #                    if atom_dist <= max_bond_dist:
-        #                        ghost_num = subsys_ghost[i] + 1
-        #                        if subsystem.basis:
-        #                            new_atom, new_basis = gen_link_basis(
-        #                                                      mol1.atom[k], 
-        #                                                      mol2.atom[m], 
-        #                                                      subsystem.basis)
-        #                        else:
-        #                            new_atom, new_basis = gen_link_basis(
-        #                                                      mol1.atom[k], 
-        #                                                      mol2.atom[m], 
-        #                                                      inp.basis)
-        #                        subsys_ghost[i] = ghost_num
-        #                        ghAtms.append(ghost_link)
-        #                        link_atoms.append(new_atom)
-        #                        link_basis.update(new_basis)
-
-        #            # Will not work if link atoms are explicitly defined.
-        #            subsys_mols[i].atom = (subsys_mols[i].atom 
-        #                                   + link_atoms)
-        #            subsys_mols[i].ghosts += ghAtms
-        #            subsys_mols[i]._basis.update(link_basis)
-            subsys_mols[i].build(dump_input=False)
-
+        add_ghost_link(subsys_mols, inp.subsystem)
+        for sub in subsys_mols:
+            sub.build(dump_input=False)
         return subsys_mols
-
-
-def bond_dist(atom1_coord, atom2_coord):
-
-    total = 0.0
-    for i in range(len(atom1_coord)):
-        total += (atom2_coord[i] - atom1_coord[i]) ** 2.
-    return (total ** 0.5)
-
-
-def gen_link_basis(atom1, atom2, basis):
-
-    basis_atom = 'H'
-    ghost_name = f'ghost:{basis_atom}'
-    basis_x = (atom2[1][0] + atom1[1][0]) / 2.
-    basis_y = (atom2[1][1] + atom1[1][1]) / 2.
-    basis_z = (atom2[1][2] + atom1[1][2]) / 2.
-
-    atm = [ghost_name, (basis_x, basis_y, basis_z)]
-    basis = {ghost_name: gto.basis.load(basis, basis_atom)}
-    return (atm, basis)

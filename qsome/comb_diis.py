@@ -58,7 +58,7 @@ class ADIIS_DIIS():
 
     def __init__(self, env_obj):
         self.adiis = scf_diis.ADIIS()
-        self.cdiis = scf_diis.DIIS(mf)
+        self.cdiis = scf_diis.DIIS(env_obj)
         self.minimum_err = 2.0
 
     def update(self, s, d, f, mf, h1e, vhf):
