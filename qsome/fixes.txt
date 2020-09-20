@@ -1,0 +1,206 @@
+************* Module cluster_subsystem
+cluster_subsystem.py:763:1: W0511: TODO This doesn't work. (fixme)
+cluster_subsystem.py:186:0: C0301: Line too long (129/100) (line-too-long)
+cluster_subsystem.py:367:0: C0301: Line too long (103/100) (line-too-long)
+cluster_subsystem.py:511:0: C0301: Line too long (171/100) (line-too-long)
+cluster_subsystem.py:647:0: C0301: Line too long (106/100) (line-too-long)
+cluster_subsystem.py:652:0: C0301: Line too long (105/100) (line-too-long)
+cluster_subsystem.py:672:0: C0301: Line too long (108/100) (line-too-long)
+cluster_subsystem.py:677:0: C0301: Line too long (134/100) (line-too-long)
+cluster_subsystem.py:800:0: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:861:0: C0330: Wrong continued indentation (add 6 spaces).
+                        + e_sorted[0][nocc_orbs[0] -1]) / 2.)
+                        ^     | (bad-continuation)
+cluster_subsystem.py:866:0: C0330: Wrong continued indentation (add 6 spaces).
+                        + e_sorted[1][nocc_orbs[1] -1]) / 2.)
+                        ^     | (bad-continuation)
+cluster_subsystem.py:880:0: C0330: Wrong continued indentation (add 9 spaces).
+                  np.zeros_like(self.env_mo_energy[1])]
+                  ^        | (bad-continuation)
+cluster_subsystem.py:884:0: C0330: Wrong continued indentation (add 9 spaces).
+                          - self.fermi[0]) / self.env_smearsigma)
+                          ^        | (bad-continuation)
+cluster_subsystem.py:1019:0: C0301: Line too long (113/100) (line-too-long)
+cluster_subsystem.py:1085:0: C0325: Unnecessary parens after 'not' keyword (superfluous-parens)
+cluster_subsystem.py:1087:0: C0325: Unnecessary parens after 'not' keyword (superfluous-parens)
+cluster_subsystem.py:1135:55: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1136:0: C0330: Wrong continued indentation (add 5 spaces).
+                       self.emb_fock[1] - fock[1])
+                       ^    | (bad-continuation)
+cluster_subsystem.py:1148:41: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1149:55: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1158:0: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1193:14: C0326: No space allowed before bracket
+        print ("use external method for hl calculation")
+              ^ (bad-whitespace)
+cluster_subsystem.py:1202:0: C0301: Line too long (403/100) (line-too-long)
+cluster_subsystem.py:1249:60: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1250:0: C0330: Wrong continued indentation (add 34 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                 | (bad-continuation)
+cluster_subsystem.py:1252:63: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1253:0: C0330: Wrong continued indentation (add 37 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                    | (bad-continuation)
+cluster_subsystem.py:1257:61: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1258:0: C0330: Wrong continued indentation (add 35 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                  | (bad-continuation)
+cluster_subsystem.py:1260:64: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1261:0: C0330: Wrong continued indentation (add 38 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                     | (bad-continuation)
+cluster_subsystem.py:1267:60: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1268:0: C0330: Wrong continued indentation (add 34 spaces).
+                emb_pot, proj_pot, *args, **kwargs))
+                ^                                 | (bad-continuation)
+cluster_subsystem.py:1270:63: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1271:0: C0330: Wrong continued indentation (add 37 spaces).
+                emb_pot, proj_pot, *args, **kwargs))
+                ^                                    | (bad-continuation)
+cluster_subsystem.py:1293:60: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1294:0: C0330: Wrong continued indentation (add 34 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                 | (bad-continuation)
+cluster_subsystem.py:1296:63: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1297:0: C0330: Wrong continued indentation (add 37 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                    | (bad-continuation)
+cluster_subsystem.py:1302:61: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1303:0: C0330: Wrong continued indentation (add 35 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                  | (bad-continuation)
+cluster_subsystem.py:1305:64: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1306:0: C0330: Wrong continued indentation (add 38 spaces).
+                self.emb_pot, self.proj_pot, *args, **kwargs))
+                ^                                     | (bad-continuation)
+cluster_subsystem.py:1313:0: C0330: Wrong hanging indentation (remove 4 spaces).
+                    custom_pyscf_methods.rks_get_fock(hl_sr_scf, 
+                |   ^ (bad-continuation)
+cluster_subsystem.py:1313:64: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1314:0: C0330: Wrong continued indentation (add 34 spaces).
+                    emb_pot, proj_pot, *args, **kwargs))
+                    ^                                 | (bad-continuation)
+cluster_subsystem.py:1316:0: C0330: Wrong hanging indentation (remove 4 spaces).
+                    custom_pyscf_methods.rks_energy_elec(hl_sr_scf, 
+                |   ^ (bad-continuation)
+cluster_subsystem.py:1316:67: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1317:0: C0330: Wrong continued indentation (add 37 spaces).
+                    emb_pot, proj_pot, *args, **kwargs))
+                    ^                                    | (bad-continuation)
+cluster_subsystem.py:1325:0: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1353:18: C0326: No space allowed before bracket
+            print ("ro mp2")
+                  ^ (bad-whitespace)
+cluster_subsystem.py:1367:0: C0301: Line too long (123/100) (line-too-long)
+cluster_subsystem.py:1394:46: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1395:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.emb_pot[0] + self.emb_pot[1])/2.
+                     ^| (bad-continuation)
+cluster_subsystem.py:1396:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.proj_pot[0] + self.proj_pot[1])/2.))
+                     ^| (bad-continuation)
+cluster_subsystem.py:1398:0: C0301: Line too long (123/100) (line-too-long)
+cluster_subsystem.py:1401:28: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1428:46: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1429:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.emb_pot[0] + self.emb_pot[1])/2.
+                     ^| (bad-continuation)
+cluster_subsystem.py:1430:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.proj_pot[0] + self.proj_pot[1])/2.))
+                     ^| (bad-continuation)
+cluster_subsystem.py:1432:0: C0301: Line too long (123/100) (line-too-long)
+cluster_subsystem.py:1454:46: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1455:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.emb_pot[0] + self.emb_pot[1])/2.
+                     ^| (bad-continuation)
+cluster_subsystem.py:1456:0: C0330: Wrong continued indentation (add 1 space).
+                     + (self.proj_pot[0] + self.proj_pot[1])/2.))
+                     ^| (bad-continuation)
+cluster_subsystem.py:1458:62: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1460:14: C0326: No space allowed before bracket
+        print (f"FCIDUMP GENERATED AT {fcidump_filename}")
+              ^ (bad-whitespace)
+cluster_subsystem.py:1462:61: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1463:0: C0330: Wrong continued indentation (add 19 spaces).
+            tol=1e-200)
+            ^                  | (bad-continuation)
+cluster_subsystem.py:1471:45: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1472:0: C0301: Line too long (103/100) (line-too-long)
+cluster_subsystem.py:1488:22: C0326: No space allowed before bracket
+                print ("Cannot save hl density because no filename")
+                      ^ (bad-whitespace)
+cluster_subsystem.py:1507:18: C0326: No space allowed before bracket
+            print ("Cannot save hl orbitals because no filename")
+                  ^ (bad-whitespace)
+cluster_subsystem.py:1518:0: C0303: Trailing whitespace (trailing-whitespace)
+cluster_subsystem.py:1:0: C0302: Too many lines in module (1534/1000) (too-many-lines)
+cluster_subsystem.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+cluster_subsystem.py:10:0: E0611: No name 'shciscf' in module 'pyscf' (no-name-in-module)
+cluster_subsystem.py:10:0: E0611: No name 'dmrgscf' in module 'pyscf' (no-name-in-module)
+cluster_subsystem.py:19:0: R0902: Too many instance attributes (43/7) (too-many-instance-attributes)
+cluster_subsystem.py:103:4: R0913: Too many arguments (23/5) (too-many-arguments)
+cluster_subsystem.py:103:4: R0914: Too many local variables (23/15) (too-many-locals)
+cluster_subsystem.py:103:4: R0915: Too many statements (63/50) (too-many-statements)
+cluster_subsystem.py:233:24: W0212: Access to a protected member _atom of a client class (protected-access)
+cluster_subsystem.py:233:41: W0212: Access to a protected member _atom of a client class (protected-access)
+cluster_subsystem.py:235:8: W0212: Access to a protected member _basis of a client class (protected-access)
+cluster_subsystem.py:235:31: W0212: Access to a protected member _basis of a client class (protected-access)
+cluster_subsystem.py:236:25: W0212: Access to a protected member _basis of a client class (protected-access)
+cluster_subsystem.py:255:4: R0913: Too many arguments (7/5) (too-many-arguments)
+cluster_subsystem.py:255:4: R0912: Too many branches (17/12) (too-many-branches)
+cluster_subsystem.py:341:8: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:326:4: R0912: Too many branches (20/12) (too-many-branches)
+cluster_subsystem.py:326:4: R0915: Too many statements (53/50) (too-many-statements)
+cluster_subsystem.py:412:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:418:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:436:4: R0913: Too many arguments (7/5) (too-many-arguments)
+cluster_subsystem.py:482:4: R0913: Too many arguments (8/5) (too-many-arguments)
+cluster_subsystem.py:514:4: R0914: Too many local variables (21/15) (too-many-locals)
+cluster_subsystem.py:532:12: C0103: Variable name "s1" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:533:18: E1101: Instance of 'ClusterEnvSubSystem' has no 'dmat' member (no-member)
+cluster_subsystem.py:533:33: E1101: Instance of 'ClusterEnvSubSystem' has no 'dmat' member (no-member)
+cluster_subsystem.py:541:12: C0103: Variable name "de" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:542:19: C0103: Variable name "ia" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:543:16: C0103: Variable name "p0" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:543:20: C0103: Variable name "p1" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:607:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:617:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:619:12: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:617:4: R1710: Either all return statements in a function should return an expression, or none of them should. (inconsistent-return-statements)
+cluster_subsystem.py:636:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:638:12: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:650:18: W1309: Using an f-string that does not have any interpolated variables (f-string-without-interpolation)
+cluster_subsystem.py:636:4: R1710: Either all return statements in a function should return an expression, or none of them should. (inconsistent-return-statements)
+cluster_subsystem.py:652:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:652:4: R0913: Too many arguments (6/5) (too-many-arguments)
+cluster_subsystem.py:654:12: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:652:4: R1710: Either all return statements in a function should return an expression, or none of them should. (inconsistent-return-statements)
+cluster_subsystem.py:678:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:681:12: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:692:50: C0103: Variable name "hf" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:701:49: C0103: Variable name "hf" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:708:49: C0103: Variable name "hf" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:714:45: C0103: Variable name "hf" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:678:4: R1710: Either all return statements in a function should return an expression, or none of them should. (inconsistent-return-statements)
+cluster_subsystem.py:720:4: C0116: Missing function or method docstring (missing-function-docstring)
+cluster_subsystem.py:723:12: R1705: Unnecessary "else" after "return" (no-else-return)
+cluster_subsystem.py:734:49: C0103: Variable name "hf" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:797:8: C0103: Variable name "E" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:797:11: C0103: Variable name "C" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:812:8: C0103: Variable name "E_ro" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:812:14: C0103: Variable name "C_ro" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:814:8: C0103: Variable name "E" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:815:8: C0103: Variable name "C" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:843:8: C0103: Variable name "E" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:843:11: C0103: Variable name "C" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:1086:8: C0103: Attribute name "shci_nPTiter" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:1087:8: C0103: Attribute name "shci_DoRDM" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:1089:8: C0103: Attribute name "dmrg_maxM" doesn't conform to snake_case naming style (invalid-name)
+cluster_subsystem.py:974:0: R0902: Too many instance attributes (39/7) (too-many-instance-attributes)
+cluster_subsystem.py:1015:4: R0913: Too many arguments (32/5) (too-many-arguments)
+cluster_subsystem.py:1015:4: R0914: Too many local variables (33/15) (too-many-locals)
+
+------------------------------------------------------------------
+Your code has been rated at 7.91/10 (previous run: 7.89/10, +0.02)
+

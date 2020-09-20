@@ -521,8 +521,44 @@ ppmem 2500
 nproc 3
 scrdir /path/to/scratch/dir
 """
-temp_inp_dir = "/temp_input/"
 
+ghostlink_filename = "ghostlink_tests.inp"
+ghostlink_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+He    1.0000    0.0000    0.0000
+hl_method_num 1
+addlinkbasis
+end
+
+subsystem
+C    2.0000    0.0000    0.0000
+end
+
+subsystem
+C    2.0000    2.0000    0.0000
+addlinkbasis
+end
+
+subsystem
+C    2.0000    2.0000    2.0000
+end
+
+env_method_settings
+ env_method pbe
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method rhf
+end
+
+basis
+ default 3-21g
+end
+"""
+
+temp_inp_dir = "/temp_input/"
 class TestKwargCreation(unittest.TestCase):
 
     def setUp(self):
@@ -552,6 +588,8 @@ class TestKwargCreation(unittest.TestCase):
 
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
+
+
 
     def test_default_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -636,10 +674,8 @@ class TestKwargCreation(unittest.TestCase):
                              'hl_save_orbs': True,
                              'hl_save_density': True,
                              'hl_save_spin_density': True,
-                             'cas_loc_orbs': True,
-                             'cas_initguess': 'rhf',
-                             'cas_active_orbs': [3,4,5,6,7],
-                             'cas_avas': ['1d']}
+                             'hl_dict': {'loc_orbs': True, 'cas_initguess': 'rhf', 'active_orbs': [3,4,5,6,7], 'avas': ['1d']}
+                             }
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         for i in range(len(in_obj.hl_subsystem_kwargs)):
             n = in_obj.hl_subsystem_kwargs[i]
@@ -689,9 +725,10 @@ class TestKwargCreation(unittest.TestCase):
                                'hl_save_orbs': True,
                                'hl_save_density': True,
                                'hl_save_spin_density': True,
-                               'cas_initguess': 'ci',
-                               'cas_active_orbs': [5,6,7,8,9],
-                               'cas_avas':['3d']}
+                               'hl_dict': {'cas_initguess': 'ci', 'active_orbs': [5,6,7,8,9], 'avas': ['3d']}
+                               }
+        print (correct_hl_kwargs_1)
+        print (in_obj.hl_subsystem_kwargs)
         self.assertDictEqual(in_obj.hl_subsystem_kwargs[0], correct_hl_kwargs_1)
 
     def test_multi_env(self):
@@ -773,11 +810,9 @@ class TestKwargCreation(unittest.TestCase):
                                'hl_ext': 'openmolcas',
                                'hl_unrestricted': True,
                                'hl_compress_approx': True,
-                               'hl_density_fitting': True,                                   'cas_loc_orbs': True,
-                               'cas_initguess': 'rhf',
-                               'cas_active_orbs': [1,2,3],
-                               'cas_avas':['1d']}
-                                
+                               'hl_density_fitting': True,
+                               'hl_dict': {'loc_orbs': True, 'cas_initguess': 'rhf', 'active_orbs': [1,2,3], 'avas':['1d']}
+                               }
         correct_hl_kwargs_2 = {'hl_order': 2,
                                'hl_method': 'rhf',
                                'hl_save_spin_density': True}
@@ -876,6 +911,9 @@ class TestMolCreation(unittest.TestCase):
 
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
+
+        with open(path+ghostlink_filename, "w") as f:
+            f.write(ghostlink_str)
 
     def test_default(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -1089,6 +1127,52 @@ class TestMolCreation(unittest.TestCase):
                 self.assertListEqual(test._basis[k[0]], corr._basis[k[0]]) 
             for k in test._ecp.keys():
                 self.assertListEqual(test._ecp[k], corr._ecp[k]) 
+
+    def test_ghostlink(self):
+        path = os.getcwd() + temp_inp_dir
+        in_obj = inp_reader.InpReader(path + ghostlink_filename)
+
+        correct_mol1 = gto.M()
+        correct_mol1.atom = '''
+            He    0.0000    0.0000    0.0000
+            He    1.0000    0.0000    0.0000
+            GHOST-H 1.0000  0.0000    0.0000
+            GHOST-H 1.5000  0.0000    0.0000'''
+        correct_mol1.basis = '3-21g'
+        correct_mol1.build()
+
+        correct_mol2 = gto.M()
+        correct_mol2.atom = '''
+            C    2.0000    0.0000    0.0000'''
+        correct_mol2.basis = '3-21g'
+        correct_mol2.build()
+
+        correct_mol3 = gto.M()
+        correct_mol3.atom = '''
+            C    2.0000    2.0000    0.0000
+            GHOST-H 2.0000 1.0000    0.0000
+            GHOST-H 2.0000 2.0000    1.0000'''
+        correct_mol3.basis = '3-21g'
+        correct_mol3.build()
+
+        correct_mol4 = gto.M()
+        correct_mol4.atom = '''
+            C    2.0000    2.0000    2.0000'''
+        correct_mol4.basis = '3-21g'
+        correct_mol4.build()
+
+        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
+        self.assertEqual(len(in_obj.subsys_mols), 4)
+        for i in range(len(in_obj.subsys_mols)):
+            test = in_obj.subsys_mols[i]
+            corr = corr_mol_list[i]
+            self.assertEqual(len(test._atom), len(corr._atom))
+            for i,atom in enumerate(test._atom):
+                self.assertEqual(test._atom[i][0], corr._atom[i][0])
+                self.assertAlmostEqual(test._atom[i][1][0], corr._atom[i][1][0])
+                self.assertAlmostEqual(test._atom[i][1][1], corr._atom[i][1][1])
+                self.assertAlmostEqual(test._atom[i][1][2], corr._atom[i][1][2])
+                self.assertListEqual(test._basis[atom[0]], corr._basis[atom[0]])
         
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

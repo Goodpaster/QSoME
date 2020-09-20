@@ -1,101 +1,119 @@
-# Need a method in multiple places? Write one here!
-# Daniel Graham
+#!/usr/bin/env python
+"""A module containing methods used in various places that don't fit in
+another module. Maintians good code decoupling
+Daniel S. Graham
+"""
 
+import copy
+import numpy as np
 from pyscf import gto
-import functools
-import time
 
-def concat_mols(subsys_list):
+def __remove_overlap_ghost(mol):
+    """Removes overlapping ghost atoms between mol objects
+
+    Parameters
+    __________
+    mol : Mole object
+        The mole object to remove ghost atoms from. Removes them in-place.
+
+    Returns
+    -------
+    Mole object
+        Mole object with overlapping ghost atoms removed
+    """
+
+    int_dist = gto.inter_distance(mol)
+    same_coords = np.argwhere(int_dist == 0.0)
+    remove_list = []
+    while len(same_coords) > 0:
+        curr_coord = same_coords[-1]
+        if curr_coord[0] == curr_coord[1]:
+            same_coords = same_coords[:-1]
+        else:
+            atom1 = mol.atom_symbol(curr_coord[0]).lower()
+            atom2 = mol.atom_symbol(curr_coord[1]).lower()
+            assert ("ghost" in atom1 or "ghost" in atom2),\
+                    f"{atom1.capitalize()} and {atom2.capitalize()} are overlapping!"
+            if "ghost" in atom2:
+                remove_list.append(curr_coord[1])
+            else:
+                remove_list.append(curr_coord[0])
+            same_coords = same_coords[:-1]
+            inverse_coords = (curr_coord[1], curr_coord[0])
+            inverse_index = np.argwhere((same_coords == inverse_coords).all(axis=1))
+            same_coords = np.delete(same_coords, inverse_index, axis=0)
+
+    for remove_index in sorted(remove_list, reverse=True):
+        mol.atom.pop(remove_index)
+    mol.build()
+    return mol
+
+def concat_mols(mol_list):
     """Concatenates Mole objects into one Mole.
 
     Parameters
     ----------
-    subsys_list : list
-        List of subsystems to concatenate into single Mole.
+    mol_list : list
+        List of Mole objects to concatenate into single Mole.
     """
 
-    assert (len(subsys_list) > 1),"Must have more than 1 subsystem"
+    assert (len(mol_list) > 1), "Must have more than 1 mol object"
 
-    mol1 = gto.mole.copy(subsys_list[0].mol)
-    for j in range(mol1.natm):
-        old_name = mol1.atom_symbol(j)
-        new_name = mol1.atom_symbol(j) + '-0'
-        mol1._atom[j] = (new_name, mol1._atom[j][1])
-        if old_name in mol1._basis.keys():
-            mol1._basis[new_name] = mol1._basis.pop(old_name)
-        if old_name in mol1.ecp.keys():
-            mol1.ecp[new_name] = mol1.ecp.pop(old_name)
-            mol1._ecp[new_name] = mol1._ecp.pop(old_name)
-            mol1._atm, mol1._ecpbas, mol1._env = mol1.make_ecp_env(mol1._atm, mol1._ecp, mol1._env)
+    total_spin = 0
+    for i, mol_obj in enumerate(mol_list):
+        mol1 = gto.mole.copy(mol_obj)
+        total_spin += mol1.spin
+        mol1.unit = 'bohr'
+        atom_coords = mol1.atom_coords()
+        mol1.atom = []
+        uniq_atoms = set()
+        for j, coord in enumerate(atom_coords):
+            a_symb = mol1.atom_symbol(j) + '-' + str(i)
+            uniq_atoms.add(a_symb)
+            mol1.atom.append([a_symb, tuple(coord)])
 
-    #if subsys_list[0].flip_ros:
-    #    mol1.spin *= -1
-    #    mol1.build()
-    for n in range(1, len(subsys_list)):
-        mol2 = gto.mole.copy(subsys_list[n].mol)
-        #if subsys_list[n].flip_ros:
-        #    mol2.spin *= -1
-        #    mol2.build()
-        for j in range(mol2.natm):
-            old_name = mol2.atom_symbol(j)
-            new_name = mol2.atom_symbol(j) + '-' + str(n)
-            mol2._atom[j] = (new_name, mol2._atom[j][1])
-            if old_name in mol2._basis.keys():
-                mol2._basis[new_name] = mol2._basis.pop(old_name)
-            if old_name in mol2.ecp.keys():
-                mol2.ecp[new_name] = mol2.ecp.pop(old_name)
-                mol2._ecp[new_name] = mol2._ecp.pop(old_name)
-                mol2._atm, mol2._ecpbas, mol2._env = mol2.make_ecp_env(mol2._atm, mol2._ecp, mol2._env)
-        mol1 = gto.mole.conc_mol(mol1, mol2)
+        if isinstance(mol1.basis, (str, tuple, list)):
+            new_basis = dict(((a, mol1.basis) for a in uniq_atoms))
+        elif isinstance(mol1.basis, dict):
+            old_basis = copy.copy(mol1.basis)
+            new_basis = {}
+            if 'default' in old_basis:
+                default_basis = old_basis['default']
+                new_basis = dict(((a, default_basis) for a in uniq_atoms))
+                del old_basis['default']
+            for atom_symb in old_basis:
+                new_symb = atom_symb + '-' + str(i)
+                new_basis[new_symb] = old_basis[atom_symb]
+        else:
+            new_basis = mol1.basis
+        mol1.basis = gto.format_basis(new_basis)
 
+        if mol1.ecp:
+            if isinstance(mol1.ecp, str):
+                new_ecp = dict(((a, str(mol1.ecp)) for a in uniq_atoms))
+            elif isinstance(mol1.ecp, dict):
+                old_ecp = copy.copy(mol1.ecp)
+                if 'default' in old_ecp:
+                    default_ecp = old_ecp['default']
+                    new_ecp = dict(((a, default_ecp) for a in uniq_atoms))
+                    del old_ecp['default']
+                for atom_symb in old_ecp:
+                    new_symb = atom_symb + '-' + str(i)
+                    new_ecp[new_symb] = old_ecp[atom_symb]
+            else:
+                new_ecp = mol1.ecp
+            mol1.ecp = gto.format_ecp(new_ecp)
+
+        mol1.build()
+        if i == 0:
+            mol2 = gto.mole.copy(mol1)
+        else:
+            new_mol = gto.mole.conc_mol(mol1, mol2)
+            new_mol.build()
+            mol2 = new_mol
+
+    conc_mol = mol2
+    conc_mol.spin = total_spin #check that this works properly.
     #Remove overlapping ghost atoms.
-    # I still think there is a better way.
-    def remove_overlap(atom_list):
-        added_already = {}
-        no_dup = []
-        for i in range(len(atom_list)):
-            coord_tuple = tuple(atom_list[i][1])
-            atom_name = atom_list[i][0]
-            if not 'ghost' in atom_name:
-                no_dup.append(atom_list[i])
-                if coord_tuple in added_already:
-                    dup_index = added_already[coord_tuple]
-                    if not 'ghost' in no_dup[dup_index][0]:
-                        print ("OVERLAPPING ATOMS")
-                    else:
-                        del no_dup[added_already[coord_tuple]]
-                        for key in added_already.keys():
-                            if added_already[key] > added_already[coord_tuple]:
-                                added_already[key] -= 1
-
-                added_already[coord_tuple] = (len(no_dup) - 1)
-            else:
-                if coord_tuple in added_already:
-                    pass 
-                else:
-                    no_dup.append(atom_list[i])
-                    added_already[coord_tuple] = (len(no_dup) - 1)
-        return no_dup
-
-    mol1._atom = remove_overlap(mol1._atom)    
-    mol1.atom = mol1._atom
-    mol1.unit = 'bohr'
-    mol1.build(basis=mol1._basis)
-    return mol1
-
-def time_method(function_name=None):
-    def real_decorator(func):
-        @functools.wraps(func)
-        def wrapper_time_method(*args, **kwargs):
-            ts = time.time()
-            result = func(*args, **kwargs)
-            te = time.time()
-            if function_name is None:
-                name = func.__name__.upper()
-            else:
-                name = function_name
-            elapsed_t = (te - ts)
-            print( f'TIMING: {name}'.ljust(40) + f'{elapsed_t:>39.4f}s')
-            return result
-        return wrapper_time_method 
-    return real_decorator
+    final_mol = __remove_overlap_ghost(conc_mol)
+    return final_mol

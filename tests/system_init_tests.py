@@ -139,7 +139,7 @@ class TestEnvSubsystem(unittest.TestCase):
         self.assertEqual(subsys.mol.atom_charges()[2],1)
         self.assertEqual(subsys.mol.atom_charges()[3],0)
 
-        self.assertEqual(subsys.mol._basis['ghost.H'],subsys.mol._basis['H'])
+        self.assertEqual(subsys.mol._basis['GHOST-H'],subsys.mol._basis['H'])
 
 class TestActiveSubSystem(unittest.TestCase):
 
@@ -173,8 +173,6 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.verbose, 3)
 
         self.assertEqual(subsys.hl_method, 'ccsd')
-        self.assertEqual(subsys.cas_loc_orbs, False)
-        self.assertEqual(subsys.cas_active_orbs, None)
         self.assertEqual(subsys.hl_conv, None)
         self.assertEqual(subsys.hl_grad, None)
         self.assertEqual(subsys.hl_cycles, None)
@@ -184,14 +182,13 @@ class TestActiveSubSystem(unittest.TestCase):
 
     def test_custom_obj_set(self):
         t_file = tempfile.NamedTemporaryFile()
-        hl_method  = 'mp2'
+        hl_method  = 'caspt2'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, 
-            hl_method, cas_loc_orbs=True, cas_active_orbs=[2,3,4,5],
-            hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, hl_damp=0.1,
+            hl_method, hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, hl_damp=0.1,
             hl_shift=0.001, hl_initguess='minao', env_smearsigma=0.5, damp=1,
             shift=1, subcycles=10, freeze=True, initguess='supmol',
             verbose=2, save_orbs=True, save_density=True, 
-            hl_save_orbs=True, hl_save_density=True, filename=t_file.name)
+            hl_save_orbs=True, hl_save_density=True, filename=t_file.name, hl_dict={'active_orbs':[2,3,4,5], 'loc_orbs':True})
 
         self.assertEqual(subsys.mol, self.cs_mol)
         self.assertEqual(subsys.env_method, self.env_method)
@@ -208,7 +205,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.save_density, True)
 
         # hl methods
-        self.assertEqual(subsys.hl_method, 'mp2')
+        self.assertEqual(subsys.hl_method, 'caspt2')
         self.assertEqual(subsys.cas_loc_orbs, True)
         self.assertEqual(subsys.cas_active_orbs, [2,3,4,5])
         self.assertEqual(subsys.hl_conv, 1e-9)
@@ -279,8 +276,9 @@ class TestSuperSystem(unittest.TestCase):
         scf_obj = supersystem.fs_scf
         comp_scf_obj = dft.RKS(gto.mole.conc_mol(mol, mol2))
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
-        for i in range(len(comp_scf_obj.mol._atom)):
-            self.assertEqual(comp_scf_obj.mol._atom[i][1], supersystem.mol._atom[i][1])
+        print (comp_scf_obj.mol._basis)
+        print (supersystem.mol._basis)
+        self.assertTrue(gto.same_mol(comp_scf_obj.mol, supersystem.mol, cmp_basis=False))
         self.assertEqual(scf_obj.xc, 'm06')
 
     def test_unrestricted_supersystem(self):
@@ -490,13 +488,6 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
-        #Check concat mols
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
-        self.assertEqual(len(supersystem.mol.atom_coords()), 5)
-        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
-
     def test_totalghost_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -543,18 +534,6 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
-        #Check concat mols
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
-        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[3][0], 3.77945225, delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[3][1], 37.79452249, delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[3][2], 0.0, delta=1e-8)
-        self.assertEqual(len(supersystem.mol.atom_coords()), 6)
-        self.assertEqual(supersystem.mol._basis['ghost:He-1'], supersystem.mol._basis['He-1'])
-
-        
     def test_ovlpghost_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -603,13 +582,6 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
-        #Check concat mols
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][0], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][1], 0., delta=1e-8)
-        self.assertAlmostEqual(supersystem.mol.atom_coords()[2][2], 5.39894754, delta=1e-8)
-        self.assertEqual(len(supersystem.mol.atom_coords()), 5)
-        self.assertEqual(supersystem.mol._basis['ghost:H-0'], supersystem.mol._basis['H-0'])
-
 class TestInteractionMediator(unittest.TestCase):
 
     def setUp(self):
@@ -640,6 +612,16 @@ class TestInteractionMediator(unittest.TestCase):
         mol3.basis = 'sto-3g'
         mol3.build()
         self.sub3 = cluster_subsystem.ClusterHLSubSystem(mol3, 'm06', 'rhf', env_order=2)
+
+        mol4 = gto.Mole()
+        mol4.verbose=3
+        mol4.atom = '''
+        O 30.0 0.0 0.0
+        H 30. 0.7586 0.5043
+        H 30. 0.7586 -0.5043'''
+        mol4.basis = 'sto-3g'
+        mol4.build()
+        self.sub4 = cluster_subsystem.ClusterEnvSubSystem(mol4, 'lda', env_order=2)
 
         sup1_alt_sub_mol = gto.Mole()
         sup1_alt_sub_mol.verbose = 3
@@ -686,7 +668,7 @@ class TestInteractionMediator(unittest.TestCase):
         subsystems = [self.sub1, self.sub2, self.sub3]
         mediator = interaction_mediator.InteractionMediator(subsystems)
         self.assertEqual(len(mediator.supersystems), 2)
-        sub_1 = [self.sub2, self.sup1_alt_sub]
+        sub_1 = [self.sub2, self.sub4]
         sub_2 = [self.sub1, self.sub3]
         supersystem_1 = cluster_supersystem.ClusterSuperSystem(sub_1, 'lda') 
         supersystem_2 = cluster_supersystem.ClusterSuperSystem(sub_2, 'm06') 

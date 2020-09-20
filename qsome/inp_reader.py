@@ -6,6 +6,7 @@ Dhabih V. Chulhai
 
 from __future__ import print_function, division
 
+from copy import copy
 import input_reader
 import numpy as np
 from pyscf import gto, pbc
@@ -55,7 +56,7 @@ def bond_dist(atom1_coord, atom2_coord):
     return total ** 0.5
 
 
-def gen_link_basis(atom1, atom2, basis):
+def gen_link_basis(atom1_coord, atom2_coord, basis):
     """Generate the linking atom between two atoms.
 
     Parameters
@@ -75,11 +76,8 @@ def gen_link_basis(atom1, atom2, basis):
 
     basis_atom = 'H'
     ghost_name = f'ghost:{basis_atom}'
-    basis_x = (atom2[1][0] + atom1[1][0]) / 2.
-    basis_y = (atom2[1][1] + atom1[1][1]) / 2.
-    basis_z = (atom2[1][2] + atom1[1][2]) / 2.
-
-    atm = [ghost_name, (basis_x, basis_y, basis_z)]
+    midpoint = (atom1_coord + atom2_coord)/2.
+    atm = [ghost_name, tuple(midpoint)]
     basis = {ghost_name: gto.basis.load(basis, basis_atom)}
     return (atm, basis)
 
@@ -124,6 +122,9 @@ def read_input(filename):
     hl_settings.add_line_key('hl_order', type=int)
     hl_settings.add_line_key('hl_method', type=str)
     add_hl_settings(hl_settings)
+
+    cc_settings = hl_settings.add_block_key('cc_settings')
+    add_cc_settings(cc_settings)
 
     cas_settings = hl_settings.add_block_key('cas_settings')
     add_cas_settings(cas_settings)
@@ -196,6 +197,9 @@ def add_subsys_settings(subsys_block):
     # Override default high level method settings.
     sub_hl_settings = subsys_block.add_block_key('hl_method_settings')
     add_hl_settings(sub_hl_settings)
+
+    sub_cc_settings = sub_hl_settings.add_block_key('cc_settings')
+    add_cc_settings(sub_cc_settings)
 
     sub_cas_settings = sub_hl_settings.add_block_key('cas_settings')
     add_cas_settings(sub_cas_settings)
@@ -340,6 +344,19 @@ def add_hl_settings(inp_block):
     inp_block.add_boolean_key('save_density')
     inp_block.add_boolean_key('save_spin_density')
 
+def add_cc_settings(inp_block):
+    """Adds the high level CC settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add high level CC setting options to.
+    """
+
+    inp_block.add_boolean_key('loc_orbs')
+    inp_block.add_line_key('cc_initguess', type=str)
+    inp_block.add_line_key('core_orbs', type=str)
+
 def add_cas_settings(inp_block):
     """Adds the high level CAS settings to the block.
 
@@ -370,7 +387,7 @@ def add_shci_settings(inp_block):
     inp_block.add_boolean_key('no_stochastic')
     inp_block.add_boolean_key('NoRDM')
 
-def cleanup_keys(settings_dict, key_correct):
+def cleanup_keys(settings_dict, key_correct=None):
     """Removes unnessecary keys created by input_reader.
 
     Parameters
@@ -388,10 +405,11 @@ def cleanup_keys(settings_dict, key_correct):
         elif settings_dict[k] is None:
             settings_dict.pop(k)
 
-    list_keys = list(settings_dict.keys())
-    for correct in key_correct:
-        if correct in list_keys:
-            settings_dict[key_correct[correct]] = settings_dict.pop(correct)
+    if key_correct:
+        list_keys = list(settings_dict.keys())
+        for correct in key_correct:
+            if correct in list_keys:
+                settings_dict[key_correct[correct]] = settings_dict.pop(correct)
 
 def get_universal_keys(inp_dict):
     """Creates the kwarg dictionary for systemwide parameters.
@@ -429,12 +447,30 @@ def build_hl_dict(hl_settings, hl_params):
     for base_kwarg in base_setting_kwargs:
         if base_kwarg in hl_params and hl_params[base_kwarg]:
             hl_settings[base_kwarg] = hl_params[base_kwarg]
+    if hl_params['cc_settings']:
+        cc_dict = vars(hl_params['cc_settings'])
+        cleanup_keys(cc_dict)
+        hl_settings['hl_dict'] = cc_dict
     if hl_params['cas_settings']:
-        hl_settings.update(vars(hl_params['cas_settings']))
+        cas_dict = vars(hl_params['cas_settings'])
+        cleanup_keys(cas_dict)
+        hl_settings['hl_dict'] = copy(cas_dict)
+        if 'active_orbs' in cas_dict:
+            act_split = cas_dict['active_orbs'].split(',')
+            act_list = [int(x) for x in act_split]
+            hl_settings['hl_dict']['active_orbs'] = act_list
+        if 'avas' in cas_dict:
+            avas_split = cas_dict['avas'].split(',')
+            avas_list = [str(x) for x in avas_split]
+            hl_settings['hl_dict']['avas'] = avas_list
     if hl_params['shci_settings']:
-        hl_settings.update(vars(hl_params['shci_settings']))
+        shci_dict = vars(hl_params['shci_settings'])
+        cleanup_keys(shci_dict)
+        hl_settings['hl_dict'] = shci_dict
     if hl_params['dmrg_settings']:
-        hl_settings.update(vars(hl_params['dmrg_settings']))
+        dmrg_dict = vars(hl_params['dmrg_settings'])
+        cleanup_keys(dmrg_dict)
+        hl_settings['hl_dict'] = dmrg_dict
 
 def add_ghost_link(subsys_mols, sub_settings):
     """Adds linking ghost atoms to the subsystem mol objects.
@@ -447,33 +483,42 @@ def add_ghost_link(subsys_mols, sub_settings):
         A list of subsystem settings
     """
 
-    max_dist = 1.76
-    ghost_link = 'H-1'
+    max_dist = 3.8
     ghost_basis = '3-21g'
-    for i, subsystem in enumerate(sub_settings):
-        gh_atms = []
-        if subsystem.addlinkbasis:
-            for j in range(i + 1, len(sub_settings)):
-                link_atoms = []
-                link_basis = {}
-                for atom1 in subsys_mols[i]._atom:
-                    for atom2 in subsys_mols[j]._atom:
-                        if bond_dist(atom1[1], atom2[1]) <= max_dist:
-                            if subsystem.basis:
-                                new_atom, new_basis = gen_link_basis(
-                                    atom1, atom2, ghost_basis)
-                            else:
-                                new_atom, new_basis = gen_link_basis(
-                                    atom1, atom2, ghost_basis)
-                            gh_atms.append(ghost_link)
-                            link_atoms.append(new_atom)
-                            link_basis.update(new_basis)
 
-                # Will not work if link atoms are explicitly defined.
-                subsys_mols[i].atom = (subsys_mols[i].atom
-                                       + link_atoms)
-                subsys_mols[i].ghosts += gh_atms
-                subsys_mols[i]._basis.update(link_basis)
+    #First get array of interatom distances
+    coord_array = np.asarray(np.vstack([x.atom_coords() for x in subsys_mols]))
+    inter_dist = gto.inter_distance(None, coords=coord_array)
+    close_indices = np.argwhere(inter_dist <= max_dist)
+    #Iterate through all close indices and add link atoms to the sub on one conditional line.
+    lowest_index = 0
+    for i, subsystem in enumerate(sub_settings):
+        num_atoms = len(subsys_mols[i].atom)
+        high_index = lowest_index + num_atoms
+        if subsystem.addlinkbasis:
+            ghost_mol = gto.M()
+            ghost_mol.atom = []
+            ghost_mol.basis = {}
+            for index in close_indices:
+                if ((index[0] >= lowest_index and index[0] < high_index) and
+                        (index[1] < lowest_index or index[1] >= high_index)):
+                    atm1_coord = coord_array[index[0]]
+                    atm2_coord = coord_array[index[1]]
+                    if subsystem.basis:
+                        new_atom, new_basis = gen_link_basis(atm1_coord,
+                                                             atm2_coord,
+                                                             subsystem.basis)
+                    else:
+                        new_atom, new_basis = gen_link_basis(atm1_coord,
+                                                             atm2_coord,
+                                                             ghost_basis)
+
+                    ghost_mol.atom.append(new_atom)
+                    ghost_mol.basis.update(new_basis)
+
+            ghost_mol.build(unit='bohr')
+            subsys_mols[i] = gto.conc_mol(subsys_mols[i], ghost_mol)
+        lowest_index = high_index
 
 class InpReader:
     """
@@ -484,24 +529,24 @@ class InpReader:
 
     TODO
     ----
-    Configure periodic settings into objects.
+    Configure periodic settings into objects
 
     Parameters
     ----------
     filename : str
-        Path to input file.
+        Path to input file
 
 
     Attributes
     ----------
     inp : InputReader
-        The InputReader object of the input file.
+        The InputReader object of the input file
     env_subsystem_kwargs : dict
-        Dictionary of settings for creating ClusterEnvSubSystem object.
+        Dictionary of settings for creating ClusterEnvSubSystem object
     hl_settings_kwargs : dict
-        Dictionary of settings for creating ClusterHLSubSystem object.
+        Dictionary of settings for creating ClusterHLSubSystem object
     supersystem_kwargs : dict
-        Dictionary of settings for creating ClusterSupersystem object.
+        Dictionary of settings for creating ClusterSupersystem object
     subsys_mols : list
         A list of subsystem pyscf Mol objects
     """
@@ -692,18 +737,7 @@ class InpReader:
                    'save_spin_density': 'hl_save_spin_density',
                    'density_fitting': 'hl_density_fitting',
                    'use_ext': 'hl_ext',
-                   'loc_orbs': 'cas_loc_orbs',
-                   'cas_initguess': 'cas_initguess',
-                   'active_orbs': 'cas_active_orbs',
-                   'avas' : 'cas_avas',
-                   'mpi_prefix': 'shci_mpi_prefix',
-                   'sweep_iter': 'shci_sweep_iter',
-                   'sweep_epsilon': 'shci_sweep_epsilon',
-                   'nPTiter': 'shci_nPTiter',
-                   'no_stochastic' : 'shci_no_stochastic',
-                   'NoRDM': 'shci_NoRDM',
-                   'maxM': 'dmrg_maxM',
-                   'num_thirds': 'dmrg_num_thirds'}
+                   }
 
 
         for subsystem in inp.subsystem:
@@ -739,14 +773,6 @@ class InpReader:
                     build_hl_dict(hl_settings, hl_param_dict)
 
                 cleanup_keys(hl_settings, hl_dict)
-
-                #Evaluate the avas and active orbs
-                if 'cas_active_orbs' in hl_settings:
-                    act_list = hl_settings['cas_active_orbs'].split(',')
-                    hl_settings['cas_active_orbs'] = [int(x) for x in act_list]
-                if 'cas_avas' in hl_settings:
-                    avas_list = hl_settings['cas_avas'].split(',')
-                    hl_settings['cas_avas'] = [str(x) for x in avas_list]
                 hl_kwargs.append(hl_settings)
 
         return hl_kwargs
@@ -834,7 +860,7 @@ class InpReader:
         return cell_kwargs, kpoints_kwargs, periodic_kwargs
 
 
-    def gen_mols(self, inp=None):
+    def gen_mols(self):
         """Generates the mol or cell objects specified in inp..
 
         Parameters
@@ -844,10 +870,8 @@ class InpReader:
             (default is None)
         """
 
-        if inp is None:
-            inp = self.inp
-
         subsys_mols = []
+        inp = self.inp
         for subsystem in inp.subsystem:
             atom_list = subsystem.atoms
             if self.periodic_kwargs is None:
@@ -855,22 +879,10 @@ class InpReader:
             else:
                 mol = pbc.gto.Cell()
             mol.atom = []
-            mol.ghosts = []
-
             for atom in atom_list:
-                if ('ghost.' in atom.group(1).lower()
-                        or 'gh.' in atom.group(1).lower()):
-                    atom_name = atom.group(1).split('.')[1]
-                    mol.ghosts.append(atom_name)
-                    ghost_name = f'ghost:{atom_name}'
-                    mol.atom.append([ghost_name, (float(atom.group(2)),
-                                                  float(atom.group(3)),
-                                                  float(atom.group(4)))])
-                else:
-                    atom_name = atom.group(1)
-                    mol.atom.append([atom.group(1), (float(atom.group(2)),
-                                                     float(atom.group(3)),
-                                                     float(atom.group(4)))])
+                mol.atom.append([atom.group(1), (float(atom.group(2)),
+                                                 float(atom.group(3)),
+                                                 float(atom.group(4)))])
 
             if subsystem.charge:
                 mol.charge = subsystem.charge
@@ -880,24 +892,23 @@ class InpReader:
                 mol.unit = subsystem.unit
 
             described_basis = {}
+            if inp.basis:
+                for basis in inp.basis.basis_def:
+                    basis_str = basis.group(0)
+                    split_basis = basis_str.split()
+                    described_basis[split_basis[0]] = split_basis[1]
+
             if subsystem.basis:
                 for basis in subsystem.basis.basis_def:
                     basis_str = basis.group(0)
                     split_basis = basis_str.split()
                     described_basis[split_basis[0]] = split_basis[1]
 
-            if inp.basis:
-                for basis in inp.basis.basis_def:
-                    basis_str = basis.group(0)
-                    split_basis = basis_str.split()
-                    if not split_basis[0] in described_basis.keys():
-                        described_basis[split_basis[0]] = split_basis[1]
             if not described_basis:
                 print("YOU HAVE NOT DEFINED A BASIS. USING 3-21g BY DEFAULT")
                 described_basis['default'] = '3-21g'
 
             described_ecp = {}
-
             if inp.ecp is not None:
                 for ecp in inp.ecp.ecp_def:
                     ecp_str = ecp.group(0)
@@ -926,8 +937,9 @@ class InpReader:
 
             subsys_mols.append(mol)
 
-        #Add ghost link atoms Assumes angstroms.
-        add_ghost_link(subsys_mols, inp.subsystem)
         for sub in subsys_mols:
             sub.build(dump_input=False)
+
+        #Add ghost link atoms Assumes angstroms.
+        add_ghost_link(subsys_mols, inp.subsystem)
         return subsys_mols
