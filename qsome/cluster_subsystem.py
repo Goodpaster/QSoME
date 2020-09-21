@@ -1159,8 +1159,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_save_orbs = hl_save_orbs
         self.hl_save_density = hl_save_density
         self.hl_save_spin_density = hl_save_spin_density
-        if hl_dict:
-            self.__set_hl_method_settings(hl_dict)
+        self.__set_hl_method_settings(hl_dict)
 
         self.hl_mo_coeff = None
         self.hl_mo_occ = None
@@ -1181,8 +1180,14 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             A dictionary containing the hl specific settings.
         """
 
-        if 'ccsd' in self.hl_method:
-            pass
+        if hl_dict is None:
+            hl_dict = {}
+        self.hl_dict = hl_dict
+           
+        if 'cc' in self.hl_method:
+            self.cc_loc_orbs = hl_dict.get("loc_orbs")
+            self.cc_initguess = hl_dict.get("cc_initguess")
+            self.cc_froz_orbs = hl_dict.get("froz_orbs")
         if 'cas' in self.hl_method:
             self.cas_loc_orbs = hl_dict.get("loc_orbs")
             self.cas_init_guess = hl_dict.get("cas_initguess")
@@ -1298,7 +1303,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         name_no_ext = os.path.splitext(name_no_path)[0]
         file_path = os.path.split(self.filename)[0]
         scr_path = self.scr_dir
-        ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(self.mol), self.hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, cas_settings={'cas_loc_orbs':self.cas_loc_orbs, 'cas_init_guess':self.cas_init_guess, 'cas_active_orbs':self.cas_active_orbs, 'cas_avas':self.cas_avas})
+        ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(self.mol), self.hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, hl_dict=self.hl_dict)
         energy = ext_obj.get_energy()
         self.hl_energy = energy[0]
 
@@ -1428,6 +1433,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         else:
             hl_cc = cc.CCSD(self.hl_sr_scf)
 
+        hl_cc.frozen = self.cc_froz_orbs
         if self.hl_conv is not None:
             hl_cc.conv_tol = self.hl_conv
         if self.hl_cycles is not None:

@@ -355,7 +355,7 @@ def add_cc_settings(inp_block):
 
     inp_block.add_boolean_key('loc_orbs')
     inp_block.add_line_key('cc_initguess', type=str)
-    inp_block.add_line_key('core_orbs', type=str)
+    inp_block.add_line_key('froz_orbs', type=str)
 
 def add_cas_settings(inp_block):
     """Adds the high level CAS settings to the block.
@@ -450,7 +450,13 @@ def build_hl_dict(hl_settings, hl_params):
     if hl_params['cc_settings']:
         cc_dict = vars(hl_params['cc_settings'])
         cleanup_keys(cc_dict)
-        hl_settings['hl_dict'] = cc_dict
+        hl_settings['hl_dict'] = copy(cc_dict)
+        if 'froz_orbs' in cc_dict:
+            froz_split = cc_dict['froz_orbs'].split(',')
+            froz_list = [int(x) for x in froz_split]
+            if len(froz_list) == 1:
+                froz_list = froz_list[0]
+            hl_settings['hl_dict']['froz_orbs'] = froz_list
     if hl_params['cas_settings']:
         cas_dict = vars(hl_params['cas_settings'])
         cleanup_keys(cas_dict)

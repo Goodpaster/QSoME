@@ -1097,12 +1097,14 @@ class TestHLSubsystemMethods(unittest.TestCase):
 
         # Closed shell
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method)
+        hl_dict = {'froz_orbs': 1}
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method, hl_dict=hl_dict)
         subsys.init_density()
         subsys_hl_e = subsys.get_hl_in_env_energy()
         true_scf = scf.RHF(self.cs_mol)
         true_hf_e = true_scf.kernel()
         true_cc = cc.CCSD(true_scf)
+        true_cc.frozen = 1
         true_cc_e = true_cc.kernel()[0]
         self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
 

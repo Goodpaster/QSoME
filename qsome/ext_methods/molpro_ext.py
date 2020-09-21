@@ -192,7 +192,7 @@ put,molden,$FNAME;   !save orbitals in molden format
 
 class MolproExt:
 
-    def __init__(self, mol, method, ext_pot, core_ham, file_name, work_dir, scr_dir, nproc, pmem, save_orbs, save_density, cas_settings):
+    def __init__(self, mol, method, ext_pot, core_ham, file_name, work_dir, scr_dir, nproc, pmem, save_orbs, save_density, hl_dict):
 
         self.mol = mol
         self.method = method
@@ -206,20 +206,32 @@ class MolproExt:
         self.pmem = pmem
         self.save_orbs = save_orbs
         self.save_density = save_density
-        self.cas_loc_orbs = None
-        self.cas_init_guess = None
-        self.cas_active_orbs = None
-        self.cas_avas = None
-        if cas_settings is not None:
-            if 'cas_loc_orbs' in cas_settings.keys():
-                self.cas_loc_orbs = cas_settings['cas_loc_orbs']
-            if 'cas_init_guess' in cas_settings.keys():
-                self.cas_init_guess = cas_settings['cas_init_guess']
-            if 'cas_active_orbs' in cas_settings.keys():
-                self.cas_active_orbs = cas_settings['cas_active_orbs']
-            if 'cas_avas' in cas_settings.keys():
-                self.cas_avas = cas_settings['cas_avas']
+        self.__set_hl_method_settings(hl_dict)
         #self.generate_molpro_input()
+
+    def __set_hl_method_settings(self, hl_dict):
+        """Sets the object parameters based on the hl settings
+
+        Parameters
+        ----------
+        hl_dict : dict
+            A dictionary containing the hl specific settings.
+        """
+
+        if hl_dict is None:
+            hl_dict = {}
+        self.hl_dict = hl_dict
+           
+        if 'cc' in self.method:
+            self.cc_loc_orbs = hl_dict.get("loc_orbs")
+            self.cc_initguess = hl_dict.get("cc_initguess")
+            self.cc_froz_orbs = hl_dict.get("froz_orbs")
+        if 'cas' in self.method:
+            self.cas_loc_orbs = hl_dict.get("loc_orbs")
+            self.cas_init_guess = hl_dict.get("cas_initguess")
+            self.cas_active_orbs = hl_dict.get("active_orbs")
+            self.cas_avas = hl_dict.get("avas")
+
 
     def generate_molpro_input(self):
   
@@ -251,10 +263,16 @@ class MolproExt:
             method_string = '{hf;noenest}'
         elif self.method == 'ccsd':
             method_string = '{hf;noenest}\n'
-            method_string += 'rccsd'
+            method_string += '{rccsd;core'
+            if self.cc_froz_orbs:
+                method_string += ',' + str(self.cc_froz_orbs)
+            method_string += '}'
         elif self.method == 'ccsd(t)':
             method_string = '{hf;noenest}\n'
-            method_string += 'rccsd(t)'
+            method_string += '{rccsd(t);core'
+            if self.cc_froz_orbs:
+                method_string += ',' + str(self.cc_froz_orbs)
+            method_string += '}'
         elif self.method == 'fcidump':
             dump_filename = 'FCIDUMP'
             method_string = '{hf;noenest}\n'
@@ -263,22 +281,25 @@ class MolproExt:
             method_string = '{rhf;noenest;\n'
             num_elec = self.mol.tot_electrons()
             method_string += 'wf,' + str(num_elec) + ',1,' + str(np.abs(self.mol.spin)) + ';}\n'
-            method_string += 'rccsd(t)'
+            method_string += '{rccsd(t);core'
+            if self.cc_froz_orbs:
+                method_string += ',' + str(self.cc_froz_orbs)
+            method_string += '}'
         elif re.match(re.compile('cas(pt2)?\[.*\].*'), method):
             cas_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
             num_elec = self.mol.tot_electrons()
             num_closed = int((num_elec - cas_space[0]) / 2.)
             num_occ = num_closed + cas_space[1]
-            if avas is None:
+            if self.cas_avas is None:
                 if mol.spin != 0:
                     method_string = f'{{hf,maxit=240;noenest;wf,{num_elec},1,{np.abs(mol.spin)}}}\n'
                 else:
                     method_string = '{hf;noenest;}\n'
             else:
                 if self.mol.spin != 0:
-                    method_string = '{uhft;avas,open=1;' + ';'.join(avas) + '}\n'
+                    method_string = '{uhft;avas,open=1;' + ';'.join(self.cas_avas) + '}\n'
                 else:
-                    method_string = '{rhft;avas;' + ';'.join(avas) + '}\n'
+                    method_string = '{rhft;avas;' + ';'.join(self.cas_avas) + '}\n'
             method_string += "put,molden," + os.path.splitext(input_file.split('/')[-1])[0] + "_2.molden;   !save orbitals in molden format\n"
             method_string += "{casscf\n"
             method_string += "maxiter,40\n"
@@ -286,9 +307,9 @@ class MolproExt:
             method_string += "occ," + str(num_occ) + "\n"
             method_string += "wf," + str(num_elec) + ",1," + str(np.abs(self.mol.spin)) + "\n"
 
-            if active_orbitals:
-                occ_orbs = [str(x+.1) for x in active_orbitals if x <= int(num_elec/2)]
-                vir_orbs = [str(x+.1) for x in active_orbitals if x > int(num_elec/2)]
+            if self.cas_active_orbs:
+                occ_orbs = [str(x+.1) for x in self.cas_active_orbitals if x <= int(num_elec/2)]
+                vir_orbs = [str(x+.1) for x in self.cas_active_orbitals if x > int(num_elec/2)]
                 for i in range(int(cas_space[0]/2)):
                     method_string += "rotate," + str(int(int(num_elec/2) - i)+.1) + "," + occ_orbs[-i] + ",0;\n"
 

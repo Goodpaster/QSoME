@@ -387,7 +387,8 @@ class TestSuperSystem(unittest.TestCase):
         mol.build()
         env_method = 'm06'
         hl_method = 'ccsd'
-        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, filename=t_file.name)
+        hl_dict = {'froz_orbs': 10}
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method, filename=t_file.name, hl_dict=hl_dict)
 
         mol2 = gto.Mole()
         mol2.verbose = 3
