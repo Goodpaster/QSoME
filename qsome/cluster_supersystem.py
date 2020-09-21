@@ -1163,7 +1163,7 @@ class ClusterSuperSystem:
             #dmat = dm_env[0] + dm_env[1]
             #cubegen.density(self.fs_scf.mol, cubename, dmat)
 
-        print(f"DFT-in-DFT Energy:{self.env_in_env_energy:>62.8f}")
+        print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
         print("".center(80, '*'))
         return self.env_in_env_energy
 
