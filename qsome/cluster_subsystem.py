@@ -1,6 +1,7 @@
-# A method to define all cluster supsystem objects
-# Daniel Graham
-# Dhabih V. Chulhai
+""" A method to define cluster subsystem objects
+Daniel Graham
+Dhabih V. Chulhai
+"""
 
 import re
 import os
@@ -26,12 +27,60 @@ class ClusterEnvSubSystem:
         The pyscf Mole object specifying the geometry and basis
     env_method : str
         Defines the method to use for environment calculations.
+    env_order : int
+        An ordering scheme to keep track of subsystems in the big picture.
+    env_smearsigma : float
+        The sigma smear value for density smearing.
+    env_initguess : str
+        The initial guess for the density matrix.
+    env_damp : float
+        The damping parameter for F&T calculations.
+    env_shift : float
+        Orbital shifting parameter.
+    env_subcycles : int
+        Number of scf subcycles for freeze and thaw cycles.
+    env_diis_num : int
+        A number indicating what kind of DIIS will be used for fock acceleration.
+    unrestricted : bool
+        Whether the subsystem is unrestricted.
+    density_fitting : book
+        Whether to use density fitting.
+    freeze : bool
+        Whether to relax the density matrix
+    save_orbs : bool
+        Whether to save the env orbitals
+    save_density : bool
+        Whether to save the env density
+    save_spin_density : bool
+        Whether to save the spin density.
+    verbose : int
+        The level of verbosity for the calculation
+    filename : str
+        A path to the input file.
+    chkfile_index : str
+        An identifier for the subsystem within the context of the full system.
+    nproc : int
+        The number of processors accessible to the calculation.
+    pmem : float
+        The amount of memory per processor (in MB)
+    scr_dir : str
+        The path to the scratch directory for the calculation.
+    fermi : array
+        An array of alpha and beta fermi energies.
     env_scf : SCF
         The pyscf SCF object of the subsystem.
-    dmat : np.float64
-        A numpy array of electron density matrix, compatible with pyscf.
     env_hcore : np.float64
         A numpy array of core hamiltonian matrix, compatible with pyscf.
+    env_dmat : np.float64
+        A numpy array of electron density matrix, compatible with pyscf.
+    emb_fock : array
+        An array of alpha and beta embedded fock matrices.
+    subsys_fock : array
+        An array of alpha and beta subsystem fock matrices.
+    emb_pot : array
+        An array of alpha and beta embedding potentials (emb_fock - subsys_fock).
+    proj_pot : array
+        An array of alpha and beta projection potentials.
     env_mo_coeff : np.float64
         A numpy array of mo coefficients, compatible with pyscf.
     env_mo_occ : np.float
@@ -40,39 +89,8 @@ class ClusterEnvSubSystem:
         A numpy array of mo energies, compatible with psycf
     env_energy : float
         The total energy of this subsystem.
-    filename : str
-        The path to the input file being read.
-    smearsigma : float
-        Sigma value for fermi smearing.
-    damp : float
-        Damping percentage. Mixeas a percent of previous density into
-        each new density.
-    shift : float
-        How much to level shift orbitals.
-    subcycles : int
-        Number of diagonalization cycles.
-    diis : DIIS
-        pyscf DIIS accelerator to use for diagonalization.
-    freeze : bool
-        Whether to freeze the subsystem density.
-    initguess : str
-        Which method to use for the initial density guess.
-    grid_level : int
-        Specifies pyscf Grids size.
-    rhocutoff : float
-        Numerical integration rho cutoff.
-    verbose : int
-        Specifies level of verbose output.
-    analysis : bool
-        Analysis flag.
-    debug : bool
-        Debug flag.
-    nproc : int
-        Number of processors provided for calculation.
-    pmem : int
-        Memory per processor available in MB.
-    scr_dir : str
-        Path to the directory used for scratch.
+    diis : DIIS object
+        The PySCF DIIS object for fock acceleration of the subsystem.
 
     Methods
     -------
@@ -80,31 +98,53 @@ class ClusterEnvSubSystem:
        Initializes the pyscf SCF object.
     init_density()
         Sets the initial subsystem density matrix.
+    get_dmat()
+        Returns a formatted density matrix.
+    update_subsys_fock(dmat, hcore)
+        Updates the subsystem fock matrix.
+    update_emb_pot(emb_fock)
+        Updates the embedding potential.
+    get_env_proj_e()
+        Returns the energy of the projection potential.
+    get_env_emb_e()
+        Returns the embedded energy
     get_env_elec_energy()
         Get the electronic energy for the subsystem.
     get_env_energy()
         Get the total energy for the subsystem.
-    update_proj_pot(new_POp)
-        Update the projection operator potential.
-    get_env_proj_e()
-        Get the energy of the peojection potential.
-    update_emb_pot(new_emb_pot)
-        Update the potential the subsystem is embedded into.
-    update_fock()
-        Update the subsystem fock matrix.
-    update_density(new_den)
-        Update the subsystem density matrix.
-    save_orbitals()
-        Save the subsystem orbitals.
-    diagonalize(run_diis=True)
-        Diagonailze the subsystem fock matrix and generate new density.
+    save_orbital_file()
+        Saves the env orbitals to a file.
+    save_density_file()
+        Save the env electron density to a file.
+    save_spin_density_file()
+        Save the env electron spin density to a file.
+    save_chkfile()
+        Saves the electron density to a chkfile for calculation restart purposes.
+    read_chkfile()
+        Reads an existing chkfile and initializes the electron density to that value.
+    diagonalize()
+        Diagonalize the env subsystem and return an update density.
+    __do_unrestricted_diag()
+        Diagonalize an unrestricted subsystem.
+    __do_restricted_os_diag()
+        Diagonalize a restricted open shell subsystem.
+    __do_restricted_diag()
+        Diagonalize a restricted closed shell subsystem.
+    relax_sub_dmat()
+        Relaxes the subsystem based on the fock operator and returns the difference
+        between old and new density matrices.
+    __set_fermi(e_sorted)
+        Sets the fermi parameter of the subsystem based on the list of sorted orbitals
+        (esorted).
+    __set_occupation()
+        Sets the molecular occupation based on the sorted molecular orbital energies.
     """
 
 
-    def __init__(self, mol, env_method, env_order=1, env_smearsigma=0,
-                 initguess=None, conv=1e-8, damp=0., shift=0., subcycles=1,
-                 setfermi=None, diis=6, unrestricted=False, density_fitting=False,
-                 freeze=False, save_orbs=False, save_density=False, save_spin_density=False,
+    def __init__(self, mol, env_method, env_order=1, env_smearsigma=0.,
+                 initguess=None, damp=0., shift=0., subcycles=1, diis=6,
+                 unrestricted=False, density_fitting=False, freeze=False,
+                 save_orbs=False, save_density=False, save_spin_density=False,
                  verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
         """
         Parameters
@@ -113,10 +153,14 @@ class ClusterEnvSubSystem:
             The pyscf Mole object specifying the geometry and basis
         env_method : str
             Defines the method to use for environment calculations.
-        filename : str, optional
-            The path to the input file being read. (default is None)
-        smearsigma : float, optional
+        env_order : int, optional
+            ID for the subsystem in the full system.
+            (default is 1)
+        env_smearsigma : float, optional
             Sigma value for fermi smearing, (default is 0.)
+        initguess : str, optional
+            Which method to use for the initial density guess.
+            (default is None)
         damp : float, optional
             Damping percentage. Mixeas a percent of previous density into
             each new density. (default is 0.)
@@ -126,22 +170,28 @@ class ClusterEnvSubSystem:
             Number of diagonalization cycles. (default is 1)
         diis : int, optional
             Specifies DIIS method to use. (default is 0)
-        freeze : bool, optional
-            Whether to freeze the subsystem density or not.
+        unrestricted : bool, optional
+            Whether the subsystem is unrestricted.
             (default is False)
-        initguess : str, optional
-            Which method to use for the initial density guess.
-            (default is None)
-        grid_level : int, optional
-            Specifies pyscf Grids size. (default is 4)
-        rhocutoff : float, optional
-            Numerical integration rho cutoff. (default is 1e-7)
+        density_fitting : bool, optional
+            Whether to use density fitting for the env method.
+            (default is False)
+        freeze : bool, optional
+            Whether to freeze the electron density.
+            (default is False)
+        save_orbs : bool, optional
+            Whether to save the env orbitals to a file.
+            (default is False)
+        save_density : bool, optional
+            Whether to save the electron density to a file.
+            (default is False)
+        save_spin_density: bool, optional
+            Whether to save the spin density to a file.
+            (default is False)
         verbose : int, optional
             Specifies level of verbose output. (default is 3)
-        analysis : bool, optional
-            Analysis flag. (default is False)
-        debug : bool, optional
-            Debug flag. (default is False)
+        filename : str, optional
+            The path to the input file being read. (default is None)
         nproc : int, optional
             Number of processors provided for calculation. (default is None)
         pmem : int, optional
@@ -156,12 +206,10 @@ class ClusterEnvSubSystem:
 
         self.env_smearsigma = env_smearsigma
         self.env_initguess = initguess
-        self.env_conv = conv
         self.env_damp = damp
         self.env_shift = shift
 
         self.env_subcycles = subcycles
-        self.env_setfermi = setfermi
         self.diis_num = diis
 
         self.unrestricted = unrestricted
@@ -184,11 +232,7 @@ class ClusterEnvSubSystem:
         if scrdir is None:
             self.scr_dir = os.getenv('TMPDIR')
 
-        self.fullsys_cs = True #Is the full system a closed shell calculation? Determines how the rohf calculation is done later.
-
-
         self.fermi = [0., 0.]
-        self.flip_ros = False
         self.env_scf = self.init_env_scf()
         self.env_hcore = self.env_scf.get_hcore()
         self.env_dmat = None
@@ -222,12 +266,6 @@ class ClusterEnvSubSystem:
             self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
         else:
             self.diis = None
-
-        self.env_sub_nuc_grad = None
-        self.env_sub_emb_nuc_grad = None
-        self.env_sub_proj_nuc_grad = None
-        self.env_hcore_deriv = None
-        self.env_vhf_deriv = None
 
     def init_env_scf(self, mol=None, env_method=None, verbose=None,
                      damp=None, shift=None, dfit=None):
@@ -273,13 +311,6 @@ class ClusterEnvSubSystem:
                 scf_obj.xc = env_method
 
         elif mol.spin != 0:
-            #Constrained Unrestricted Calculation.
-            if mol.spin < 0:
-                #This doesn't work properly. As long as only setting spin above 0 should be fine.
-                self.flip_ros = True
-                mol.spin *= -1
-                mol.build()
-
             if 'hf' in env_method:
                 scf_obj = scf.ROHF(mol)
             else:
@@ -370,11 +401,6 @@ class ClusterEnvSubSystem:
             dmat = scf_obj.make_rdm1()
         else:
             dmat = scf_obj.get_init_guess()
-
-        if self.flip_ros:
-            temp_dmat = copy(dmat)
-            dmat[0] = temp_dmat[1]
-            dmat[1] = temp_dmat[0]
 
         #Dmat always stored [alpha, beta]
         if np.array(dmat).ndim == 2:
@@ -563,51 +589,13 @@ class ClusterEnvSubSystem:
                            self.emb_fock[1] - fock[1]]
         if mol is None:
             mol = self.mol
-        self.env_energy = self.get_env_elec_energy(env_method=env_method, fock=fock, dmat=dmat, env_hcore=env_hcore, proj_pot=proj_pot, emb_pot=emb_pot) + mol.energy_nuc()
+        self.env_energy = (self.get_env_elec_energy(env_method=env_method,
+                                                    fock=fock, dmat=dmat,
+                                                    env_hcore=env_hcore,
+                                                    proj_pot=proj_pot,
+                                                    emb_pot=emb_pot)
+                           + mol.energy_nuc())
         return self.env_energy
-
-    def get_env_nuc_grad(self, mol=None, scf_obj=None):
-        """Return the gradient of just the subsystem in isolation.
-           Must occur after a diagonalization."""
-
-        if mol is None:
-            mol = self.mol
-        if scf_obj is None:
-            scf_obj = self.env_scf
-
-        if self.unrestricted or self.mol.spin != 0:
-            total_grad = None
-        else:
-            grad_obj = scf_obj.nuc_grad_method()
-            mo_e = self.env_mo_energy[0]
-            mo_coeff = self.env_mo_coeff[0]
-            mo_occ = self.env_mo_occ[0] * 2.
-            hcore_deriv = grad_obj.hcore_generator(mol)
-            self.env_hcore_deriv = hcore_deriv
-            ovlp_1 = grad_obj.get_ovlp(mol)
-            dm0 = self.env_dmat[0] + self.env_dmat[1]
-
-            vhf = grad_obj.get_veff(mol, dm0)
-            self.env_vhf_deriv = np.copy(vhf)
-            dme0 = grad_obj.make_rdm1e(mo_e, mo_coeff, mo_occ)
-
-            atmlst = range(mol.natm)
-            aoslices = mol.aoslice_by_atom()
-            deriv = np.zeros((len(atmlst), 3))
-            for i, atm in enumerate(atmlst):
-                ind_0, ind_1 = aoslices[atm, 2:]
-                h1ao = hcore_deriv(atm)
-                deriv[i] += np.einsum('xij,ij->x', h1ao, dm0)
-                # nabla was applied on bra in vhf, *2 for the contributions of nabla|ket>
-                deriv[i] += np.einsum('xij,ij->x', vhf[:, ind_0:ind_1], dm0[ind_0:ind_1]) * 2
-                deriv[i] -= np.einsum('xij,ij->x', ovlp_1[:, ind_0:ind_1], dme0[ind_0:ind_1]) * 2
-
-                #de[k] += grad_obj.extra_force(ia, locals())
-
-            total_grad = deriv
-
-        self.env_sub_nuc_grad = total_grad
-        return total_grad
 
     def save_orbital_file(self, filename=None, scf_obj=None, mo_occ=None,
                           mo_coeff=None, mo_energy=None):
@@ -644,49 +632,63 @@ class ClusterEnvSubSystem:
             molden_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv.molden'
             with open(molden_fn, 'w') as fin:
                 tools.molden.header(scf_obj.mol, fin)
-                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[0], ene=mo_energy[0], occ=(mo_occ[0] + mo_occ[1]))
+                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[0],
+                                           ene=mo_energy[0],
+                                           occ=(mo_occ[0] + mo_occ[1]))
         else:
-            molden_fn_a = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_alpha.molden'
-            molden_fn_b = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_beta.molden'
+            molden_fn_a = (os.path.splitext(filename)[0] + '_' +
+                           self.chkfile_index + '_subenv_alpha.molden')
+            molden_fn_b = (os.path.splitext(filename)[0] + '_' +
+                           self.chkfile_index + '_subenv_beta.molden')
             with open(molden_fn_a, 'w') as fin:
                 tools.molden.header(scf_obj.mol, fin)
-                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[0], spin='Alpha', ene=mo_energy[0], occ=mo_occ[0])
+                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[0],
+                                           spin='Alpha', ene=mo_energy[0],
+                                           occ=mo_occ[0])
             with open(molden_fn_b, 'w') as fin:
                 tools.molden.header(scf_obj.mol, fin)
-                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[1], spin='Beta', ene=mo_energy[1], occ=mo_occ[1])
+                tools.molden.orbital_coeff(self.mol, fin, mo_coeff[1],
+                                           spin='Beta', ene=mo_energy[1],
+                                           occ=mo_occ[1])
         return True
 
-    def save_density_file(self, filename=None, density=None):
-        """Save the electron density to the file
+    def save_density_file(self, filename=None):
+        """Save the electron density as a molden file.
 
         Parameters
         ----------
-        filename : str
-        density : list
+        filename : str, optional
+            The filename to save the density as.
+            (default is None)
         """
+
         if filename is None:
             if self.filename is None:
                 print("Cannot save density because no filename")
                 return False
             filename = self.filename
-        if density is None:
-            density = self.get_dmat()
+        density = self.get_dmat()
         print(f'Writing Subsystem {self.chkfile_index} Density'.center(80))
         if self.mol.spin != 0 or self.unrestricted:
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_alpha.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index + '_subenv_alpha.cube')
             tools.cubegen.density(self.mol, cubegen_fn, density[0])
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_beta.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index + '_subenv_beta.cube')
             tools.cubegen.density(self.mol, cubegen_fn, density[1])
         else:
             cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv.cube'
             tools.cubegen.density(self.mol, cubegen_fn, density)
         return True
 
-    def save_spin_density_file(self, filename=None, density=None):
+    def save_spin_density_file(self, filename=None):
         """Saves a molden file of the spin density
 
         Parameters
         ----------
+        filename : str, optional
+            The filename to save the spin density as.
+            (default is None)
         """
 
         if filename is None:
@@ -694,11 +696,11 @@ class ClusterEnvSubSystem:
                 print("Cannot save density because no filename")
                 return False
             filename = self.filename
-        if density is None:
-            density = self.get_dmat()
+        density = self.get_dmat()
         if self.mol.spin != 0 or self.unrestricted:
             print(f'Writing Subsystem {self.chkfile_index} Spin Density'.center(80))
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_subenv_spinden.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index + '_subenv_spinden.cube')
             tools.cubegen.density(self.mol, cubegen_fn, np.subtract(density[0], density[1]))
         else:
             print('Cannot write spin density for a closed shell system.'.center(80))
@@ -802,15 +804,8 @@ class ClusterEnvSubSystem:
     def diagonalize(self):
         """Diagonalizes the subsystem fock matrix and returns updated density."""
 
-        num_orb_a = self.subsys_fock[0].shape[0]
-        num_orb_b = self.subsys_fock[1].shape[0]
-        num_orb = [np.zeros((num_orb_a)), np.zeros((num_orb_b))]
-        num_orb[0][:self.mol.nelec[0]] = 1.
-        num_orb[1][:self.mol.nelec[1]] = 1.
-
         for i in range(self.env_subcycles):
-            #TODO This doesn't work.
-            if i > 0:
+            if i > 0: #This doesn't work as intended right now.
                 self.update_subsys_fock()
 
             if self.unrestricted:
@@ -818,14 +813,13 @@ class ClusterEnvSubSystem:
 
             elif self.mol.spin != 0:
                 self.__do_restricted_os_diag()
-                #return self.env_dmat
 
             else:
                 self.__do_restricted_diag()
 
             e_sorted = [np.sort(self.env_mo_energy[0]), np.sort(self.env_mo_energy[1])]
             self.__set_fermi(e_sorted)
-            self.__set_occupation(e_sorted)
+            self.__set_occupation()
 
             self.env_dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]),
                                       self.env_mo_coeff[0].transpose().conjugate())
@@ -844,7 +838,7 @@ class ClusterEnvSubSystem:
         emb_proj_fock[0] = fock[0] + self.proj_pot[0]
         emb_proj_fock[1] = fock[1] + self.proj_pot[1]
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
-        self.env_mo_energy = [energy[0], energy[1]] #May be unnecessary.
+        self.env_mo_energy = [energy[0], energy[1]]
         self.env_mo_coeff = [coeff[0], coeff[1]]
 
     def __do_restricted_os_diag(self):
@@ -857,27 +851,10 @@ class ClusterEnvSubSystem:
         emb_proj_fock += fock[1] + self.proj_pot[1]
         emb_proj_fock /= 2.
 
-        #emb_proj_fock = scf.rohf.get_roothaan_fock(emb_proj_fock, dmat, scf_obj.get_ovlp())
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
 
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]
-        #occ = self.env_scf.get_occ(energy, coeff)
-        #alpha_occ = np.zeros_like(occ)
-        #beta_occ = np.zeros_like(occ)
-        #for i, occ_val in enumerate(occ):
-        #    if occ_val > 0:
-        #        alpha_occ[i] = 1.
-        #    if occ_val > 1:
-        #        beta_occ[i] = 1.
-        #env_mo_occ = [alpha_occ, beta_occ]
-        #self.env_mo_energy = env_mo_energy
-        #self.env_mo_coeff = env_mo_coeff
-        #self.env_mo_occ = env_mo_occ
-        #self.env_dmat[0] = np.dot((env_mo_coeff[0] * env_mo_occ[0]),
-        #                          env_mo_coeff[0].transpose().conjugate())
-        #self.env_dmat[1] = np.dot((env_mo_coeff[1] * env_mo_occ[1]),
-        #                          env_mo_coeff[1].transpose().conjugate())
 
     def __do_restricted_diag(self):
         """Performs diagonalization on the restricted env object."""
@@ -896,7 +873,7 @@ class ClusterEnvSubSystem:
         """
         sub_old_dm = self.get_dmat().copy()
         self.diagonalize()
-    
+
         new_dm = [None, None]
         if self.unrestricted or self.mol.spin != 0:
             ddm = sp.linalg.norm(self.get_dmat()[0] - sub_old_dm[0])
@@ -925,8 +902,6 @@ class ClusterEnvSubSystem:
         ----------
         e_sorted : list
             A list of the orbital energies sorted lowest to highest.
-        nocc_orbs : list
-            A list of the number of occupied orbitals for alpha and beta e.
         """
         self.fermi = [0., 0.]
         nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
@@ -941,18 +916,12 @@ class ClusterEnvSubSystem:
         else:
             self.fermi[1] = 0.    #Minimal basis
 
-    def __set_occupation(self, e_sorted):
+    def __set_occupation(self):
         """Sets the orbital occupation numbers.
-
-        Parameters
-        ----------
-        e_sorted : list
-            A sorted list of molecular orbital energies.
         """
         #Smear sigma may not be right for single elctron
         self.env_mo_occ = [np.zeros_like(self.env_mo_energy[0]),
                            np.zeros_like(self.env_mo_energy[1])]
-        nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
         if self.env_smearsigma > 0.:
             self.env_mo_occ[0] = ((self.env_mo_energy[0]
                                    - self.fermi[0]) / self.env_smearsigma)
@@ -984,82 +953,6 @@ class ClusterEnvSubSystem:
                 mo_coeff = self.env_mo_coeff[0]
                 mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
                 self.env_mo_occ = [mo_occ/2., mo_occ/2.]
-            #if len(e_sorted[0]) > nocc_orbs[0]:
-            #    for i in range(nocc_orbs[0]):
-            #        self.env_mo_occ[0][i] = 1
-            #else:
-            #    self.env_mo_occ[0][:] = 1.
-
-            #if len(e_sorted[1]) > nocc_orbs[1]:
-            #    for i in range(nocc_orbs[1]):
-            #        self.env_mo_occ[1][i] = 1
-            #else:
-            #    self.env_mo_occ[1][:] = 1.
-
-#    def get_useable_dmat(self, mat=None):
-#        """Return a useable density matrix for use with PySCF.
-#        This is because we always store the density matrix as a
-#        (2 x nao x nao) matrix."""
-#
-#        if self.unrestricted:
-#            return mat
-#        if self.cell.spin != 0:
-#            return mat
-#        else:
-#            return mat[0] + mat[1]
-
-
-#    def update_stored_dmat(self, mat=None):
-#        """Store the density matrix as a (2 x nao x nao) matrix."""
-#
-#        if mat.ndim == 3:
-#            return mat
-#        else:
-#            out = np.zeros((2, mat.shape[0], mat.shape[1]), dtype=mat.dtype)
-#            out[0] = mat / 2.0
-#            out[1] = mat / 2.0
-#            return out
-
-#    def get_useable_pot(self, mat=None):
-#        """Return a useable potential for use with PySCF.
-#        This is because we always store the potentials as a
-#        (2 x nao x nao) matrix."""
-#
-#        if mat.ndim == 2:
-#            return mat
-#        if self.unrestricted:
-#            return mat
-#        if self.cell.spin != 0:
-#            return mat
-#        else:
-#            return (mat[0] + mat[1])/2.
-#
-#    def update_stored_pot(self, mat=None):
-#        """Store the potential matrix as a (2 x nao x nao) matrix."""
-#
-#        if mat.ndim == 3:
-#            return mat
-#        else:
-#            out = np.zeros((2, mat.shape[0], mat.shape[1]), dtype=mat.dtype)
-#            out[0] = mat
-#            out[1] = mat
-#            return out
-#
-#    def print_coordinates(self):
-#        """Prints the Mole coordinates."""
-#        bohr_2_angstrom = 0.52917720859
-#        print(" Atom Coordinates (Angstrom) ".center(80, "-"))
-#        if hasattr(self, 'cell'):
-#            mol = self.cell
-#        else:
-#            mol = self.mol
-#        for i in range(mol.natm):
-#            a = mol.atom_symbol(i)
-#            c = mol.atom_coord(i) * bohr_2_angstrom
-#            st = "{0:<10} {1:10.4f} {2:10.4f} {3:10.4f}".format(
-#                a, c[0], c[1], c[2])
-#            print(st)
-
 
 class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
@@ -1067,45 +960,98 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
     Attributes
     ----------
-    active_method : str
+    hl_method : str
         Which method to use for high level calculation.
-    localize_orbitals : bool
-        Whether or not to localize orbitals.
-    active_orbs : list
-        List of active orbitals for multireference methods.
-    active_conv : float
-        Convergence parameter for active method.
-    active_grad : float
-        Gradient parameter for active method.
-    active_cycles : int
-        Number of active cycles.
-    active_damp : float
-        Damping parameter.
-    active_shift : float
-        Level shift parameter.
-    use_molprol : bool
-        Whether or not to use molpro.
-    writeorbs : bool
-        Whether or not to write active orbs.
-    active_mo_coeff : numpy.float64
-        Array of mo coefficients.
-    active_mo_occ : list
-        List of occupied orbitals.
-    active_mo_energy : list
-        List of mo orbital energies.
+    hl_initguess : str
+        Specifies initial dmat guess for hl method.
+    hl_sr_method : str
+        Specifies which single reference method to use for high level
+        calculations.
+    hl_spin : int
+        The spin of the high level calculation, different from the
+        lower level calculation.
+    hl_conv : float
+        The density convergence criteria of the high level calculation.
+    hl_grad : float
+        The convergence of the electronic gradient of the
+        high level calculation.
+    hl_cycles : int
+        The number of scf cycles for the high level method.
+    hl_damp : float
+        The damping parameter for the high level method.
+    hl_shift : float
+        The orbital shift parameter for the high level method.
+    hl_ext : str
+        The name of an external code to calculate the high level energy.
+    hl_unrestricted : bool
+        Whether the high level calculation is unrestricted.
+    hl_compress_approx : bool
+        Whether to use the compression approximation for the high levem method.
+    hl_density_fitting : bool
+        Whether to use density fitting for high level calculation.
+    hl_save_orbs : bool
+        Whether to save the high level orbitals.
+    hl_save_density : bool
+        Whether to save the high level electron density.
+    hl_save_spin_density : bool
+        Whether to save high level electron spin density.
+    hl_mo_coeff : array
+        Array of high level molecular orbital coeffecients
+    hl_mo_occ : array
+        Array of high level molecular orbital occupation
+    hl_mo_energy : array
+        Array of high level molecular orbital energies
+    hl_dmat : array
+        Array of high level molecular electron density
+    hl_sr_scf : SCF Object
+        PySCF SCF object for the single reference part of high level calculation.
+    hl_energy : float
+        The energy of the high level method.
 
     Methods
     -------
-    active_proj_energy(dmat, proj_pot)
-        Get the projection potential for the density of the active system.
-    active_in_env_energy(mol, dmat, env_hcore, emb_pot, proj_pot, active_method)
-        Get the high level energy embedded into the total system.
+    __set_hl_method_settings(hl_dict)
+        Set additional object attributes specific to the high level method.
+    get_hl_proj_energy(dmat, proj_pot)
+        Gets the projection operator energy based on the high level density.
+    get_hl_in_env_energy()
+        Gets the energy of the high level calculation in the potential of the
+        environment.
+    __get_ext_energy()
+        Uses the specified external code to calculate the high level energies.
+    __do_sr_scf()
+        Performs the inital single reference calculation for the high level
+        method.
+    __gen_hf_scf()
+        Initializes a hartree-fock single reference calculation as the initial
+        guess for high level calculations.
+    __gen_dft_scf()
+        Initializes a DFT single reference calculation as the initial guess
+        for high level calculations.
+    __do_cc()
+        Performs a coupled cluster calculation as the high level method.
+    __do_mp()
+        Performs an MP calculation as the high level method.
+    __do_casscf()
+        Performs a CASSCF calculation as the high level method.
+    __do_fci()
+        Performs an FCI calculation as the high level method.
+    __do_dmrg()
+        Performs a DMRG calculation as the high level method.
+    __do_shci()
+        Performs an SHCI calculation as the high level method.
+    __save_fcidump()
+        Saves a formatted fcidump file at the specified location.
+    __save_hl_density_file()
+        Saves the high level electron density to a file.
+    __save_hl_orbital_file()
+        Saves the high level orbitals to a file.
     """
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
                  hl_sr_method=None, hl_spin=None, hl_conv=None, hl_grad=None,
-                 hl_cycles=None, hl_damp=0., hl_shift=0., hl_freeze_orbs=None,
-                 hl_ext=None, hl_unrestricted=False, hl_compress_approx=False,
+                 hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
+                 hl_unrestricted=False, hl_compress_approx=False,
                  hl_density_fitting=False, hl_save_orbs=False,
                  hl_save_density=False, hl_save_spin_density=False,
                  hl_dict=None, **kwargs):
@@ -1116,27 +1062,62 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             The pyscf Mole object specifitying geometry and basis.
         env_method : str
             Defines the method for use in env calculations.
-        active_method : str
+        hl_method : str
             Defines the high level method for the calculations.
-        localize_orbitals : bool, optional
-            Whether to localize the orbitals first (default is False).
-        active_orbs : list, optional
-            A list of active orbitals (default is None).
-        active_conv : float, optional
-            Active SCF convergence parameters (default is 1e-9).
-        active_grad : float, optional
-            Active SCF gradient parameters (default is None).
-        active_cycles : int, optional
-            Number of active cycles for SCF (default is 100).
-        use_molpro : bool, optional
-            Whether or not to use molpro for high level calculations
-            (default is False).
-        writeorbs : bool, optional
-            Whether or not to write the orbitals out (default is False).
-        active_damp : int, optional
-            SCF damping parameters (default is 0).
-        active_shift : int, optional
-            SCF level shift parameters (default is 0).
+        hl_order : int, optional
+            Specifies the subsystem within the context of the full system.
+            (default is 1)
+        hl_initguess : str, optional
+            Specifies initial dmat guess for hl method.
+            (default is None)
+        hl_sr_method : str, optional
+            Specifies which single reference method to use for high level
+            calculations.
+            (default is None)
+        hl_spin : int, optional
+            The spin of the high level calculation, different from the
+            lower level calculation.
+            (default is None)
+        hl_conv : float, optional
+            The density convergence criteria of the high level calculation.
+            (default is None)
+        hl_grad : float, optional
+            The convergence of the electronic gradient of the
+            high level calculation.
+            (default is None)
+        hl_cycles : int, optional
+            The number of scf cycles for the high level method.
+            (default is None)
+        hl_damp : float, optional
+            The damping parameter for the high level method.
+            (default is 0.)
+        hl_shift : float, optional
+            The orbital shift parameter for the high level method.
+            (default is 0.)
+        hl_ext : str, optional
+            The name of an external code to calculate the high level energy.
+            (default is None)
+        hl_unrestricted : bool, optional
+            Whether the high level calculation is unrestricted.
+            (default is False)
+        hl_compress_approx : bool, optional
+            Whether to use the compression approximation for the high levem method.
+            (default is False)
+        hl_density_fitting : bool, optional
+            Whether to use density fitting for high level calculation.
+            (default is False)
+        hl_save_orbs : bool, optional
+            Whether to save the high level orbitals.
+            (default is False)
+        hl_save_density : bool, optional
+            Whether to save the high level electron density.
+            (default is False)
+        hl_save_spin_density : bool, optional
+            Whether to save high level electron spin density.
+            (default is False)
+        hl_dict : dict, optional
+            A dictionary containing method specific keywords.
+            (default is None)
         """
 
         super().__init__(mol, env_method, **kwargs)
@@ -1152,7 +1133,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_shift = hl_shift
 
         self.hl_ext = hl_ext
-        self.hl_freeze_orbs = hl_freeze_orbs
         self.hl_unrestricted = hl_unrestricted
         self.hl_compress_approx = hl_compress_approx
         self.hl_density_fitting = hl_density_fitting
@@ -1167,9 +1147,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_dmat = None
         self.hl_sr_scf = None
         self.hl_energy = None
-        self.hl_sub_nuc_grad = None
-        self.hl_sub_emb_nuc_grad = None
-        self.hl_sub_proj_nuc_grad = None
 
     def __set_hl_method_settings(self, hl_dict):
         """Sets the object parameters based on the hl settings
@@ -1183,11 +1160,11 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         if hl_dict is None:
             hl_dict = {}
         self.hl_dict = hl_dict
-           
+
         if 'cc' in self.hl_method:
             self.cc_loc_orbs = hl_dict.get("loc_orbs")
             self.cc_initguess = hl_dict.get("cc_initguess")
-            self.cc_froz_orbs = hl_dict.get("froz_orbs")
+            self.cc_froz_core_orbs = hl_dict.get("froz_core_orbs")
         if 'cas' in self.hl_method:
             self.cas_loc_orbs = hl_dict.get("loc_orbs")
             self.cas_init_guess = hl_dict.get("cas_initguess")
@@ -1249,72 +1226,72 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         fci_aliases = ['fci']
         fcidump_aliases = ['fcidump']
         known_methods = hf_aliases + cc_aliases + mp_aliases + fci_aliases + fcidump_aliases
+
         if (self.hl_sr_method is None and
                 self.hl_method not in known_methods and
                 not re.match(cas_regex, self.hl_method)):
             self.hl_sr_method = self.hl_method
 
         if self.hl_ext is not None:
-            self.get_ext_energy()
+            self.__get_ext_energy()
             return self.hl_energy
 
-        self.do_sr_scf()
+        self.__do_sr_scf()
 
         if self.hl_method in cc_aliases:
-            self.do_cc()
+            self.__do_cc()
 
         elif self.hl_method in mp_aliases:
-            self.do_mp()
+            self.__do_mp()
 
         elif re.match(cas_regex, self.hl_method):
-            self.do_casscf()
+            self.__do_casscf()
 
         elif self.hl_method in fci_aliases:
-            self.do_fci()
+            self.__do_fci()
 
         elif re.match(dmrg_regex, self.hl_method):
-            self.do_dmrg()
+            self.__do_dmrg()
 
         elif re.match(shci_regex, self.hl_method):
-            self.do_shci()
+            self.__do_shci()
 
         elif self.hl_method in fcidump_aliases:
-            self.save_fcidump()
+            self.__save_fcidump()
 
         return self.hl_energy
 
-    def get_ext_energy(self):
+    def __get_ext_energy(self):
         """Uses an external method to calculate high level energy.
-
-        Parameters
-        ----------
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
 
         print("use external method for hl calculation")
         hcore = self.env_scf.get_hcore()
-        #emb_pot_ro = self.emb_ro_fock[0] - self.fock
         emb_proj_pot = [self.emb_pot[0] + self.proj_pot[0], self.emb_pot[1] + self.proj_pot[1]]
         ext_factory = ExtFactory()
         name_no_path = os.path.split(self.filename)[-1]
         name_no_ext = os.path.splitext(name_no_path)[0]
         file_path = os.path.split(self.filename)[0]
         scr_path = self.scr_dir
-        ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(self.mol), self.hl_method, emb_proj_pot, core_ham=hcore, filename=name_no_ext, work_dir=file_path, scr_dir=scr_path, nproc=self.nproc, pmem=self.pmem, save_orbs=None, save_density=False, hl_dict=self.hl_dict)
+        ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(self.mol),
+                                          self.hl_method, emb_proj_pot,
+                                          core_ham=hcore, filename=name_no_ext,
+                                          work_dir=file_path, scr_dir=scr_path,
+                                          nproc=self.nproc, pmem=self.pmem,
+                                          save_orbs=None, save_density=False,
+                                          hl_dict=self.hl_dict)
         energy = ext_obj.get_energy()
         self.hl_energy = energy[0]
 
-    def do_sr_scf(self):
-        """Initializes and runs the single reference hf object"""
+    def __do_sr_scf(self):
+        """Initializes and runs the single reference hf object
+        """
 
         hf_aliases = ['hf', 'uhf', 'rhf', 'rohf']
         if (self.hl_sr_method is None or self.hl_sr_method in hf_aliases):
-            self.gen_hf_scf()
+            self.__gen_hf_scf()
         else:
-            self.gen_dft_scf()
+            self.__gen_dft_scf()
 
         if self.hl_initguess == 'ft':
             dmat = self.get_dmat()
@@ -1334,15 +1311,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_energy = self.hl_sr_scf.kernel(dm0=dmat)
 
-    def gen_hf_scf(self):
+    def __gen_hf_scf(self):
         """Initializes the single reference hartree-fock object.
-
-        Parameters
-        ----------
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
 
         #Use HF for initial guesses
@@ -1376,17 +1346,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_sr_scf = hl_sr_scf
 
-    def gen_dft_scf(self):
+    def __gen_dft_scf(self):
         """Initializes the single reference dft object.
-
-        Parameters
-        ----------
-        xc_fun : str
-           The exchange correlation functional.
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
 
         #Use DFT for initial guesses
@@ -1424,7 +1385,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hl_sr_scf.xc = self.hl_sr_method
         self.hl_sr_scf = hl_sr_scf
 
-    def do_cc(self):
+    def __do_cc(self):
         """Perform the requested coupled cluster calculation."""
 
         #If dft for sr method, need to convert to hf.
@@ -1433,7 +1394,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         else:
             hl_cc = cc.CCSD(self.hl_sr_scf)
 
-        hl_cc.frozen = self.cc_froz_orbs
+        hl_cc.frozen = self.cc_froz_core_orbs
         if self.hl_conv is not None:
             hl_cc.conv_tol = self.hl_conv
         if self.hl_cycles is not None:
@@ -1448,14 +1409,14 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 ecc_t = ccsd_t.kernel(hl_cc, eris)
             self.hl_energy += ecc_t
 
-    def do_mp(self):
+    def __do_mp(self):
         """Perform the requested perturbation calculation"""
 
         #If dft for sr method, need to convert to hf.
         if self.hl_unrestricted:
             hl_mp = mp.UMP2(self.hl_sr_scf)
         elif self.mol.spin != 0:
-            print("ro mp2")
+            print("ROMP2 Not Implemented.")
         else:
             hl_mp = mp.MP2(self.hl_sr_scf)
 
@@ -1466,10 +1427,13 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         emp = hl_mp.kernel()[0]
         self.hl_energy += emp
 
-    def do_casscf(self):
+    def __do_casscf(self):
         """Perform the requested casscf calculation"""
 
-        active_space = [int(i) for i in (self.hl_method[self.hl_method.find("[") + 1:self.hl_method.find("]")]).split(',')]
+        str_start = self.hl_method.find("[") + 1
+        str_end = self.hl_method.find("]")
+        active_space_str_list = self.hl_method[str_start:str_end].split(',')
+        active_space = list(map(int, active_space_str_list))
         hl_casscf = mcscf.CASSCF(self.hl_sr_scf, active_space[0], active_space[1])
         if self.hl_conv is not None:
             hl_casscf.conv_tol = self.hl_conv
@@ -1478,22 +1442,15 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_energy = hl_casscf.kernel()[0]
 
-    def do_fci(self):
-        """Perform the requested fci calculation. THIS IS NOT CORRECT."""
+    def __do_fci(self):
+        """Perform the requested fci calculation. This is incomplete."""
 
         cisolver = fci.FCI(self.mol, self.hl_sr_scf.mo_coeff)
         hl_energy_tot = cisolver.kernel()
         self.hl_energy = hl_energy_tot[0]
 
-    def do_dmrg(self):
+    def __do_dmrg(self):
         """Perform the requested dmrg calculation.
-
-        Parameters
-        ----------
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
         from pyscf import dmrgscf
 
@@ -1501,7 +1458,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                       + (self.emb_pot[0] + self.emb_pot[1])/2.
                       + (self.proj_pot[0] + self.proj_pot[1])/2.))
         self.hl_sr_scf.get_hcore = lambda *args, **kwargs: mod_hcore
-        active_space = [int(i) for i in (self.hl_method[self.hl_method.find("[") + 1:self.hl_method.find("]")]).split(',')]
+        str_start = self.hl_method.find("[") + 1
+        str_end = self.hl_method.find("]")
+        active_space_str_list = self.hl_method[str_start:str_end].split(',')
+        active_space = list(map(int, active_space_str_list))
         hl_dmrg = dmrgscf.DMRGSCF(self.hl_sr_scf, active_space[0], active_space[1])
 
         dmrg_mem = self.pmem
@@ -1521,15 +1481,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 enevpt = mrpt.NEVPT(hl_dmrg).kernel()
         self.hl_energy += edmrg + enevpt
 
-    def do_shci(self):
+    def __do_shci(self):
         """Perform the requested shci calculation.
-
-        Parameters
-        ----------
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
         from pyscf import shciscf
 
@@ -1537,7 +1490,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                       + (self.emb_pot[0] + self.emb_pot[1])/2.
                       + (self.proj_pot[0] + self.proj_pot[1])/2.))
         self.hl_sr_scf.get_hcore = lambda *args, **kwargs: mod_hcore
-        active_space = [int(i) for i in (self.hl_method[self.hl_method.find("[") + 1:self.hl_method.find("]")]).split(',')]
+        str_start = self.hl_method.find("[") + 1
+        str_end = self.hl_method.find("]")
+        active_space_str_list = self.hl_method[str_start:str_end].split(',')
+        active_space = list(map(int, active_space_str_list))
         hl_shci = shciscf.shci.SHCISCF(self.hl_sr_scf, active_space[0], active_space[1])
         hl_shci.fcisolver.mpiprefix = self.shci_mpi_prefix
         hl_shci.fcisolver.stochastic = not self.shci_no_stochastic
@@ -1549,15 +1505,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         ecc = 0
         self.hl_energy += ecc
 
-    def save_fcidump(self):
+    def __save_fcidump(self):
         """Saves fcidump file.
-
-        Parameters
-        ----------
-        emb_pot : np.array
-            Array of the embedding potential.
-        proj_pot : np.array
-            Array of the projection potential.
         """
 
         mod_hcore = ((self.env_scf.get_hcore()
@@ -1571,62 +1520,72 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             os.path.splitext(self.filename)[0] + '.fcidump'),
                                tol=1e-200)
 
-    def save_hl_density_file(self, filename=None, density=None):
+    def __save_hl_density_file(self, hl_density):
         """Saves the high level system density to file.
 
         Parameters
-        ---------
-        filename : str
-            Name of file to save the cube density file.
-        density : np.array
-            An array of the density matrix for the subsystem.
+        ----------
+        hl_density : array
+            An array of the high level density matrix to save.
         """
 
-        if filename is None:
-            if self.filename is None:
-                print("Cannot save hl density because no filename")
-                return False
-            filename = self.filename
-        if density is None:
-            density = self.get_dmat()
-        cubegen_fn = os.path.splitext(filename)[0] + '_hl.cube'
-        tools.cubegen.density(self.mol, cubegen_fn, density)
+        if self.filename is None:
+            print("Cannot save hl density because no filename")
+            return False
+        if self.hl_unrestricted:
+            cubegen_fn = (os.path.splitext(self.filename)[0] + '_' +
+                          self.chkfile_index + '_hl_alpha.cube')
+            tools.cubegen.density(self.mol, cubegen_fn, hl_density[0])
+            cubegen_fn = (os.path.splitext(self.filename)[0] + '_' +
+                          self.chkfile_index +  '_hl_beta.cube')
+            tools.cubegen.density(self.mol, cubegen_fn, hl_density[1])
+        else:
+            cubegen_fn = (os.path.splitext(self.filename)[0] + '_' +
+                          self.chkfile_index +  '_hl.cube')
+            tools.cubegen.density(self.mol, cubegen_fn, hl_density)
         return True
 
-    def save_hl_orbital_file(self):
+    def __save_hl_orbital_file(self, hl_mo_coeff, hl_mo_energy, hl_mo_occ):
         '''Save the orbitals generated by the hl method.
 
         Parameters
         ----------
-
-        Returns
-        -------
+        hl_mo_coeff : array
+            An array of molecular orbital coeffecients from the high level method.
+        hl_mo_energy : array
+            An array of molecular orbital energies from the high level method.
+        hl_mo_occ : array
+            An array of molecular occupations from the high level method.
         '''
         if self.filename is None:
             print("Cannot save hl orbitals because no filename")
             return False
-        molden_fn = os.path.splitext(self.filename)[0] + '_hl.molden'
-        with open(molden_fn, 'w') as fin:
-            tools.molden.header(self.mol, fin)
-            tools.molden.orbital_coeff(self.mol, fin, self.env_mo_coeff,
-                                       ene=self.env_mo_energy,
-                                       occ=self.env_mo_occ)
-        tools.molden.from_mo(self.mol, molden_fn, self.env_mo_coeff,
-                             ene=self.env_mo_energy, occ=self.env_mo_occ)
+        if self.hl_unrestricted:
+            molden_fn = os.path.splitext(self.filename)[0] + self.chkfile_index + '_hl_alpha.molden'
+            with open(molden_fn, 'w') as fin:
+                tools.molden.header(self.mol, fin)
+                tools.molden.orbital_coeff(self.mol, fin, hl_mo_coeff[0],
+                                           ene=hl_mo_energy[0],
+                                           occ=hl_mo_occ[0])
+            tools.molden.from_mo(self.mol, molden_fn, hl_mo_coeff[0],
+                                 ene=hl_mo_energy[0], occ=hl_mo_occ[0])
+
+            molden_fn = os.path.splitext(self.filename)[0] + self.chkfile_index + '_hl_beta.molden'
+            with open(molden_fn, 'w') as fin:
+                tools.molden.header(self.mol, fin)
+                tools.molden.orbital_coeff(self.mol, fin, hl_mo_coeff[1],
+                                           ene=hl_mo_energy[1],
+                                           occ=hl_mo_occ[1])
+            tools.molden.from_mo(self.mol, molden_fn, hl_mo_coeff[1],
+                                 ene=hl_mo_energy[1], occ=hl_mo_occ[1])
+
+        else:
+            molden_fn = os.path.splitext(self.filename)[0] + self.chkfile_index + '_hl.molden'
+            with open(molden_fn, 'w') as fin:
+                tools.molden.header(self.mol, fin)
+                tools.molden.orbital_coeff(self.mol, fin, hl_mo_coeff,
+                                           ene=hl_mo_energy,
+                                           occ=hl_mo_occ)
+            tools.molden.from_mo(self.mol, molden_fn, hl_mo_coeff,
+                                 ene=hl_mo_energy, occ=hl_mo_occ)
         return True
-#class ClusterExcitedSubSystem(ClusterHLSubSystem):
-#    """Excited state subsystem object for embedding
-#
-#    Attributes
-#    ----------
-#    UNKNOWN
-#
-#    Methods
-#    -------
-#    UNKNOWN
-#    """
-#
-#
-#    def __init__(self):
-#        super().__init__()
-#

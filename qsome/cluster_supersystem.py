@@ -132,8 +132,9 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None,
-                 ft_damp=0, ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1, ft_initguess=None, ft_unrestricted=False,
-                 ft_save_orbs=False, ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
+                 ft_damp=0, ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
+                 ft_initguess=None, ft_unrestricted=False, ft_save_orbs=False,
+                 ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
 
         """
@@ -275,22 +276,18 @@ class ClusterSuperSystem:
         # Densities are stored separately to allow for alpha and beta.
         self.is_ft_conv = False
         self.ext_pot = np.array([0., 0.])
-        #self.update_hl_basis_tau()
         mol_list = [x.mol for x in self.subsystems]
         self.mol = concat_mols(mol_list)
-        #self.update_hl_basis_tau()
         self.fs_scf = None
         self.__gen_sub2sup()
         self.__init_scf()
 
-        # how to include sigmasmear? Currently not in pyscf.
         self.smat = self.fs_scf.get_ovlp()
         self.mo_coeff = np.array([np.zeros_like(self.smat), np.zeros_like(self.smat)])
         self.local_mo_coeff = np.array([None, None])
         self.mo_occ = np.array([np.zeros_like(self.smat[0]),
                                 np.zeros_like(self.smat[0])])
         self.mo_energy = self.mo_occ.copy()
-        #self.fock = self.mo_coeff.copy()
         self.hcore = self.fs_scf.get_hcore()
         self.fock = [None, None]
         self.veff = [None, None]
@@ -304,8 +301,6 @@ class ClusterSuperSystem:
         self.fs_dmat = None
         self.emb_dmat = None
 
-
-        # There are other diis methods but these don't work with out method due to subsystem projection.
         if ft_diis is None:
             self.ft_diis = None
         else:
@@ -537,89 +532,6 @@ class ClusterSuperSystem:
                 subsystem.env_dmat = sub_dmat
             elif sub_guess == 'localsup': # Localize supermolecular density.
                 pass
-                # Incomplete.
-                #mo_alpha = lo.PM(mol).kernel(fs_scf.mo_coeff[:, :mol.nelec[0]])
-                #mo_beta = lo.PM(mol).kernel(fs_scf.mo_coeff[:, :mol.nelec[1]])
-                #temp_smat = np.copy(fs_scf.get_ovlp())
-                #sub_dmat = 0.
-                #for j in range(self.mol.nelec[0]):
-                #    portion = [0 for i in range(len(self.subsystems))]
-                #    for n in range(len(self.subsystems)):
-                #        temp_smat = np.copy(self.fs_scf.get_ovlp())
-                #        temp_smat = temp_smat[np.ix_(s2s[n], s2s[n])]
-                #        if n > 0:
-                #            sub_nao = self.subsystems[n-1].mol.nao_nr()
-                #            dl_n = np.outer(
-                #                mo_alpha[sub_nao:,j].T, mo_alpha[sub_nao:,j])
-                #            portion[n] = (np.trace(np.dot(dl_n, temp_smat)))
-                #        else:
-                #            sub_nao = self.subsystems[n].mol.nao_nr()
-                #            dl = np.outer(
-                #                mo_alpha[:sub_nao,j].T, mo_alpha[:sub_nao,j])
-                #            portion[n] = (np.trace(np.dot(dl, temp_smat)))
-                #    if portion[i] >= max(portion):
-                #        #sub_mo[:,j] += mo_alpha[:,j]
-                #        if i > 0:
-                #            sub_dmat += (dl_n * 2.)
-                #        else:
-                #            sub_dmat += (dl * 2.)
-                ##print(sub_mo)
-                ##temp_dm = self.fs_scf.make_rdm1(sub_mo, self.fs_scf.mo_occ)[np.ix_(s2s[i], s2s[i])]
-                ##temp_dm = sub_dmat[np.ix_(s2s[i], s2s[i])]
-                #temp_dm = sub_dmat
-                ##print ("SEP")
-                ###One way of determining electrons.
-                #temp_smat = np.copy(self.fs_scf.get_ovlp())
-                #temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
-                #num_e = np.trace(np.dot(temp_dm, temp_sm))
-                #print (f"Subsystem {i} Electrion Number")
-                #print (num_e)
-                #temp_dm *= subsystem.mol.nelectron / num_e
-                #num_e = np.trace(np.dot(temp_dm, temp_sm))
-                #print (num_e)
-                #print ()
-
-                #loc_dm = [temp_dm/2., temp_dm/2.]
-                #subsystem.update_density(loc_dm)
-                #s2s = self.sub2sup
-                #self.get_supersystem_energy(readchk=super_chk, local_orbs=True)
-                #local_coeff = [0,0]
-                #local_coeff[0] = self.local_mo_coeff[0].T
-                #local_coeff[1] = self.local_mo_coeff[1].T
-                #local_occ = [np.zeros(len(local_coeff[0])), np.zeros(len(local_coeff[1]))]
-                #occ_order = [None, None]
-                #temp_co = [0,0]
-                #temp_dm = [0,0]
-                #for j in range(len(local_coeff[0])):
-                #    temp_co[0] = local_coeff[0][j][s2s[i]]
-                #    temp_co[1] = local_coeff[1][j][s2s[i]]
-                #    temp_dm[0] = np.outer(temp_co[0], temp_co[0])
-                #    temp_dm[1] = np.outer(temp_co[1], temp_co[1])
-                #    local_occ[0][j] = np.trace(np.dot(temp_dm[0], subsystem.env_scf.get_ovlp()))
-                #    local_occ[1][j] = np.trace(np.dot(temp_dm[1], subsystem.env_scf.get_ovlp()))
-                #if subsystem.flip_ros:
-                #    occ_order[0] = np.argsort(local_occ[0])[-1*int(subsystem.mol.nelec[1]):]
-                #    occ_order[1] = np.argsort(local_occ[1])[-1*int(subsystem.mol.nelec[0]):]
-                #else:
-                #    occ_order[0] = np.argsort(local_occ[0])[-1*int(subsystem.mol.nelec[0]):]
-                #    occ_order[1] = np.argsort(local_occ[1])[-1*int(subsystem.mol.nelec[1]):]
-                #local_occ = [np.zeros(len(local_coeff[0])), np.zeros(len(local_coeff[1]))]
-                #local_occ[0][occ_order[0]] = 1
-                #local_occ[1][occ_order[1]] = 1
-                #new_dm = np.zeros_like(subsystem.env_dmat)
-
-                ##Can likely do this with multiply by the local_occ rather than iterate.
-                #for k in range(len(local_coeff[0])):
-                #    if local_occ[0][k]:
-                #        temp_d = local_coeff[0][k][s2s[i]]
-                #        temp_d = np.outer(temp_d, temp_d)
-                #        new_dm[0] += temp_d
-                #    if local_occ[1][k]:
-                #        temp_d = local_coeff[1][k][s2s[i]]
-                #        temp_d = np.outer(temp_d, temp_d)
-                #        new_dm[1] += temp_d
-
-                #subsystem.env_dmat = new_dm
 
         self.update_fock(diis=False)
         self.update_proj_pot()
@@ -707,7 +619,7 @@ class ClusterSuperSystem:
                 scf_obj.scf()
             self.fs_dmat = scf_obj.make_rdm1()
 
-            if self.fs_dmat.ndim == 2: #Always store as alpha and beta, even if closed shell. Makes calculations easier.
+            if self.fs_dmat.ndim == 2:
                 t_d = [self.fs_dmat.copy()/2., self.fs_dmat.copy()/2.]
                 self.fs_dmat = t_d
                 self.mo_coeff = [self.fs_scf.mo_coeff, self.fs_scf.mo_coeff]
@@ -732,18 +644,12 @@ class ClusterSuperSystem:
             #Can also use ER and Boys
             if self.fs_unrestricted or scf_obj.mol.spin != 0:
                 nelec_a = scf_obj.mol.nelec[0]
-                #self.local_mo_coeff[0] = lo.PM(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 self.local_mo_coeff[0] = lo.ER(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
-                #self.local_mo_coeff[0] = lo.Boys(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 nelec_b = scf_obj.mol.nelec[1]
-                #self.local_mo_coeff[1] = lo.PM(scf_obj.mol, self.mo_coeff[1][:, :nelec_b]).kernel()
                 self.local_mo_coeff[1] = lo.ER(scf_obj.mol, self.mo_coeff[1][:, :nelec_b]).kernel()
-                #self.local_mo_coeff[1] = lo.Boys(scf_obj.mol, self.mo_coeff[1][:, :nelec_b]).kernel()
             else:
                 nelec_a = scf_obj.mol.nelec[0]
-                #self.local_mo_coeff[0] = lo.PM(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 self.local_mo_coeff[0] = lo.ER(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
-                #self.local_mo_coeff[0] = lo.Boys(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 self.local_mo_coeff[1] = self.local_mo_coeff[0]
 
         return self.fs_energy
@@ -776,12 +682,14 @@ class ClusterSuperSystem:
 
         if self.mol.spin != 0 or self.fs_unrestricted:
             print('Writing Full System Spin Density'.center(80))
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_spinden.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index + '_fs_spinden.cube')
             cubegen.density(self.mol, cubegen_fn, np.subtract(density[0], density[1]))
         else:
             print('Cannot write spin density for a closed shell system.'.center(80))
 
-    def save_fs_orbital_file(self, filename=None, scf_obj=None, mo_occ=None, mo_coeff=None, mo_energy=None):
+    def save_fs_orbital_file(self, filename=None, scf_obj=None, mo_occ=None,
+                             mo_coeff=None, mo_energy=None):
         """Save the full system KS-DFT electron density as a molden file.
         """
         if filename is None:
@@ -801,16 +709,21 @@ class ClusterSuperSystem:
                 molden.header(scf_obj.mol, fin)
                 molden.orbital_coeff(self.mol, fin, mo_coeff, ene=mo_energy, occ=mo_occ)
         else:
-            molden_fn_a = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_alpha.molden'
+            molden_fn_a = (os.path.splitext(filename)[0] + '_' +
+                           self.chkfile_index + '_fs_alpha.molden')
             print('Writing Full System Orbitals'.center(80))
             with open(molden_fn_a, 'w') as fin:
                 molden.header(scf_obj.mol, fin)
-                molden.orbital_coeff(self.mol, fin, mo_coeff[0], spin='Alpha', ene=mo_energy[0], occ=mo_occ[0])
-            molden_fn_b = os.path.splitext(filename)[0] + '_' + self.chkfile_index + '_fs_beta.molden'
+                molden.orbital_coeff(self.mol, fin, mo_coeff[0],
+                                     spin='Alpha', ene=mo_energy[0],
+                                     occ=mo_occ[0])
+            molden_fn_b = (os.path.splitext(filename)[0] + '_' +
+                           self.chkfile_index + '_fs_beta.molden')
             print('Writing Full System Orbitals'.center(80))
             with open(molden_fn_b, 'w') as fin:
                 molden.header(scf_obj.mol, fin)
-                molden.orbital_coeff(self.mol, fin, mo_coeff[1], spin='Beta', ene=mo_energy[1], occ=mo_occ[1])
+                molden.orbital_coeff(self.mol, fin, mo_coeff[1], spin='Beta',
+                                     ene=mo_energy[1], occ=mo_occ[1])
 
 
     @time_method("Subsystem Energies")
@@ -830,199 +743,12 @@ class ClusterSuperSystem:
             subsystem.update_emb_pot(froz_veff)
             subsystem.get_env_energy()
             print(f"Uncorrected Energy:{subsystem.env_energy:>61.8f}")
-        #self.correct_env_energy()
 
-#    @time_method("Subsystem Nuclear Gradients")
-#    def get_emb_subsys_nuc_grad(self):
-#        # Update subsystem embedding gradient.
-#        # Assumes closed shell for now.
-#        s2s = self.sub2sup
-#        nS = self.mol.nao_nr()
-#        atms_completed = 0
-#        full_sys_grad = self.fs_scf.nuc_grad_method()
-#        hcore_deriv = full_sys_grad.hcore_generator(self.fs_scf.mol)
-#        s1 = full_sys_grad.get_ovlp(self.fs_scf.mol)
-#        full_fock = self.fock
-#        full_fock_cs = (full_fock[0] + full_fock[1])/2.
-#        prev_p1 = 0
-#
-#        full_dmat = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#        for j in range(len(self.subsystems)):
-#            sub_temp = self.subsystems[j]
-#            full_dmat[0][np.ix_(s2s[j], s2s[j])] += sub_temp.dmat[0]
-#            full_dmat[1][np.ix_(s2s[j], s2s[j])] += sub_temp.dmat[1]
-#
-#        vhf = full_sys_grad.get_veff(self.fs_scf.mol, full_dmat[0] + full_dmat[1])
-#        for i in range(len(self.subsystems)):
-#            subsystem = self.subsystems[i]
-#            subsystem.get_env_nuc_grad()
-#            if isinstance(subsystem, cluster_subsystem.ClusterActiveSubSystem):
-#                dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[0]
-#                dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.dmat[1]
-#
-#
-#                env_dm = np.copy(full_dmat)
-#                env_dm[0][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[0]
-#                env_dm[1][np.ix_(s2s[i], s2s[i])] -= subsystem.dmat[1]
-#
-#                dm_cs = dm[0] + dm[1]
-#                env_dm_cs = env_dm[0] + env_dm[1]
-#
-#                active_dm = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                active_dm[0][np.ix_(s2s[i], s2s[i])] += subsystem.active_dmat[0]
-#                active_dm[1][np.ix_(s2s[i], s2s[i])] += subsystem.active_dmat[1]
-#
-#                active_dm_cs = active_dm[0] + active_dm[1]
-#
-#                atmlist = range(atms_completed, subsystem.mol.natm + atms_completed)
-#                atms_completed = subsystem.mol.natm
-#
-#                aoslices = subsystem.mol.aoslice_by_atom()
-#                env_emb_de = np.zeros((len(atmlist), 3))
-#                active_emb_de = np.zeros((len(atmlist), 3))
-#                env_proj_de = np.zeros((len(atmlist), 3))
-#                active_proj_de = np.zeros((len(atmlist), 3))
-#                for k, ia in enumerate(atmlist):
-#                    p0, p1 = aoslices [k,2:]
-#                    p0_full = p0 + prev_p1
-#                    p1_full = p1 + prev_p1
-#                    h1ao_full = hcore_deriv(ia)
-#                    h1ao_sub = subsystem.env_hcore_deriv(k)
-#                    h1ao_env = np.zeros_like(h1ao_full)
-#                    h1ao_env[0][np.ix_(s2s[i], s2s[i])] += h1ao_sub[0]
-#                    h1ao_env[1][np.ix_(s2s[i], s2s[i])] += h1ao_sub[1]
-#                    h1ao_env[2][np.ix_(s2s[i], s2s[i])] += h1ao_sub[2]
-#                    h1ao_emb = h1ao_full - h1ao_env
-#                    env_emb_de[k] += np.einsum('xij,ij->x', h1ao_emb,  dm_cs)
-#                    active_emb_de[k] += np.einsum('xij,ij->x', h1ao_emb,  active_dm_cs)
-#
-#                    vhf_sub = subsystem.env_vhf_deriv
-#                    vhf_env = np.zeros_like(vhf)
-#                    vhf_env[0][np.ix_(s2s[i], s2s[i])] += vhf_sub[0]
-#                    vhf_env[1][np.ix_(s2s[i], s2s[i])] += vhf_sub[1]
-#                    vhf_env[2][np.ix_(s2s[i], s2s[i])] += vhf_sub[2]
-#                    vhf_emb = vhf[:,p0_full:p1_full] - vhf_env[:,p0_full:p1_full]
-#                    env_emb_de[k] += np.einsum('xij,ij->x', vhf_emb, dm_cs[p0:p1]) * 2
-#                    active_emb_de[k] += np.einsum('xij,ij->x', vhf_emb, active_dm_cs[p0:p1]) * 2
-#
-#                    #Get the projection gradient.
-#                    fock_deriv = h1ao_full + (vhf * 2.)
-#                    proj_pot = np.zeros_like(fock_deriv)
-#                    proj_pot[0] += np.dot(np.dot(fock_deriv[0], env_dm_cs), self.smat)
-#                    proj_pot[1] += np.dot(np.dot(fock_deriv[1], env_dm_cs), self.smat)
-#                    proj_pot[2] += np.dot(np.dot(fock_deriv[2], env_dm_cs), self.smat)
-#
-#                    proj_pot[0] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[0])
-#                    proj_pot[1] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[1])
-#                    proj_pot[2] += np.dot(np.dot(full_fock_cs, env_dm_cs), s1[2])
-#
-#                    proj_pot[0] += proj_pot[0].transpose()
-#                    proj_pot[1] += proj_pot[1].transpose()
-#                    proj_pot[2] += proj_pot[2].transpose()
-#
-#                    proj_pot = proj_pot * -0.5
-#
-#                    env_proj_de[k] = np.einsum('xij,ij->x', proj_pot[:,p0_full:p1_full], dm_cs[p0:p1])
-#                    active_proj_de[k] = np.einsum('xij,ij->x', proj_pot[:,p0_full:p1_full], active_dm_cs[p0:p1])
-#
-#                prev_p1 = p1_full
-#                subsystem.env_sub_emb_nuc_grad = env_emb_de
-#                subsystem.env_sub_proj_nuc_grad = env_proj_de
-#                subsystem.active_sub_emb_nuc_grad = active_emb_de
-#                subsystem.active_sub_proj_nuc_grad = active_proj_de
-
-
-#    @time_method("Environment XC Correction")
-#    # This doesn't work yet.
-#    def __correct_env_energy(self):
-#        nS = self.mol.nao_nr()
-#        s2s = self.sub2sup
-#        #Correct exc energy
-#        # get interaction energies.
-#        for i in range(len(self.subsystems)):
-#            for j in range(i + 1, len(self.subsystems)):
-#                # if embedding method is dft, must add the correct embedding energy
-#                if not 'hf' in self.fs_method[:5]:
-#                    e_corr_1 = 0.0
-#                    e_corr_2 = 0.0
-#                    subsystem_1 = self.subsystems[i]
-#            self.fs_scf = scf_obj
-#        print(f"KS-DFT  Energy: {self.fs_energy}  ".center(80))
-#        return self.fs_energy
-
-#    @time_method("Environment XC Correction")
-#    # This doesn't work yet.
-#    def __correct_env_energy(self):
-#        nS = self.mol.nao_nr()
-#        s2s = self.sub2sup
-#        #Correct exc energy
-#        # get interaction energies.
-#        for i in range(len(self.subsystems)):
-#            for j in range(i + 1, len(self.subsystems)):
-#                # if embedding method is dft, must add the correct embedding energy
-#                if not 'hf' in self.fs_method[:5]:
-#                    e_corr_1 = 0.0
-#                    e_corr_2 = 0.0
-#                    subsystem_1 = self.subsystems[i]
-#                    subsystem_2 = self.subsystems[j]
-#                    dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                    dm_subsys[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
-#                    dm_subsys[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
-#                    dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-#                    dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
-#
-#                    dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                    dm_subsys_1[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[0]
-#                    dm_subsys_1[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += subsystem_1.dmat[1]
-#
-#                    dm_subsys_2 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                    dm_subsys_2[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-#                    dm_subsys_2[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
-#
-#                    #Subtract the incorrect energy
-#                    #Assume active system is closed shell
-#                    veff_combined = self.fs_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
-#                    vxc_comb = veff_combined
-#                    vxc_comb = veff_combined - veff_combined.vj
-#                    if not veff_combined.vk is None:
-#                        vxc_comb += veff_combined.vk * 0.5
-#
-#                    veff_active_sub_1 = self.fs_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
-#                    veff_active_sub_2 = self.fs_scf.get_veff(dm=(dm_subsys_2[0] + dm_subsys_2[1]))
-#                    vxc_sub_1 = veff_active_sub_1 - veff_active_sub_1.vj
-#                    vxc_sub_2 = veff_active_sub_2 - veff_active_sub_2.vj
-#                    if not veff_active_sub_1.vk is None:
-#                        vxc_sub_1 += veff_active_sub_1.vk * 0.5
-#                    if not veff_active_sub_2.vk is None:
-#                        vxc_sub_2 += veff_active_sub_2.vk * 0.5
-#
-#                    vxc_emb_1 = vxc_comb
-#                    vxc_emb_2 = vxc_comb
-#                    vxc_emb_1 = vxc_comb - vxc_sub_1
-#                    vxc_emb_2 = vxc_comb - vxc_sub_2
-#                    vxc_emb_sub_1 = vxc_emb_1[np.ix_(s2s[i], s2s[i])]
-#                    vxc_emb_sub_2 = vxc_emb_2[np.ix_(s2s[j], s2s[j])]
-#
-#                    #Get Exc Last
-#                    emb_exc_comb_1 = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#                    emb_exc_comb_2 = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_2[0] + dm_subsys_2[1])[1]
-#                    emb_exc_1 = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#                    emb_exc_2 = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys_2[0] + dm_subsys_2[1], dm_subsys_2[0] + dm_subsys_2[1])[1]
-#
-#                    #vxc_sub_1 = np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* .5
-#                    #vxc_sub_2 = np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* .5
-#
-#                    subsystem_1.env_energy -= np.einsum('ij,ji', vxc_emb_sub_1, (subsystem_1.dmat[0] + subsystem_1.dmat[1])) #* 0.5
-#                    subsystem_2.env_energy -= np.einsum('ij,ji', vxc_emb_sub_2, (subsystem_2.dmat[0] + subsystem_2.dmat[1])) #* 0.5
-#                    subsystem_1.env_energy += (emb_exc_comb_1 - emb_exc_1) * 2.
-#                    subsystem_2.env_energy += (emb_exc_comb_2 - emb_exc_2) * 2.
-#
     @time_method("Active Energy")
     def get_hl_energy(self):
         """Determines the hl energy.
         """
-        #This is crude. Later iterations should be more sophisticated and account for more than 2 subsystems.
+        #This is crude. Later iterations should account for more than 2 subsystems.
         print("".center(80, '*'))
         print("  HL Subsystems Calculation  ".center(80))
         print("".center(80, '*'))
@@ -1030,8 +756,7 @@ class ClusterSuperSystem:
         #ONLY DO FOR THE RO SYSTEM. THIS IS KIND OF A TEST.
         if self.mol.spin != 0 and not self.fs_unrestricted:
             self.update_ro_fock()
-        for i in range(len(self.subsystems)):
-            sub = self.subsystems[i]
+        for i, sub in enumerate(self.subsystems):
             #Check if subsystem is HLSubSystem but rightnow it is being difficult.
             if i == 0:
                 fock_aa = [None, None]
@@ -1069,79 +794,6 @@ class ClusterSuperSystem:
             print(f"Energy Subsystem {i}:{env_e:>61.8f}")
         print("".center(80, '*'))
 
-#    @time_method("Correct Exc Energy")
-#    #Doesn't work yet.
-#    def __correct_active_energy(self):
-#        #Assumes all are closed shell systems
-#        # Do for all subsystems
-#        nS = self.mol.nao_nr()
-#        s2s = self.sub2sup
-#        energy_corr = 0.0
-#        for j in range(1, len(self.subsystems)):
-#            # if embedding method is dft, must add the correct embedding energy
-#            if not 'hf' in self.fs_method[:5]:
-#                subsystem_1 = self.subsystems[0]
-#                subsystem_2 = self.subsystems[j]
-#                dm_subsys = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                dm_subsys[0][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[0]
-#                dm_subsys[1][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[1]
-#                dm_subsys[0][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[0]
-#                dm_subsys[1][np.ix_(self.sub2sup[j], self.sub2sup[j])] += subsystem_2.dmat[1]
-#
-#                dm_subsys_1 = [np.zeros((nS, nS)), np.zeros((nS, nS))]
-#                dm_subsys_1[0][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[0]
-#                dm_subsys_1[1][np.ix_(self.sub2sup[0], self.sub2sup[0])] += subsystem_1.active_dmat[1]
-#
-#                #Assume active system is closed shell
-#                veff_combined = self.fs_scf.get_veff(dm=(dm_subsys[0] + dm_subsys[1]))
-#                vxc_comb = veff_combined - veff_combined.vj
-#                if not veff_combined.vk is None:
-#                    vxc_comb += veff_combined.vk * 0.5
-#
-#                veff_active_sub = self.fs_scf.get_veff(dm=(dm_subsys_1[0] + dm_subsys_1[1]))
-#                vxc_sub = veff_active_sub - veff_active_sub.vj
-#                if not veff_active_sub.vk is None:
-#                    vxc_sub += veff_active_sub.vk * 0.5
-#
-#                vxc_emb = vxc_comb - vxc_sub
-#                vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
-#
-#                emb_exc = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#                emb_exc_a = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#
-#                energy_corr -= np.einsum('ij,ji',vxc_emb_sub, (subsystem_1.active_dmat[0] + subsystem_1.active_dmat[1])) #* 0.5
-#                energy_corr += (emb_exc - emb_exc_a) * 2.
-#
-#                #vxc_emb_sub = vxc_emb[np.ix_(s2s[0], s2s[0])]
-#                ##THis is incorrect for more than 2 subsys
-#                #emb_exc = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys[0] + dm_subsys[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#                #emb_exc_a = custom_pyscf_methods.exc_rks(self.fs_scf, dm_subsys_1[0] + dm_subsys_1[1], dm_subsys_1[0] + dm_subsys_1[1])[1]
-#                #
-#                ##Subtract the Vxc from the fock and recalculate the energies.
-#                #if 'hf' in subsystem_1.active_method:
-#               #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
-#                #    proj_pot = (subsystem_1.proj_pot[0] + subsystem_1.proj_pot[1])/2.
-#                #    energy_elec = custom_pyscf_methods.rhf_energy_elec(subsystem_1.active_scf, emb_pot, proj_pot)
-#                #    energy_corr = energy_elec[0] + (emb_exc - emb_exc_a)
-#                #elif subsystem_1.active_method == 'ccsd' or subsystem_1.active_method == 'rccsd':
-#                #    new_eris = subsystem_1.active_cc.ao2mo()
-#                #    emb_pot = (subsystem_1.emb_pot[0] + subsystem_1.emb_pot[1])/2. - vxc_emb_sub
-#                #    proj_pot = (subsystem_1.proj_pot[0] + subsystem_1.proj_pot[1])/2.
-#                #    fock = custom_pyscf_methods.rhf_get_fock(subsystem_1.active_scf, emb_pot, proj_pot)
-#                #    new_eris.fock = functools.reduce(np.dot, (subsystem_1.active_scf.mo_coeff.conj().T, fock, subsystem_1.active_scf.mo_coeff))
-#                #    energy_elec = custom_pyscf_methods.rhf_energy_elec(subsystem_1.active_scf, emb_pot, proj_pot)[0]
-#                #    energy_elec += subsystem_1.active_cc.energy(eris=new_eris)
-#                #    energy_corr = energy_elec + (emb_exc - emb_exc_a)
-#
-#                #else:
-#                #    energy_elec = 0.0
-#                #    energy_corr = energy_elec + (emb_exc - emb_exc_a)
-#
-#                #Calculate the Exc using the active density and add it to the energies.
-#
-#        return energy_corr
-
-
     @time_method("Env. in Env. Energy")
     def get_env_in_env_energy(self):
         """Calculates the energy of dft-in-dft.
@@ -1155,14 +807,6 @@ class ClusterSuperSystem:
         print("".center(80, '*'))
         dm_env = self.get_emb_dmat()
         self.env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
-
-        if self.ft_save_orbs:
-            print('Writing DFT-in-DFT Orbitals'.center(80))
-            #The MO coefficients must be created from the density.
-            #moldenname = os.path.splitext(self.filename)[0] + '_dftindft' + '.molden'
-            #dmat = dm_env[0] + dm_env[1]
-            #cubegen.density(self.fs_scf.mol, cubename, dmat)
-
         print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
         print("".center(80, '*'))
         return self.env_in_env_energy
@@ -1175,7 +819,7 @@ class ClusterSuperSystem:
         diis : bool
             Whether to use the diis method.
         """
-        # Optimization: Rather than recalculate the full V, only calculate the V for densities which changed.
+        # Optimize: Rather than recalc. the full V, only calc. the V for changed densities.
         # get 2e matrix
         num_rank = self.mol.nao_nr()
         dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
@@ -1203,7 +847,7 @@ class ClusterSuperSystem:
             Whether to use the diis method.
         """
 
-        # Optimization: Rather than recalculate the full V, only calculate the V for densities which changed.
+        # Optimize: Rather than recalc. the full V, only calc. the V for changed densities.
         # get 2e matrix
         num_rank = self.mol.nao_nr()
         dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
@@ -1225,7 +869,6 @@ class ClusterSuperSystem:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
-        # to use the scf diis methods, must generate individual fock parts and recombine to make full fock matrix, because the projection operator is necessary to use diis correctly.
         if not self.ft_diis is None and diis:
             if self.fs_unrestricted or sub_unrestricted:
                 new_fock = self.ft_diis[0].update(self.fock)
@@ -1238,12 +881,6 @@ class ClusterSuperSystem:
                 self.fock[0] = new_fock
                 self.fock[1] = new_fock
         self.veff = [self.fock[0] - self.hcore, self.fock[1] - self.hcore]
-        #if not self.ft_diis is None and diis:
-        #    #f = self.ft_diis[0].update(self.smat, (dm[0] + dm[1]), self.fock[0], self.fs_scf, self.hcore, V_a)
-        #    f = self.ft_diis[0].update(self.fock[0])
-        #    self.fock[0] = f
-        #    self.fock[1] = f
-        #Every fock update also update the subsystem embedding potentials.
 
         #Add the external potential to each fock.
         self.fock[0] += self.ext_pot[0]
@@ -1256,7 +893,7 @@ class ClusterSuperSystem:
         return True
 
     def update_proj_pot(self):
-        # currently updates both at once. Can easily modify to only update one subsystem, however I don't think it will improve the speed.
+        # currently updates all at once. Can mod. to update one subsystem; likely won't matter.
         """Updates the projection potential of the system.
         """
         s2s = self.sub2sup
@@ -1299,10 +936,10 @@ class ClusterSuperSystem:
                         efermi[1] = max([fermi[1] for fermi in self.ft_fermi])
                     else:
                         efermi[0] = self.ft_setfermi
-                        efermi[1] = self.ft_setfermi #Allow for two set fermi, one for a and one for b
+                        efermi[1] = self.ft_setfermi
 
                     fock_ab[0] -= smat_ab * efermi[0]
-                    fock_ab[1] -= smat_ab * efermi[1] #could probably specify fermi for each alpha or beta electron.
+                    fock_ab[1] -= smat_ab * efermi[1]
 
                     fock_den_smat = [None, None]
                     fock_den_smat[0] = np.dot(fock_ab[0], np.dot(sub_b_dmat[0], smat_ba))
@@ -1412,7 +1049,7 @@ class ClusterSuperSystem:
             mat_rank = self.mol.nao_nr()
             dmat = [np.zeros((mat_rank, mat_rank)), np.zeros((mat_rank, mat_rank))]
             s2s = self.sub2sup
-            for i in range(len(self.subsystems)):
+            for i, sub in enumerate(self.subsystems):
                 if self.subsystems[i].unrestricted or self.subsystems[i].mol.spin != 0:
                     dmat[0][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[0]
                     dmat[1][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[1]
@@ -1420,17 +1057,28 @@ class ClusterSuperSystem:
                     dmat[0][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
                     dmat[1][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
         print('Writing DFT-in-DFT Density'.center(80))
-        if self.mol.spin != 0 or self.ft_unrestricted:
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_alpha.cube'
+        if self.mol.spin != 0 or self.ft_unrestricted or self.fs_unrestricted:
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index +  '_ft_alpha.cube')
             cubegen.density(self.mol, cubegen_fn, dmat[0])
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_beta.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index +  '_ft_beta.cube')
             cubegen.density(self.mol, cubegen_fn, dmat[1])
         else:
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index +  '_ft.cube')
             cubegen.density(self.mol, cubegen_fn, (dmat[0] + dmat[1]))
 
     def save_ft_spin_density_file(self, filename=None, density=None):
-        """Saves the spin density of the freeze and thaw system"""
+        """Saves the spin density of the freeze and thaw system
+
+        Parameters
+        ----------
+        filename : str
+            Density save file.
+        density : array
+            Density array.
+        """
 
         if filename is None:
             filename = self.filename
@@ -1438,16 +1086,17 @@ class ClusterSuperSystem:
             mat_rank = self.mol.nao_nr()
             dmat = [np.zeros((mat_rank, mat_rank)), np.zeros((mat_rank, mat_rank))]
             s2s = self.sub2sup
-            for i in range(len(self.subsystems)):
+            for i, sub in enumerate(self.subsystems):
                 if self.subsystems[i].unrestricted or self.subsystems[i].mol.spin != 0:
                     dmat[0][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[0]
                     dmat[1][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[1]
                 else:
                     dmat[0][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
                     dmat[1][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
-        if self.mol.spin != 0 or self.ft_unrestricted:
+        if self.mol.spin != 0 or self.ft_unrestricted or self.fs_unrestricted:
             print('Writing DFT-in-DFT Density'.center(80))
-            cubegen_fn = os.path.splitext(filename)[0] + '_' + self.chkfile_index +  '_ft_spinden.cube'
+            cubegen_fn = (os.path.splitext(filename)[0] + '_' +
+                          self.chkfile_index +  '_ft_spinden.cube')
             cubegen.density(self.mol, cubegen_fn, np.subtract(dmat[0], dmat[1]))
         else:
             print('Cannot write spin density for a closed shell system.'.center(80))
@@ -1457,7 +1106,7 @@ class ClusterSuperSystem:
     def freeze_and_thaw(self):
         """Performs the freeze and thaw subsystem density optimization
         """
-        # Optimization: rather than recalculate vA use the existing fock and subtract out the block that is double counted.
+        # Opt.: rather than recalc. vA use the existing fock and subtract out blocks dble counted.
 
         print("".center(80, '*'))
         print("Freeze-and-Thaw".center(80))
@@ -1496,7 +1145,6 @@ class ClusterSuperSystem:
             print("Freeze-and-Thaw NOT converged".center(80))
 
         self.update_fock(diis=False)
-        #Update Proj pot?
         # print subsystem energies
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]
@@ -1526,130 +1174,3 @@ class ClusterSuperSystem:
         if self.ft_save_spin_density:
             print('Writing Supersystem FT spin density'.center(80))
             self.save_ft_spin_density_file()
-
-    def get_dft_diff_parameters(self, fs_dmat=None, fs_scf=None, emb_dmat=None):
-        """Get the difference between the KS-DFT and the embedded DFT energy
-
-        Parameters
-        ----------
-
-        Returns
-        """
-
-        if fs_dmat is None:
-            fs_dmat = self.fs_dmat
-        if fs_scf is None:
-            fs_dmat = self.fs_scf
-        if emb_dmat is None:
-            emb_dmat = self.get_emb_dmat()
-
-        e_diff = self.fs_energy - self.env_in_env_energy
-        print(f"Energy Difference of KS-DFT to DFT-in-DFT:{e_diff:>38.8f}")
-
-        #trace_diff = (0.5 * np.trace(self.dmat[0] - self.dftindft_dmat[0])
-        #             + 0.5 * np.trace(self.dmat[1] - self.dftindft_dmat[1]))
-
-        #print (f"Trace Difference of KS-DFT to DFT-in-DFT:{trace_diff:>39.8f}")
-
-#    def get_embedding_nuc_grad(self):
-#        sup_nuc_grad = self.get_supersystem_nuc_grad().grad()
-#        self.get_emb_subsys_nuc_grad()
-#        subsystem_grad = np.zeros_like(sup_nuc_grad)
-#        s2s = self.sub2sup
-#        num_atoms_done = 0
-#        for i in range(len(self.subsystems)):
-#            subsystem = self.subsystems[i]
-#            if isinstance(subsystem, cluster_subsystem.ClusterActiveSubSystem):
-#                subsystem.get_env_nuc_grad()
-#                subsystem.get_active_nuc_grad()
-#                for a in range(subsystem.mol.natm):
-#                    curr_atom = a + num_atoms_done
-#                    subsystem_grad[curr_atom] -= subsystem.env_sub_nuc_grad[a] + subsystem.env_sub_emb_nuc_grad[a] + subsystem.env_sub_proj_nuc_grad[a]
-#                    subsystem_grad[curr_atom] += subsystem.active_sub_nuc_grad[a] + subsystem.active_sub_emb_nuc_grad[a] + subsystem.active_sub_proj_nuc_grad[a]
-#                num_atoms_done += subsystem.mol.natm
-#
-#        total_grad = sup_nuc_grad - subsystem_grad
-#        return total_grad
-#
-#    @time_method("Supersystem Nuclear Gradient")
-#    def get_supersystem_nuc_grad(self, scf_obj=None, readchk=False):
-#
-#        if self.fs_nuc_grad is None:
-#            if self.fs_energy is None:
-#                print ("Calculate Full system energy first")
-#                self.get_supersystem_energy()
-#            if scf_obj is None:
-#                scf_obj = self.fs_scf
-#            nuc_grad = scf_obj.nuc_grad_method()
-#            nuc_grad.kernel()
-#            self.fs_nuc_grad = nuc_grad
-#        else:
-#            nuc_grad = self.fs_nuc_grad
-#
-#        return nuc_grad
-#
-#
-#    def update_hl_basis_tau(self, subsystems=None, basis_tau=None):
-#        """Adds basis functions to the high level subsystem based on the tau overlap parameter"""
-#        if subsystems is None:
-#            subsystems = self.subsystems
-#        if basis_tau is None:
-#            basis_tau = self.ft_basis_tau
-#
-#        for i in range(len(self.subsystems)):
-#            #Needs to check if subsystem is HLSubSsytem but for now just use i==0
-#            if i == 0:
-#                hl_sub = self.subsystems[i]
-#                if len(self.subsystems) <= 2:
-#                    env_sub = self.subsystems[1]
-#                    tau_mol = gto.M()
-#                    tau_mol.unit = 'bohr'
-#                    tau_mol.atom = []
-#                    tau_mol.basis = {}
-#                    for a in range(len(env_sub.mol._atom)):
-#                        atom_basis = env_sub.mol._basis[env_sub.mol._atom[a][0]]
-#                        tau_ghost_atom_name = 'X' + str(a)
-#                        tau_ghost_basis = {}
-#                        tau_ghost_basis[tau_ghost_atom_name] = []
-#                        for b in atom_basis:
-#                            temp_mol = gto.M()
-#                            temp_mol.atom = [env_sub.mol._atom[a]]
-#                            temp_mol.basis = {}
-#                            temp_mol.basis[temp_mol.atom[0][0]] = [b]
-#                            temp_mol.spin = temp_mol.nelectron
-#                            temp_mol.build()
-#                            basis_ovlp = gto.intor_cross('int1e_ovlp', hl_sub.mol, temp_mol)
-#                            max_ovlp = np.max(np.abs(np.sum(basis_ovlp, axis=0)))
-#                            if max_ovlp > basis_tau and max_ovlp < 1:
-#                                tau_ghost_basis[tau_ghost_atom_name].append(b)
-#                        if len(tau_ghost_basis[tau_ghost_atom_name]) > 0:
-#                                tau_mol.atom.append([tau_ghost_atom_name, env_sub.mol._atom[a][1]])
-#                                tau_mol.basis.update(tau_ghost_basis)
-#                    tau_mol.build()
-#                    #if len(tau_mol.atom) > 0:
-#                    #    #Add the tau mol object with ghost functions to the hl subsystem.
-#                    #    self.subsystems[i].helpers.concat_mol_obj(tau_mol)
-#
-#                    #ao_slices = gto.aoslice_by_atom(env_sub.mol)
-#                    #basis_ovlp = gto.intor_cross('int1e_ovlp', hl_sub.mol, env_sub.mol)
-#                    #if len(uniq_ovlp_coords) > 0:
-#                    #    new_mol = gto.M()
-#                    #    new_mol.unit = 'bohr'
-#                    #    new_mol.atom = []
-#                    #    new_mol.basis = {}
-#                    #    prev_basis = 0
-#                    #    for a in range(len(env_sub.mol._atom)):
-#                    #        a_coord = env_sub.mol._atom[a]
-#                    #        a_num_basis = len(env_sub.mol._basis[a_coord[0]])
-#                    #        print (env_sub.mol._basis)
-#                    #        prev_basis += a_num_basis
-#                    #        print (prev_basis)
-#                else: #Iterate through and concatinate.
-#                    pass
-#        #Iterate through active systems.
-#        #For each active system get the overlap with basis functions.
-#        #if overlap is greater than the tau parameter, include it into the hl mol object.
-#        #Include the basis function by
-#        # Creating a new mol object with the ghost systems and basis functions to add
-#        # Concatinate the hl system and the new ghost system
-#        # recreate the subsystem object with a new mol object.

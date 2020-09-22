@@ -225,7 +225,7 @@ class MolproExt:
         if 'cc' in self.method:
             self.cc_loc_orbs = hl_dict.get("loc_orbs")
             self.cc_initguess = hl_dict.get("cc_initguess")
-            self.cc_froz_orbs = hl_dict.get("froz_orbs")
+            self.cc_froz_core_orbs = hl_dict.get("froz_core_orbs")
         if 'cas' in self.method:
             self.cas_loc_orbs = hl_dict.get("loc_orbs")
             self.cas_init_guess = hl_dict.get("cas_initguess")
@@ -264,14 +264,14 @@ class MolproExt:
         elif self.method == 'ccsd':
             method_string = '{hf;noenest}\n'
             method_string += '{rccsd;core'
-            if self.cc_froz_orbs:
-                method_string += ',' + str(self.cc_froz_orbs)
+            if self.cc_froz_core_orbs:
+                method_string += ',' + str(self.cc_froz_core_orbs)
             method_string += '}'
         elif self.method == 'ccsd(t)':
             method_string = '{hf;noenest}\n'
             method_string += '{rccsd(t);core'
-            if self.cc_froz_orbs:
-                method_string += ',' + str(self.cc_froz_orbs)
+            if self.cc_froz_core_orbs:
+                method_string += ',' + str(self.cc_froz_core_orbs)
             method_string += '}'
         elif self.method == 'fcidump':
             dump_filename = 'FCIDUMP'
@@ -282,8 +282,8 @@ class MolproExt:
             num_elec = self.mol.tot_electrons()
             method_string += 'wf,' + str(num_elec) + ',1,' + str(np.abs(self.mol.spin)) + ';}\n'
             method_string += '{rccsd(t);core'
-            if self.cc_froz_orbs:
-                method_string += ',' + str(self.cc_froz_orbs)
+            if self.cc_froz_core_orbs:
+                method_string += ',' + str(self.cc_froz_core_orbs)
             method_string += '}'
         elif re.match(re.compile('cas(pt2)?\[.*\].*'), method):
             cas_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]

@@ -90,11 +90,11 @@ class TestEnvSubsystem(unittest.TestCase):
     def test_custom_subsystem(self):
 
         t_file = tempfile.NamedTemporaryFile()
-        subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, 
-            env_order=2, env_smearsigma=0.5, conv=1e-4, damp=1, shift=1, 
-            subcycles=10, setfermi=1.0, diis=2, unrestricted=False,
-            density_fitting=True, freeze=True, verbose=2, nproc=4, pmem=300,
-            scrdir='/path/to/scratch/', save_orbs=True, save_density=True, filename=t_file.name)
+        subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method,
+            env_order=2, env_smearsigma=0.5, damp=1, shift=1, subcycles=10,
+            diis=2, unrestricted=False, density_fitting=True, freeze=True,
+            verbose=2, nproc=4, pmem=300, scrdir='/path/to/scratch/',
+            save_orbs=True, save_density=True, filename=t_file.name)
 
         self.assertEqual(subsys.mol, self.cs_mol)
         self.assertEqual(subsys.env_method, self.env_method)

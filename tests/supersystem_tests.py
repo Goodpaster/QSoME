@@ -742,13 +742,13 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_fock2[0], supersystem.subsystems[1].emb_fock[0]))
         self.assertTrue(np.allclose(test_fock2[1], supersystem.subsystems[1].emb_fock[1]))
 
-    #@unittest.skip
+    @unittest.skip
     def test_update_proj_pot(self):
         #Only test I can think of is to just recreate the 
         #projection potential and check they are still equal.
         pass
 
-    @unittest.skip
+    #@unittest.skip
     def test_save_read_chkfile(self):
         t_file = tempfile.NamedTemporaryFile()
         hl_method = 'ccsd'
@@ -808,7 +808,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.equal(old_sub1_dmat, new_sub1_dmat).all)
         self.assertTrue(np.equal(old_sub2_dmat, new_sub2_dmat).all)
 
-    @unittest.skip
+    #@unittest.skip
     def test_save_ft_density(self):
         from pyscf.tools import cubegen
         t_file = tempfile.NamedTemporaryFile()
@@ -910,7 +910,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         self.assertEqual(test_den_data[99:], true_den_data[99:])
 
-    @unittest.skip
+    #@unittest.skip
     def test_save_ft_spin_density(self):
         from pyscf.tools import cubegen
         hl_method = 'ccsd'
@@ -966,7 +966,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         self.assertEqual(test_den_data[99:], true_den_data[99:])
 
-    #@unittest.skip
+    @unittest.skip
     def test_freeze_and_thaw(self):
 
         #Restricted closed shell

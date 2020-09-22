@@ -15,8 +15,8 @@ class InputError(Exception):
     """Exception for an improperly designed input file.
 
     Some input options conflict with each other or are nonsensical.
-    While these will not raise errors with the input reader,
-    they should raise an error.
+    While these will not raise errors with the input reader module,
+    they should raise an error for embedding.
 
     Parameters
     ----------
@@ -56,8 +56,8 @@ def bond_dist(atom1_coord, atom2_coord):
     return total ** 0.5
 
 
-def gen_link_basis(atom1_coord, atom2_coord, basis):
-    """Generate the linking atom between two atoms.
+def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
+    """Generate the linking ghost atom between two atoms.
 
     Parameters
     ----------
@@ -67,6 +67,9 @@ def gen_link_basis(atom1_coord, atom2_coord, basis):
         atom coordinates
     basis : str
         the basis of the link atom
+    basis_atom : str
+        The type of atom for the ghost atom.
+        (default is 'H')
 
     Returns
     -------
@@ -95,7 +98,7 @@ def read_input(filename):
     subsys = reader.add_block_key('subsystem', required=True, repeat=True)
     add_subsys_settings(subsys)
 
-    # Define the environment settings and embedding ops
+    # Define the environment settings and embedding operations.
     env_settings = reader.add_block_key('env_method_settings',
                                         required=True,
                                         repeat=True)
@@ -117,6 +120,7 @@ def read_input(filename):
                                                    required=False)
     add_periodic_settings(periodic_settings)
 
+    # Define the high level calculation settings.
     hl_settings = reader.add_block_key('hl_method_settings', repeat=True,
                                        required=True)
     hl_settings.add_line_key('hl_order', type=int)
@@ -143,10 +147,10 @@ def read_input(filename):
     ecp.add_regex_line('ecp_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
                        repeat=True)
     reader.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
-    reader.add_line_key('ppmem', type=(int, float)) # MB
-    reader.add_line_key('nproc', type=int) # MB
-    reader.add_line_key('scrdir', type=str)
 
+    reader.add_line_key('ppmem', type=(int, float)) # MB
+    reader.add_line_key('nproc', type=int)
+    reader.add_line_key('scrdir', type=str)
     inp = reader.read_input(filename)
     inp.filename = filename
 
@@ -176,7 +180,7 @@ def add_subsys_settings(subsys_block):
     subsys_block.add_line_key('charge', type=int)
     subsys_block.add_line_key('spin', type=int)
     subsys_block.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
-    subsys_block.add_boolean_key('addlinkbasis') # Add link H basis functions
+    subsys_block.add_boolean_key('addlinkbasis') # Add link ghost atoms
     sub_basis = subsys_block.add_block_key('basis')
     sub_basis.add_regex_line('basis_def',
                              r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
@@ -273,14 +277,16 @@ def add_embed_settings(embed_block):
     embed_block.add_line_key('damp', type=float)
     embed_block.add_line_key('diis', type=int) # Use DIIS for fock. (0 for off)
     embed_block.add_line_key('setfermi', type=float)
-    # Supersystem fock update frequency.
+
     # 0 is after F&T cycle, otherwise after every n subsystem cycles
     embed_block.add_line_key('updatefock', type=int)
     embed_block.add_line_key('updateproj', type=int)
+
     # Initial guess for the subsystem embedding calculation
     embed_block.add_line_key('initguess', type=(
         'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
     embed_block.add_boolean_key('unrestricted')
+
     # Output subsystem orbitals after F&T cycles
     embed_block.add_boolean_key('save_orbs')
     embed_block.add_boolean_key('save_density')
@@ -355,7 +361,7 @@ def add_cc_settings(inp_block):
 
     inp_block.add_boolean_key('loc_orbs')
     inp_block.add_line_key('cc_initguess', type=str)
-    inp_block.add_line_key('froz_orbs', type=str)
+    inp_block.add_line_key('froz_core_orbs', type=str)
 
 def add_cas_settings(inp_block):
     """Adds the high level CAS settings to the block.
@@ -451,12 +457,12 @@ def build_hl_dict(hl_settings, hl_params):
         cc_dict = vars(hl_params['cc_settings'])
         cleanup_keys(cc_dict)
         hl_settings['hl_dict'] = copy(cc_dict)
-        if 'froz_orbs' in cc_dict:
-            froz_split = cc_dict['froz_orbs'].split(',')
+        if 'froz_core_orbs' in cc_dict:
+            froz_split = cc_dict['froz_core_orbs'].split(',')
             froz_list = [int(x) for x in froz_split]
             if len(froz_list) == 1:
                 froz_list = froz_list[0]
-            hl_settings['hl_dict']['froz_orbs'] = froz_list
+            hl_settings['hl_dict']['froz_core_orbs'] = froz_list
     if hl_params['cas_settings']:
         cas_dict = vars(hl_params['cas_settings'])
         cleanup_keys(cas_dict)
@@ -567,8 +573,6 @@ class InpReader:
         self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.subsys_mols = self.gen_mols()
 
-    #def get_interaction_mediatior_kwargs(self, inp=None):
-    #    pass
 
     def get_supersystem_kwargs(self, inp=None):
         """Generates a kwarg dictionary for supersystem object.

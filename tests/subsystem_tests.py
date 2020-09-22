@@ -1097,7 +1097,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
 
         # Closed shell
         hl_method = 'ccsd'
-        hl_dict = {'froz_orbs': 1}
+        hl_dict = {'froz_core_orbs': 1}
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, hl_method, hl_dict=hl_dict)
         subsys.init_density()
         subsys_hl_e = subsys.get_hl_in_env_energy()
