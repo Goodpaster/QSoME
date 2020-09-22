@@ -330,10 +330,10 @@ class MolproExt:
         mol_geom = self.pyscf2molpro_geom()
         mol_basis = self.pyscf2molpro_basis()
         dummy_atoms = ""
-        for gh_num in range(len(self.mol.ghosts)):
-            dummy_atoms += self.mol.ghosts[gh_num] + str(gh_num + 1) + ","
-        #Remove final comma.
-        dummy_atoms = dummy_atoms[:-1]
+        #for gh_num in range(len(self.mol.ghosts)):
+        #    dummy_atoms += self.mol.ghosts[gh_num] + str(gh_num + 1) + ","
+        ##Remove final comma.
+        #dummy_atoms = dummy_atoms[:-1]
 
         pword = self.pmem / 8.
         inp_str = molpro_template.substitute(MEMORY=str(pword), SYMMETRY="nosym",
