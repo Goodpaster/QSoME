@@ -230,7 +230,8 @@ class ClusterEnvSubSystem:
             self.pmem = 2000
         self.scr_dir = scrdir
         if scrdir is None:
-            self.scr_dir = os.getenv('TMPDIR')
+        #    self.scr_dir = os.getenv('TMPDIR')
+            self.scr_dir = '/scratch.global/graha682'
 
         self.fermi = [0., 0.]
         self.env_scf = self.init_env_scf()
@@ -1125,7 +1126,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_method = hl_method
         self.hl_initguess = hl_initguess
         self.hl_sr_method = hl_sr_method
-        self.hl_spin = hl_spin
+        if hl_spin:
+            self.hl_spin = hl_spin
+        else:
+            self.hl_spin = self.mol.spin
         self.hl_conv = hl_conv
         self.hl_grad = hl_grad
         self.hl_cycles = hl_cycles
@@ -1273,7 +1277,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         name_no_ext = os.path.splitext(name_no_path)[0]
         file_path = os.path.split(self.filename)[0]
         scr_path = self.scr_dir
-        ext_obj = ext_factory.get_ext_obj(self.hl_ext, gto.copy(self.mol),
+        ext_mol = gto.copy(self.mol)
+        ext_mol.spin = self.hl_spin
+        ext_mol.build()
+        ext_obj = ext_factory.get_ext_obj(self.hl_ext, ext_mol,
                                           self.hl_method, emb_proj_pot,
                                           core_ham=hcore, filename=name_no_ext,
                                           work_dir=file_path, scr_dir=scr_path,

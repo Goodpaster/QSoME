@@ -182,8 +182,9 @@ charge=$CHARGE
 spin=$SPIN
 
 {matrop                   !read the modified core hamiltonian
-read,h01,file=$HMAT
-save,h01,1210.1,h0}
+read,h01,type=h0,
+$HMAT
+save,h01,7500.1,h0}
 
 $METHOD
 put,molden,$FNAME;   !save orbitals in molden format
@@ -285,14 +286,14 @@ class MolproExt:
             if self.cc_froz_core_orbs:
                 method_string += ',' + str(self.cc_froz_core_orbs)
             method_string += '}'
-        elif re.match(re.compile('cas(pt2)?\[.*\].*'), method):
-            cas_space = [int(i) for i in (method[method.find("[") + 1:method.find("]")]).split(',')]
+        elif re.match(re.compile('cas(pt2)?\[.*\].*'), self.method):
+            cas_space = [int(i) for i in (self.method[self.method.find("[") + 1:self.method.find("]")]).split(',')]
             num_elec = self.mol.tot_electrons()
             num_closed = int((num_elec - cas_space[0]) / 2.)
             num_occ = num_closed + cas_space[1]
             if self.cas_avas is None:
-                if mol.spin != 0:
-                    method_string = f'{{hf,maxit=240;noenest;wf,{num_elec},1,{np.abs(mol.spin)}}}\n'
+                if self.mol.spin != 0:
+                    method_string = f'{{hf,maxit=240;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
                 else:
                     method_string = '{hf;noenest;}\n'
             else:
@@ -300,7 +301,7 @@ class MolproExt:
                     method_string = '{uhft;avas,open=1;' + ';'.join(self.cas_avas) + '}\n'
                 else:
                     method_string = '{rhft;avas;' + ';'.join(self.cas_avas) + '}\n'
-            method_string += "put,molden," + os.path.splitext(input_file.split('/')[-1])[0] + "_2.molden;   !save orbitals in molden format\n"
+            method_string += "put,molden," + os.path.splitext(self.filename.split('/')[-1])[0] + "_hf.molden;   !save orbitals in molden format\n"
             method_string += "{casscf\n"
             method_string += "maxiter,40\n"
             method_string += "closed," + str(num_closed) + "\n"
@@ -308,8 +309,8 @@ class MolproExt:
             method_string += "wf," + str(num_elec) + ",1," + str(np.abs(self.mol.spin)) + "\n"
 
             if self.cas_active_orbs:
-                occ_orbs = [str(x+.1) for x in self.cas_active_orbitals if x <= int(num_elec/2)]
-                vir_orbs = [str(x+.1) for x in self.cas_active_orbitals if x > int(num_elec/2)]
+                occ_orbs = [str(x+.1) for x in self.cas_active_orbs if x <= int(num_elec/2)]
+                vir_orbs = [str(x+.1) for x in self.cas_active_orbs if x > int(num_elec/2)]
                 for i in range(int(cas_space[0]/2)):
                     method_string += "rotate," + str(int(int(num_elec/2) - i)+.1) + "," + occ_orbs[-i] + ",0;\n"
 
@@ -318,10 +319,10 @@ class MolproExt:
 
             method_string += "}"
 
-            if re.match(re.compile('caspt2\[.*\]'), method):
+            if re.match(re.compile('caspt2\[.*\]'), self.method):
                 method_string += "\nrs2c"
 
-            if ('nevpt2' in method.lower()):
+            if ('nevpt2' in self.method.lower()):
                 method_string += '\nnevpt2'
 
         else:
@@ -336,9 +337,10 @@ class MolproExt:
         #dummy_atoms = dummy_atoms[:-1]
 
         pword = self.pmem / 8.
-        inp_str = molpro_template.substitute(MEMORY=str(pword), SYMMETRY="nosym",
+        orb_file = os.path.splitext(self.filename.split('/')[-1])[0] + ".molden"
+        inp_str = molpro_template_molden.substitute(MEMORY=str(pword), SYMMETRY="nosym",
                       BASIS=mol_basis, GEOM=mol_geom, DUMMY=dummy_atoms, CHARGE=self.mol.charge,
-                      SPIN=self.mol.spin, HMAT=h0_string, METHOD=method_string) 
+                      SPIN=self.mol.spin, HMAT=h0_string, METHOD=method_string, FNAME=orb_file) 
         return inp_str
 
     def pyscf2molpro_geom(self):
@@ -382,11 +384,20 @@ class MolproExt:
         ##Run molpro
         file_path = self.work_dir + '/' + self.filename + '_molpro.com'
         print (file_path)
-        print (self.scr_dir)
         cmd = ' '.join(("molpro" + ' -n ' + str(self.nproc) + ' -d ' + self.scr_dir, file_path))
         print (cmd)
         proc_results = subprocess.getoutput(cmd)
         print (proc_results)
+
+        #Copy the molden files if caspt2
+        if re.match(re.compile('cas(pt2)?\[.*\].*'), self.method):
+            curr_work_dir = os.getcwd()
+            hf_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + "_hf.molden" 
+            cas_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + ".molden" 
+            copyfile(hf_orb_file, self.work_dir + '/' + 
+                     os.path.splitext(self.filename)[0] + '_hf.molden')
+            copyfile(cas_orb_file, self.work_dir + '/' + 
+                     os.path.splitext(self.filename)[0] + '_cas.molden')
 
         #Open and extract from output.
         outfile = self.work_dir + '/' + self.filename + '_molpro.out'
@@ -428,7 +439,7 @@ class MolproExt:
 
             if re.match(re.compile('cas(pt2)?\[.*\].*'), self.method):
                 for i in range((len(dat1)-10), len(dat1), 1):
-                    if (avas is None and "HF-SCF" in dat1[i]) or ("RHFT" in dat1[i]):
+                    if (self.cas_avas is None and "HF-SCF" in dat1[i]) or ("RHFT" in dat1[i]):
                         elec_e = dat1[i+1].split()
 
             else:
