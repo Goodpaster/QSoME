@@ -142,7 +142,7 @@ class ClusterEnvSubSystem:
 
 
     def __init__(self, mol, env_method, env_order=1, env_smearsigma=0.,
-                 initguess=None, damp=0., shift=0., subcycles=1, diis=6,
+                 initguess=None, damp=0., shift=0., subcycles=1, diis=0,
                  unrestricted=False, density_fitting=False, freeze=False,
                  save_orbs=False, save_density=False, save_spin_density=False,
                  verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
@@ -832,12 +832,14 @@ class ClusterEnvSubSystem:
 
     def __do_unrestricted_diag(self):
         """Performs diagonalization on the unrestricted env object."""
-        emb_proj_fock = [None, None]
+        emb_proj_fock = np.array([None, None])
         fock = self.emb_fock
         if fock[0] is None:
             fock = self.subsys_fock
         emb_proj_fock[0] = fock[0] + self.proj_pot[0]
         emb_proj_fock[1] = fock[1] + self.proj_pot[1]
+        if self.diis:
+            emb_proj_fock = self.diis.update(emb_proj_fock)
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy[0], energy[1]]
         self.env_mo_coeff = [coeff[0], coeff[1]]
@@ -851,6 +853,8 @@ class ClusterEnvSubSystem:
         emb_proj_fock = fock[0] + self.proj_pot[0]
         emb_proj_fock += fock[1] + self.proj_pot[1]
         emb_proj_fock /= 2.
+        if self.diis:
+            emb_proj_fock = self.diis.update(emb_proj_fock)
 
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
 
@@ -865,6 +869,8 @@ class ClusterEnvSubSystem:
         emb_proj_fock = fock[0] + self.proj_pot[0]
         emb_proj_fock += fock[1] + self.proj_pot[1]
         emb_proj_fock = emb_proj_fock / 2.
+        if self.diis:
+            emb_proj_fock = self.diis.update(emb_proj_fock)
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]

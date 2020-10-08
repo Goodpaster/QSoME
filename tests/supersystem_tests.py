@@ -966,7 +966,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         self.assertEqual(test_den_data[99:], true_den_data[99:])
 
-    @unittest.skip
+    #@unittest.skip
     def test_freeze_and_thaw(self):
 
         #Restricted closed shell

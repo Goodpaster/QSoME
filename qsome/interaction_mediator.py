@@ -209,7 +209,7 @@ class InteractionMediator:
 
         sup = self.supersystems[-1]
         sup_e = sup.get_supersystem_energy()
-        env_in_env_e = sup.get_env_in_env_energy()
+        sup.get_env_in_env_energy()
         sup.get_hl_energy()
         sup.get_env_energy()
         energy_tot += sup_e

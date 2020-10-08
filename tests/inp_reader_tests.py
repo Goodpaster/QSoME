@@ -7,6 +7,8 @@ import os
 import shutil
 import re
 
+import input_reader
+from input_reader import helpers as ir_helpers
 from qsome import inp_reader
 from pyscf import gto
 
@@ -43,6 +45,10 @@ basis
  default 3-21g
 end
 """
+
+bad_file_format = "bad_formatting.inp"
+bad_file_format_str = """
+Throw an error"""
 
 env_settings_filename = 'env_settings.inp'
 env_settings_str_replace = """
@@ -559,6 +565,43 @@ end
 """
 
 temp_inp_dir = "/temp_input/"
+class TestGenerateInputReaderObject(unittest.TestCase):
+
+    def setUp(self):
+        path = os.getcwd() + temp_inp_dir
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+        os.mkdir(path)
+        self.def_filename_path = path + def_filename
+        with open(self.def_filename_path, "w") as f:
+            f.write(default_str)
+
+        self.bad_file_format_path = path + bad_file_format
+        with open(self.bad_file_format_path, "w") as f:
+            f.write(bad_file_format_str)
+
+    def test_read_filename_and_return_inp_object(self):
+        test_obj = inp_reader.read_input(self.def_filename_path)
+        self.assertIsInstance(test_obj, ir_helpers.Namespace)
+
+    def test_assert_file_not_found(self):
+        with self.assertRaises(ir_helpers.ReaderError):
+            inp_reader.read_input("")
+
+    def test_assert_bad_format(self):
+        with self.assertRaises(ir_helpers.ReaderError):
+            inp_reader.read_input(self.bad_file_format_path)
+
+    def test_namespace_params(self):
+        test_obj = inp_reader.read_input(self.def_filename_path)
+        print (test_obj)
+        self.assertTrue(False)
+
+    def tearDown(self):
+        path = os.getcwd() + temp_inp_dir   #Maybe a better way.
+        if os.path.isdir(path):
+            shutil.rmtree(path)    
+        
 class TestKwargCreation(unittest.TestCase):
 
     def setUp(self):

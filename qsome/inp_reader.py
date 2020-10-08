@@ -10,6 +10,7 @@ from copy import copy
 import input_reader
 import numpy as np
 from pyscf import gto, pbc
+from qsome import helpers
 
 class InputError(Exception):
     """Exception for an improperly designed input file.
@@ -33,56 +34,6 @@ class InputError(Exception):
     def __init__(self, message):
         super().__init__()
         self.message = message
-
-def bond_dist(atom1_coord, atom2_coord):
-    """Determine the distance between two atoms in the same units as the atoms
-
-    Parameters
-    ----------
-    atom1_coord : list
-        A list of atom coordinates.
-    atom2_coord : list
-        A list of atom coordinates.
-
-    Returns
-    ------
-    float
-        The distance between two atoms.
-    """
-
-    total = 0.0
-    for atom1, atom2 in zip(atom1_coord, atom2_coord):
-        total += (atom2 - atom1) ** 2.
-    return total ** 0.5
-
-
-def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
-    """Generate the linking ghost atom between two atoms.
-
-    Parameters
-    ----------
-    atom1 : list
-        atom coordinates
-    atom2 : list
-        atom coordinates
-    basis : str
-        the basis of the link atom
-    basis_atom : str
-        The type of atom for the ghost atom.
-        (default is 'H')
-
-    Returns
-    -------
-    tuple
-        A tuple of the link atom coordinate and basis
-    """
-
-    basis_atom = 'H'
-    ghost_name = f'ghost:{basis_atom}'
-    midpoint = (atom1_coord + atom2_coord)/2.
-    atm = [ghost_name, tuple(midpoint)]
-    basis = {ghost_name: gto.basis.load(basis, basis_atom)}
-    return (atm, basis)
 
 def read_input(filename):
     """Reads a formatted input file, generates an InputReader object.
@@ -115,10 +66,6 @@ def read_input(filename):
     # Freeze and thaw settings
     embed = env_settings.add_block_key('embed_settings')
     add_embed_settings(embed)
-
-    periodic_settings = env_settings.add_block_key('periodic_settings',
-                                                   required=False)
-    add_periodic_settings(periodic_settings)
 
     # Define the high level calculation settings.
     hl_settings = reader.add_block_key('hl_method_settings', repeat=True,
@@ -214,51 +161,6 @@ def add_subsys_settings(subsys_block):
     sub_dmrg_settings = sub_hl_settings.add_block_key('dmrg_settings')
     sub_dmrg_settings.add_line_key('maxM', type=int)
     sub_dmrg_settings.add_line_key('num_thirds', type=int)
-
-def add_periodic_settings(periodic_block):
-    """Adds periodic settings to the object.
-
-    Parameters
-    ----------
-    periodic_block : input_reader block
-        Block to add the periodic settings.
-    """
-
-    lattice = periodic_block.add_block_key('lattice_vectors', required=True)
-    lattice.add_regex_line('vector',
-                           (r'\s*(\-?\d+.?\d*)'
-                            r'\s+(\-?\d+.?\d*)'
-                            r'\s+(\-?\d+.?\d*)'),
-                           repeat=True)
-    kgroup = periodic_block.add_mutually_exclusive_group(dest='kgroup',
-                                                         required=True)
-    kgroup.add_line_key('kpoints', type=[int, int, int])
-    kscaled = kgroup.add_block_key('kgrid')
-    kscaled.add_regex_line('kpoints',
-                           (r'\s*(\-?\d+\.?\d*)'
-                            r'\s+(\-?\d+\.?\d*)'
-                            r'\s+(\-?\d+\.?\d*)'),
-                           repeat=True)
-    mesh = periodic_block.add_mutually_exclusive_group(dest='mgroup',
-                                                       required=False)
-    mesh.add_line_key('gspacing', type=float)
-    mesh.add_line_key('gs', type=[int, int, int])
-    mesh.add_line_key('mesh', type=[int, int, int])
-    periodic_block.add_line_key('dimensions', type=(0, 1, 2, 3),
-                                required=True)
-    # line keys with good defaults (shouldn't need to change these)
-    periodic_block.add_line_key('auxbasis', type=str, case=True)
-    periodic_block.add_line_key('density_fit',
-                                type=('df', 'mdf', 'pwdf', 'fftdf',
-                                      'gdf', 'aftdf'))
-    periodic_block.add_line_key('exxdiv', type=('vcut_sph', 'ewald',
-                                                'vcut_ws'))
-    periodic_block.add_line_key('precision', type=float)
-    periodic_block.add_line_key('ke_cutoff', type=float)
-    periodic_block.add_line_key('rcut', type=float)
-    periodic_block.add_line_key('exp_to_discard', type=float)
-    periodic_block.add_line_key('low_dim_ft_type', type=str)
-    periodic_block.add_boolean_key('fractional_coordinates')
 
 def add_embed_settings(embed_block):
     """Adds the embedding settings to the input reader block.
@@ -517,13 +419,13 @@ def add_ghost_link(subsys_mols, sub_settings):
                     atm1_coord = coord_array[index[0]]
                     atm2_coord = coord_array[index[1]]
                     if subsystem.basis:
-                        new_atom, new_basis = gen_link_basis(atm1_coord,
-                                                             atm2_coord,
-                                                             subsystem.basis)
+                        new_atom, new_basis = helpers.gen_link_basis(atm1_coord,
+                                                                     atm2_coord,
+                                                                     subsystem.basis)
                     else:
-                        new_atom, new_basis = gen_link_basis(atm1_coord,
-                                                             atm2_coord,
-                                                             ghost_basis)
+                        new_atom, new_basis = helpers.gen_link_basis(atm1_coord,
+                                                                     atm2_coord,
+                                                                     ghost_basis)
 
                     ghost_mol.atom.append(new_atom)
                     ghost_mol.basis.update(new_basis)
@@ -538,10 +440,6 @@ class InpReader:
 
     Takes a formatted text file and generates arg and kwarg
     dictionaries to generate the specified embedding system objects.
-
-    TODO
-    ----
-    Configure periodic settings into objects
 
     Parameters
     ----------
@@ -569,7 +467,6 @@ class InpReader:
         self.inp = read_input(filename)
         self.env_subsystem_kwargs = self.get_env_subsystem_kwargs()
         self.hl_subsystem_kwargs = self.get_hl_subsystem_kwargs()
-        self.periodic_kwargs = None
         self.supersystem_kwargs = self.get_supersystem_kwargs()
         self.subsys_mols = self.gen_mols()
 
@@ -787,89 +684,6 @@ class InpReader:
 
         return hl_kwargs
 
-
-    def get_periodic_kwargs(self, inp=None):
-        """Generates a kwarg dictionary to create PeriodicSupersystem,
-        PeriodicEnvSubsystem, and PeriodicEnvSubsystem objects.
-
-        Parameters
-        ----------
-        inp : InputReader, optional
-            InputReader object to extract supersystem settings from.
-            (default is None)
-
-        Returns
-        -------
-        cell_kwargs : dict
-            Keywords necessary for generating a PySCF cell object
-        kpoints_kwargs : dict
-            Keywords necessary for generating k-points
-        periodic_kwrags : dict
-            Other periodic keywords
-        """
-
-
-        if inp is None:
-            inp = self.inp
-        if inp.periodic_settings is None:
-            return None, None, None
-
-        cell_kwargs = {}
-        kpoints_kwargs = {}
-        periodic_kwargs = {}
-
-        # cell kwargs
-        cell_keys = {'dimensions'        :           'dimension',
-                     'auxbasis'          :           'auxbasis',
-                     'exxdiv'            :           'exxdiv',
-                     'precision'         :           'precision',
-                     'ke_cutoff'         :           'ke_cutoff',
-                     'rcut'              :           'rcut',
-                     'low_dim_ft_type'   :           'low_dim_ft_type',
-                    }
-
-        # other periodic kwargs
-        periodic_keys = {
-                        'density_fit'       :       'density_fit',
-                        'exp_to_discard'    :       'exp_to_discard',
-                        }
-
-
-        # get k-points arguments
-        kpoints_kwargs = {}
-        if inp.periodic_settings.kgroup.__class__ is tuple:
-            kpoints_kwargs['kpoints'] = np.array(inp.periodic_settings.kgroup)
-        else:
-            p_kgroup = inp.periodic_settings.kgroup
-            kabs = np.array([x.group(0).split() for x in p_kgroup])
-            kpoints_kwargs['kgroup'] = kabs
-
-        # lattice vectors
-        lattice = []
-        for vec in inp.periodic_settings.lattice_vectors.vector:
-            vec_array = np.array([vec.group(1), vec.group(2). vec.group(3)])
-            lattice.append(vec_array)
-        cell_kwargs['a'] = np.array(lattice)
-        if len(cell_kwargs['a']) < 3:
-            raise Exception("LATTICE_VECTORS must be a 3x3 array!")
-
-        # read from all cell_keys to create cell_kwargs
-        for key in cell_keys:
-            value = getattr(inp.periodic_settings, key)
-            if value is not None:
-                cell_kwargs[cell_keys[key]] = value
-
-        # read from all other keys to create periodic_kwargs
-        for key in periodic_keys:
-            value = getattr(inp.periodic_settings, key)
-            if value is not None:
-                periodic_kwargs[periodic_keys[key]] = value
-        if inp.grid:
-            periodic_kwargs['grid_level'] = inp.grid
-
-        return cell_kwargs, kpoints_kwargs, periodic_kwargs
-
-
     def gen_mols(self):
         """Generates the mol or cell objects specified in inp..
 
@@ -884,10 +698,7 @@ class InpReader:
         inp = self.inp
         for subsystem in inp.subsystem:
             atom_list = subsystem.atoms
-            if self.periodic_kwargs is None:
-                mol = gto.Mole()
-            else:
-                mol = pbc.gto.Cell()
+            mol = gto.Mole()
             mol.atom = []
             for atom in atom_list:
                 mol.atom.append([atom.group(1), (float(atom.group(2)),
@@ -933,18 +744,7 @@ class InpReader:
 
             mol.basis = described_basis
             mol.ecp = described_ecp
-
-            if self.periodic_kwargs is None:
-                mol.build(dump_input=False)
-
-            # other options unique to periodic systems
-            else:
-                if inp.periodic_settings.exp_to_discard is not None:
-                    mol.exp_to_discard = inp.periodic_settings.exp_to_discard
-                if inp.periodic_settings.precision is not None:
-                    mol.precision = inp.periodic_settings.precision
-                mol.build(dump_input=False, **self.cell_kwargs)
-
+            mol.build(dump_input=False)
             subsys_mols.append(mol)
 
         for sub in subsys_mols:

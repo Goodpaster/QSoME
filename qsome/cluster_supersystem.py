@@ -132,7 +132,7 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None,
-                 ft_damp=0, ft_diis=0, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
+                 ft_damp=0, ft_diis=1, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
                  ft_initguess=None, ft_unrestricted=False, ft_save_orbs=False,
                  ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
@@ -301,9 +301,8 @@ class ClusterSuperSystem:
         self.fs_dmat = None
         self.emb_dmat = None
 
-        if ft_diis is None:
-            self.ft_diis = None
-        else:
+        self.ft_diis = None
+        if ft_diis == 1:
             self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
             self.ft_diis[0].space = 10
             self.ft_diis[1].space = 10
@@ -871,6 +870,7 @@ class ClusterSuperSystem:
 
         if not self.ft_diis is None and diis:
             if self.fs_unrestricted or sub_unrestricted:
+                print (type(self.fock))
                 new_fock = self.ft_diis[0].update(self.fock)
                 self.fock[0] = new_fock[0]
                 self.fock[1] = new_fock[1]

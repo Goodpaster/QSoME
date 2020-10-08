@@ -8,6 +8,34 @@ import copy
 import numpy as np
 from pyscf import gto
 
+def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
+    """Generate the linking ghost atom between two atoms.
+
+    Parameters
+    ----------
+    atom1 : list
+        atom coordinates
+    atom2 : list
+        atom coordinates
+    basis : str
+        the basis of the link atom
+    basis_atom : str
+        The type of atom for the ghost atom.
+        (default is 'H')
+
+    Returns
+    -------
+    tuple
+        A tuple of the link atom coordinate and basis
+    """
+
+    basis_atom = 'H'
+    ghost_name = f'ghost:{basis_atom}'
+    midpoint = (atom1_coord + atom2_coord)/2.
+    atm = [ghost_name, tuple(midpoint)]
+    basis = {ghost_name: gto.basis.load(basis, basis_atom)}
+    return (atm, basis)
+
 def __remove_overlap_ghost(mol):
     """Removes overlapping ghost atoms between mol objects
 
