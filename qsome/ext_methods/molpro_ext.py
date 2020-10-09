@@ -293,7 +293,7 @@ class MolproExt:
             num_occ = num_closed + cas_space[1]
             if self.cas_avas is None:
                 if self.mol.spin != 0:
-                    method_string = f'{{hf,maxit=240;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
+                    method_string = f'{{uhf,maxit=240;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
                 else:
                     method_string = '{hf;noenest;}\n'
             else:
@@ -303,7 +303,7 @@ class MolproExt:
                     method_string = '{rhft;avas;' + ';'.join(self.cas_avas) + '}\n'
             method_string += "put,molden," + os.path.splitext(self.filename.split('/')[-1])[0] + "_hf.molden;   !save orbitals in molden format\n"
             method_string += "{casscf\n"
-            method_string += "maxiter,40\n"
+            method_string += "maxiter,100\n"
             method_string += "closed," + str(num_closed) + "\n"
             method_string += "occ," + str(num_occ) + "\n"
             method_string += "wf," + str(num_elec) + ",1," + str(np.abs(self.mol.spin)) + "\n"
@@ -320,7 +320,7 @@ class MolproExt:
             method_string += "}"
 
             if re.match(re.compile('caspt2\[.*\]'), self.method):
-                method_string += "\nrs2c"
+                method_string += "\n{rs2c,maxiti=100}"
 
             if ('nevpt2' in self.method.lower()):
                 method_string += '\nnevpt2'

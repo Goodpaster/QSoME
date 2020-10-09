@@ -126,6 +126,7 @@ def add_subsys_settings(subsys_block):
         repeat=True)
     subsys_block.add_line_key('charge', type=int)
     subsys_block.add_line_key('spin', type=int)
+    subsys_block.add_line_key('diis', type=int)
     subsys_block.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
     subsys_block.add_boolean_key('addlinkbasis') # Add link ghost atoms
     sub_basis = subsys_block.add_block_key('basis')
