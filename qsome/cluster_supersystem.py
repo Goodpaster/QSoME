@@ -868,9 +868,8 @@ class ClusterSuperSystem:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
-        if not self.ft_diis is None and diis:
+        if (not self.ft_diis is None) and diis:
             if self.fs_unrestricted or sub_unrestricted:
-                print (type(self.fock))
                 new_fock = self.ft_diis[0].update(self.fock)
                 self.fock[0] = new_fock[0]
                 self.fock[1] = new_fock[1]
@@ -1114,13 +1113,14 @@ class ClusterSuperSystem:
 
         ft_err = 1.
         ft_iter = 0
+        ft_diis_swap = 100
         while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
             ft_err = 0
             ft_iter += 1
             #Correct for DIIS
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
-            self.update_fock(diis=True)
+            self.update_fock()
             self.update_proj_pot()
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
@@ -1133,9 +1133,10 @@ class ClusterSuperSystem:
 
                 #Check if need to update fock or proj pot.
                 if self.ft_updatefock > 0 and ((i + 1) % self.ft_updatefock) == 0:
-                    self.update_fock(diis=True)
+                    self.update_fock()
                 if self.ft_updateproj > 0 and ((i + 1) % self.ft_updateproj) == 0:
                     self.update_proj_pot()
+
             self.save_chkfile()
 
         print("".center(80))

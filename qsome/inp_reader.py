@@ -126,8 +126,8 @@ def add_subsys_settings(subsys_block):
         repeat=True)
     subsys_block.add_line_key('charge', type=int)
     subsys_block.add_line_key('spin', type=int)
-    subsys_block.add_line_key('diis', type=int)
     subsys_block.add_line_key('unit', type=('angstrom', 'a', 'bohr', 'b'))
+    subsys_block.add_line_key('diis', type=int)
     subsys_block.add_boolean_key('addlinkbasis') # Add link ghost atoms
     sub_basis = subsys_block.add_block_key('basis')
     sub_basis.add_regex_line('basis_def',
@@ -581,6 +581,9 @@ class InpReader:
                 setattr(inp.env_method_settings[0], 'env_order', 1)
             else:
                 env_settings['env_order'] = subsystem.env_method_num
+            if subsystem.diis:
+                env_settings['diis'] = subsystem.diis
+
             params_found = False
             method_num = env_settings['env_order']
             for env_param in inp.env_method_settings:
