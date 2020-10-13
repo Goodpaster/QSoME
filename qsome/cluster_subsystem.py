@@ -237,26 +237,27 @@ class ClusterEnvSubSystem:
         self.env_scf = self.init_env_scf()
         self.env_hcore = self.env_scf.get_hcore()
         self.env_dmat = None
-        self.emb_fock = [None, None]
-        self.subsys_fock = [None, None]
+        self.emb_fock = np.array([None, None])
+        self.subsys_fock = np.array([None, None])
 
-        self.emb_pot = [np.zeros_like(self.env_hcore),
-                        np.zeros_like(self.env_hcore)]
-        self.proj_pot = [np.zeros_like(self.env_hcore),
-                         np.zeros_like(self.env_hcore)]
+        self.emb_pot = np.array([np.zeros_like(self.env_hcore),
+                        np.zeros_like(self.env_hcore)])
+        self.proj_pot = np.array([np.zeros_like(self.env_hcore),
+                         np.zeros_like(self.env_hcore)])
 
-        self.env_mo_coeff = [np.zeros_like(self.env_hcore),
-                             np.zeros_like(self.env_hcore)]
-        self.env_mo_occ = [np.zeros_like(self.env_hcore[0]),
-                           np.zeros_like(self.env_hcore[0])]
+        self.env_mo_coeff = np.array([np.zeros_like(self.env_hcore),
+                             np.zeros_like(self.env_hcore)])
+        self.env_mo_occ = np.array([np.zeros_like(self.env_hcore[0]),
+                           np.zeros_like(self.env_hcore[0])])
         self.env_mo_energy = self.env_mo_occ.copy()
         self.env_energy = 0.0
 
+        self.diis_num = diis
         if diis == 1:
             #Use subtractive diis. Most simple
             self.diis = lib_diis.DIIS()
         elif diis == 2:
-            self.diis = scf_diis.CDIIS(self.env_scf)
+            self.diis = scf_diis.CDIIS()
         elif diis == 3:
             self.diis = scf_diis.EDIIS()
         elif diis == 4:
@@ -405,7 +406,7 @@ class ClusterEnvSubSystem:
 
         #Dmat always stored [alpha, beta]
         if np.array(dmat).ndim == 2:
-            dmat = [dmat/2., dmat/2.]
+            dmat = np.array([dmat/2., dmat/2.])
         self.env_dmat = dmat
 
         #Initialize the subsys fock when density initialized.
@@ -839,7 +840,12 @@ class ClusterEnvSubSystem:
         emb_proj_fock[0] = fock[0] + self.proj_pot[0]
         emb_proj_fock[1] = fock[1] + self.proj_pot[1]
         if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 1:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 2:
+                dmat = self.get_dmat()
+                ovlp = self.env_scf.get_ovlp()
+                emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy[0], energy[1]]
         self.env_mo_coeff = [coeff[0], coeff[1]]
@@ -854,7 +860,13 @@ class ClusterEnvSubSystem:
         emb_proj_fock += fock[1] + self.proj_pot[1]
         emb_proj_fock /= 2.
         if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 1:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 2:
+                dmat = self.get_dmat()
+                dmat_tot = dmat[0] + dmat[1]
+                ovlp = self.env_scf.get_ovlp()
+                emb_proj_fock = self.diis.update(ovlp, dmat_tot, emb_proj_fock)
 
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
 
@@ -870,7 +882,12 @@ class ClusterEnvSubSystem:
         emb_proj_fock += fock[1] + self.proj_pot[1]
         emb_proj_fock = emb_proj_fock / 2.
         if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 1:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+            if self.diis_num == 2:
+                dmat = self.get_dmat()
+                ovlp = self.env_scf.get_ovlp()
+                emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]
@@ -881,7 +898,7 @@ class ClusterEnvSubSystem:
         sub_old_dm = self.get_dmat().copy()
         self.diagonalize()
 
-        new_dm = [None, None]
+        new_dm = np.array([None, None])
         if self.unrestricted or self.mol.spin != 0:
             ddm = sp.linalg.norm(self.get_dmat()[0] - sub_old_dm[0])
             ddm += sp.linalg.norm(self.get_dmat()[1] - sub_old_dm[1])
