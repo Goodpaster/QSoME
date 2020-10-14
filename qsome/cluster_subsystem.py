@@ -238,6 +238,7 @@ class ClusterEnvSubSystem:
         self.env_hcore = self.env_scf.get_hcore()
         self.env_dmat = None
         self.emb_fock = [None, None]
+        self.emb_proj_fock = np.array([None, None])
         self.subsys_fock = [None, None]
 
         self.emb_pot = [np.zeros_like(self.env_hcore),
@@ -833,28 +834,38 @@ class ClusterEnvSubSystem:
     def __do_unrestricted_diag(self):
         """Performs diagonalization on the unrestricted env object."""
         emb_proj_fock = np.array([None, None])
-        fock = self.emb_fock
-        if fock[0] is None:
-            fock = self.subsys_fock
-        emb_proj_fock[0] = fock[0] + self.proj_pot[0]
-        emb_proj_fock[1] = fock[1] + self.proj_pot[1]
-        if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+        if self.emb_proj_fock[0] is None:
+            print ('here4')
+            fock = self.emb_fock
+            if fock[0] is None:
+                fock = self.subsys_fock
+            emb_proj_fock[0] = fock[0] + self.proj_pot[0]
+            emb_proj_fock[1] = fock[1] + self.proj_pot[1]
+            if self.diis:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+        else:
+            print ('here5')
+            emb_proj_fock = self.emb_proj_fock
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy[0], energy[1]]
         self.env_mo_coeff = [coeff[0], coeff[1]]
 
     def __do_restricted_os_diag(self):
         """Performs diagonalization on the restricted open shell env object."""
-        fock = self.emb_fock
-        if fock[0] is None:
-            fock = self.subsys_fock
+        if self.emb_proj_fock[0] is None:
+            print ('here6')
+            fock = self.emb_fock
+            if fock[0] is None:
+                fock = self.subsys_fock
 
-        emb_proj_fock = fock[0] + self.proj_pot[0]
-        emb_proj_fock += fock[1] + self.proj_pot[1]
-        emb_proj_fock /= 2.
-        if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+            emb_proj_fock = fock[0] + self.proj_pot[0]
+            emb_proj_fock += fock[1] + self.proj_pot[1]
+            emb_proj_fock /= 2.
+            if self.diis:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+        else:
+            print ('here7')
+            emb_proj_fock = (self.emb_proj_fock[0] + self.emb_proj_fock[1]) / 2.
 
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
 
@@ -863,14 +874,20 @@ class ClusterEnvSubSystem:
 
     def __do_restricted_diag(self):
         """Performs diagonalization on the restricted env object."""
-        fock = self.emb_fock
-        if fock[0] is None:
-            fock = self.subsys_fock
-        emb_proj_fock = fock[0] + self.proj_pot[0]
-        emb_proj_fock += fock[1] + self.proj_pot[1]
-        emb_proj_fock = emb_proj_fock / 2.
-        if self.diis:
-            emb_proj_fock = self.diis.update(emb_proj_fock)
+        if self.emb_proj_fock[0] is None:
+            print ('here8')
+            fock = self.emb_fock
+            if fock[0] is None:
+                fock = self.subsys_fock
+            emb_proj_fock = fock[0] + self.proj_pot[0]
+            emb_proj_fock += fock[1] + self.proj_pot[1]
+            emb_proj_fock = emb_proj_fock / 2.
+            if self.diis:
+                emb_proj_fock = self.diis.update(emb_proj_fock)
+        else:
+            print ('here9')
+            emb_proj_fock = (self.emb_proj_fock[0] + self.emb_proj_fock[1]) / 2.
+
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]

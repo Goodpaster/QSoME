@@ -33,7 +33,8 @@ end
 env_method_settings
  env_method m06
  embed_settings
-  cycles 1000
+  cycles 100
+  diis 7
  end
 end
 

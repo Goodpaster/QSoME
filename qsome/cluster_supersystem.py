@@ -5,11 +5,14 @@ Dhabih V. Chulhai"""
 import os
 import numpy as np
 import h5py
+from copy import copy
 
 from pyscf import gto, scf, dft, lib, lo
 from pyscf.tools import cubegen, molden
+from pyscf.scf import diis as scf_diis
+from pyscf.lib import diis as lib_diis
 
-from qsome import custom_pyscf_methods, cluster_subsystem
+from qsome import custom_pyscf_methods, comb_diis, cluster_subsystem
 from qsome.helpers import concat_mols
 from qsome.utilities import time_method
 
@@ -289,7 +292,7 @@ class ClusterSuperSystem:
                                 np.zeros_like(self.smat[0])])
         self.mo_energy = self.mo_occ.copy()
         self.hcore = self.fs_scf.get_hcore()
-        self.fock = [None, None]
+        self.fock = np.array([None, None])
         self.veff = [None, None]
         self.proj_pot = [np.array([0.0, 0.0]) for sub in self.subsystems]
         #DIIS Stuff
@@ -303,9 +306,23 @@ class ClusterSuperSystem:
 
         self.ft_diis = None
         if ft_diis == 1:
-            self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
-            self.ft_diis[0].space = 10
-            self.ft_diis[1].space = 10
+            self.ft_diis = lib_diis.DIIS()
+        if ft_diis == 2:
+            self.ft_diis = lib_diis.DIIS()
+        if ft_diis == 3:
+            self.ft_diis = scf_diis.CDIIS()
+        if ft_diis == 4:
+            self.ft_diis = comb_diis.EDIIS()
+        if ft_diis == 5:
+            self.ft_diis = comb_diis.ADIIS()
+        if ft_diis == 6:
+            self.ft_diis = comb_diis.EDIIS_DIIS()
+        if ft_diis == 7:
+            self.ft_diis = comb_diis.ADIIS_DIIS()
+        if ft_diis == 8:
+            self.ft_diis = comb_diis.EDIIS_CDIIS()
+        if ft_diis == 9:
+            self.ft_diis = comb_diis.ADIIS_CDIIS()
 
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
 
@@ -849,7 +866,7 @@ class ClusterSuperSystem:
         # Optimize: Rather than recalc. the full V, only calc. the V for changed densities.
         # get 2e matrix
         num_rank = self.mol.nao_nr()
-        dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
+        dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
         sub_unrestricted = False
         s2s = self.sub2sup
         for i, sub in enumerate(self.subsystems):
@@ -862,21 +879,22 @@ class ClusterSuperSystem:
             self.fock = self.os_scf.get_fock(h1e=self.hcore, dm=dmat)
         elif self.mol.spin != 0:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
-            self.fock = [temp_fock, temp_fock]
+            self.fock = np.array([temp_fock, temp_fock])
         else:
             dmat = dmat[0] + dmat[1]
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
-            self.fock = [temp_fock, temp_fock]
+            self.fock = np.array([temp_fock, temp_fock])
 
-        if (not self.ft_diis is None) and diis:
+        if (not self.ft_diis is None) and diis and self.ft_diis_num == 1:
+            print ('here1')
             if self.fs_unrestricted or sub_unrestricted:
-                new_fock = self.ft_diis[0].update(self.fock)
+                new_fock = self.ft_diis.update(self.fock)
                 self.fock[0] = new_fock[0]
                 self.fock[1] = new_fock[1]
                 #self.fock[0] = self.ft_diis[0].update(self.fock[0]
                 #self.fock[1] = self.ft_diis[1].update(self.fock[1]
             else:
-                new_fock = self.ft_diis[0].update(self.fock[0])
+                new_fock = self.ft_diis.update(self.fock[0])
                 self.fock[0] = new_fock
                 self.fock[1] = new_fock
         self.veff = [self.fock[0] - self.hcore, self.fock[1] - self.hcore]
@@ -947,6 +965,167 @@ class ClusterSuperSystem:
                     proj_op[1] += -1. * (fock_den_smat[1] + fock_den_smat[1].transpose())
 
             self.proj_pot[i] = proj_op.copy()
+
+        return True
+
+    def update_fock_proj_diis(self, iter_num):
+        #Add the projection potential to the full fock and optimize with diis. Then seperate to subsystem and set the subsystem emb_proj_fock value.
+        fock = copy(self.fock)
+        s2s = self.sub2sup
+        for i, sub in enumerate(self.subsystems):
+            fock[0][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][0]
+            fock[1][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][1]
+
+        if self.ft_diis_num == 2:
+            fock = self.ft_diis.update(fock)
+            print ('here2')
+        if self.ft_diis_num == 3:
+            print ('here3a')
+            #CDIIS
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+            fock = self.ft_diis.update(self.smat, dmat, fock)
+        if self.ft_diis_num == 4:
+            #EDIIS
+            print ('here4a')
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+            
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.space:
+                fock = diis_fock
+
+        if self.ft_diis_num == 5:
+            #ADIIS
+            print ('here5a')
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.space:
+                fock = diis_fock
+
+        if self.ft_diis_num == 6:
+            print ('here6a')
+            #EDIIS_DIIS
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.ediis.space:
+                diis_fock = self.ft_diis.mix()
+                fock = diis_fock
+
+        if self.ft_diis_num == 7:
+            print ('here7a')
+            #ADIIS_DIIS
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.adiis.space:
+                diis_fock = self.ft_diis.mix()
+                fock = diis_fock
+
+        if self.ft_diis_num == 8:
+            print ('here8a')
+            #EDIIS_CDIIS
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.ediis.space:
+                fock = diis_fock
+
+        if self.ft_diis_num == 9:
+            print ('here9a')
+            #ADIIS_CDIIS
+            num_rank = self.mol.nao_nr()
+            dmat = np.array([np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))])
+            for i, sub in enumerate(self.subsystems):
+                dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+                dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+
+            dm_env = self.get_emb_dmat()
+            env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+            #Proj Energy
+            proj_energy = 0.
+            for i, sub in enumerate(self.subsystems):
+                proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                                np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1])).real
+            tot_emb_energy = env_in_env_energy + proj_energy 
+
+            diis_fock = self.ft_diis.update(self.smat, dmat, fock, tot_emb_energy)
+            if iter_num > self.ft_diis.ediis.space:
+                fock = diis_fock
+
+        for i, sub in enumerate(self.subsystems):
+            sub_fock_0 = fock[0][np.ix_(s2s[i], s2s[i])]
+            sub_fock_1 = fock[1][np.ix_(s2s[i], s2s[i])]
+            sub.emb_proj_fock = np.array([sub_fock_0, sub_fock_1])
 
         return True
 
@@ -1113,7 +1292,6 @@ class ClusterSuperSystem:
 
         ft_err = 1.
         ft_iter = 0
-        ft_diis_swap = 100
         while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
             ft_err = 0
@@ -1122,6 +1300,8 @@ class ClusterSuperSystem:
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
             self.update_fock()
             self.update_proj_pot()
+            if self.ft_diis_num > 1:
+                self.update_fock_proj_diis(ft_iter)
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)
