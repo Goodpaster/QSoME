@@ -10,7 +10,6 @@ S         -3.02131       -0.17073       -0.00001
 charge -1
 hl_method_num 1
 spin 1
-diis 2
 end
 
 subsystem
@@ -25,7 +24,6 @@ C          1.11974        0.37903       -0.00001
 H          1.17755        1.04420        0.88131
 H          1.17756        1.04418       -0.88134
 charge +1
-diis 2
 end
 
 basis
@@ -35,8 +33,7 @@ end
 env_method_settings
  env_method m06
  embed_settings
-  cycles 1000
-  diis 0
+  cycles 50
  end
 end
 

@@ -5,6 +5,7 @@ Dhabih V. Chulhai"""
 import os
 import numpy as np
 import h5py
+import copy as copy
 
 from pyscf import gto, scf, dft, lib, lo
 from pyscf.tools import cubegen, molden
@@ -303,9 +304,11 @@ class ClusterSuperSystem:
 
         self.ft_diis = None
         if ft_diis == 1:
-            self.ft_diis = [lib.diis.DIIS(), lib.diis.DIIS()]
-            self.ft_diis[0].space = 10
-            self.ft_diis[1].space = 10
+            self.ft_diis = lib.diis.DIIS()
+            self.ft_diis.space = 10
+        elif ft_diis == 2:
+            self.ft_diis = lib.diis.DIIS()
+            self.ft_diis.space = 10
 
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
 
@@ -868,15 +871,15 @@ class ClusterSuperSystem:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
-        if (not self.ft_diis is None) and diis:
+        if (not self.ft_diis is None) and diis and self.ft_diis_num == 1:
             if self.fs_unrestricted or sub_unrestricted:
-                new_fock = self.ft_diis[0].update(self.fock)
+                new_fock = self.ft_diis.update(self.fock)
                 self.fock[0] = new_fock[0]
                 self.fock[1] = new_fock[1]
                 #self.fock[0] = self.ft_diis[0].update(self.fock[0]
                 #self.fock[1] = self.ft_diis[1].update(self.fock[1]
             else:
-                new_fock = self.ft_diis[0].update(self.fock[0])
+                new_fock = self.ft_diis.update(self.fock[0])
                 self.fock[0] = new_fock
                 self.fock[1] = new_fock
         self.veff = [self.fock[0] - self.hcore, self.fock[1] - self.hcore]
@@ -949,6 +952,37 @@ class ClusterSuperSystem:
             self.proj_pot[i] = proj_op.copy()
 
         return True
+
+    def update_fock_proj_diis(self, iter_num):
+        fock = copy.copy(self.fock)
+        fock = np.array(fock)
+        s2s = self.sub2sup
+        for i, sub in enumerate(self.subsystems):
+            fock[0][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][0]
+            fock[1][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][1]
+        if self.ft_diis_num == 2:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 3:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 4:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 5:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 6:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 7:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 8:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 9:
+            fock = self.ft_diis.update(fock)
+        elif self.ft_diis_num == 10:
+            fock = self.ft_diis.update(fock)
+
+        for i, sub in enumerate(self.subsystems):
+            sub_fock_0 = fock[0][np.ix_(s2s[i], s2s[i])]
+            sub_fock_1 = fock[1][np.ix_(s2s[i], s2s[i])]
+            sub.emb_proj_fock = [sub_fock_0, sub_fock_1]
 
     def set_chkfile_index(self, index):
         """Sets the index of the checkfile
@@ -1122,6 +1156,8 @@ class ClusterSuperSystem:
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
             self.update_fock()
             self.update_proj_pot()
+            if self.ft_diis_num > 1:
+                self.update_fock_proj_diis(ft_iter)
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)
