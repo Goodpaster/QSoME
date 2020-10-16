@@ -10,7 +10,7 @@ import copy as copy
 from pyscf import gto, scf, dft, lib, lo
 from pyscf.tools import cubegen, molden
 
-from qsome import custom_pyscf_methods, cluster_subsystem
+from qsome import custom_pyscf_methods, cluster_subsystem, custom_diis
 from qsome.helpers import concat_mols
 from qsome.utilities import time_method
 
@@ -291,7 +291,7 @@ class ClusterSuperSystem:
         self.mo_energy = self.mo_occ.copy()
         self.hcore = self.fs_scf.get_hcore()
         self.fock = [None, None]
-        self.veff = [None, None]
+        self.emb_vhf = None
         self.proj_pot = [np.array([0.0, 0.0]) for sub in self.subsystems]
         #DIIS Stuff
         self.sub_diis = [np.array([lib.diis.DIIS(), lib.diis.DIIS()]) for sub in self.subsystems]
@@ -305,10 +305,31 @@ class ClusterSuperSystem:
         self.ft_diis = None
         if ft_diis == 1:
             self.ft_diis = lib.diis.DIIS()
-            self.ft_diis.space = 10
+            self.ft_diis.space = 15
         elif ft_diis == 2:
             self.ft_diis = lib.diis.DIIS()
+            self.ft_diis.space = 15
+        elif ft_diis == 3:
+            self.ft_diis = scf.diis.CDIIS()
+            self.ft_diis.space = 20
+        elif ft_diis == 4:
+            self.ft_diis = custom_diis.EDIIS()
             self.ft_diis.space = 10
+        elif ft_diis == 5:
+            self.ft_diis = custom_diis.ADIIS()
+            self.ft_diis.space = 15
+        elif ft_diis == 6:
+            self.ft_diis = custom_diis.EDIIS_DIIS()
+            self.ft_diis.space = 15
+        elif ft_diis == 7:
+            self.ft_diis = custom_diis.ADIIS_DIIS()
+            self.ft_diis.space = 15
+        elif ft_diis == 8:
+            self.ft_diis = custom_diis.EDIIS_CDIIS()
+            self.ft_diis.space = 15
+        elif ft_diis == 9:
+            self.ft_diis = custom_diis.ADIIS_CDIIS()
+            self.ft_diis.space = 15
 
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
 
@@ -808,7 +829,12 @@ class ClusterSuperSystem:
         print("  Env-in-Env Calculation  ".center(80))
         print("".center(80, '*'))
         dm_env = self.get_emb_dmat()
-        self.env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env)
+        self.env_in_env_energy = self.fs_scf.energy_tot(dm=dm_env, h1e=self.hcore, vhf=self.emb_vhf)
+        proj_e = 0.
+        for i, sub in enumerate(self.subsystems):
+            proj_e += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                       np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1]))
+        self.env_in_env_energy += proj_e
         print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
         print("".center(80, '*'))
         return self.env_in_env_energy
@@ -862,13 +888,16 @@ class ClusterSuperSystem:
             dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
 
         if self.fs_unrestricted or sub_unrestricted:
-            self.fock = self.os_scf.get_fock(h1e=self.hcore, dm=dmat)
+            self.emb_vhf = self.os_scf.get_veff(self.mol, dmat)
+            self.fock = self.os_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
         elif self.mol.spin != 0:
-            temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
+            self.emb_vhf = self.fs_scf.get_veff(self.mol, dmat)
+            temp_fock = self.fs_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             self.fock = [temp_fock, temp_fock]
         else:
             dmat = dmat[0] + dmat[1]
-            temp_fock = self.fs_scf.get_fock(h1e=self.hcore, dm=dmat)
+            self.emb_vhf = self.fs_scf.get_veff(self.mol, dmat)
+            temp_fock = self.fs_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
         if (not self.ft_diis is None) and diis and self.ft_diis_num == 1:
@@ -882,7 +911,6 @@ class ClusterSuperSystem:
                 new_fock = self.ft_diis.update(self.fock[0])
                 self.fock[0] = new_fock
                 self.fock[1] = new_fock
-        self.veff = [self.fock[0] - self.hcore, self.fock[1] - self.hcore]
 
         #Add the external potential to each fock.
         self.fock[0] += self.ext_pot[0]
@@ -956,28 +984,57 @@ class ClusterSuperSystem:
     def update_fock_proj_diis(self, iter_num):
         fock = copy.copy(self.fock)
         fock = np.array(fock)
+        num_rank = self.mol.nao_nr()
+        dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
         s2s = self.sub2sup
+        sub_unrestricted = False
+        diis_start_cycle = 1
+        proj_energy = 0.
+        old_fock = copy.copy(fock)
         for i, sub in enumerate(self.subsystems):
+            if sub.unrestricted:
+                sub_unrestricted = True
             fock[0][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][0]
             fock[1][np.ix_(s2s[i], s2s[i])] += self.proj_pot[i][1]
+            dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[0])
+            dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.env_dmat[1])
+            proj_energy += (np.einsum('ij,ji', self.proj_pot[i][0], sub.env_dmat[0]) +
+                            np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1]))
+                            
+        #remove off diagonal elements of fock matrix
+        new_fock = np.zeros_like(fock)
+        for i, sub in enumerate(self.subsystems):
+            new_fock[0][np.ix_(s2s[i], s2s[i])] = fock[0][np.ix_(s2s[i], s2s[i])]
+            new_fock[1][np.ix_(s2s[i], s2s[i])] = fock[1][np.ix_(s2s[i], s2s[i])]
+
+        fock = new_fock
+
+        if self.mol.spin == 0 and not(sub_unrestricted or self.fs_unrestricted):
+            elec_dmat = dmat[0] + dmat[1]
+        else:
+            elec_dmat = copy.copy(dmat)
+
+        
+        elec_energy = self.fs_scf.energy_elec(dm=elec_dmat, h1e=self.hcore, vhf=self.emb_vhf)[0]
+        elec_proj_energy = elec_energy + proj_energy
+
+        if not(sub_unrestricted or self.fs_unrestricted):
+            fock = (fock[0] + fock[1]) / 2.
+            dmat = dmat[0] + dmat[1]
+
         if self.ft_diis_num == 2:
             fock = self.ft_diis.update(fock)
         elif self.ft_diis_num == 3:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 4:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 5:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 6:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 7:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 8:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 9:
-            fock = self.ft_diis.update(fock)
-        elif self.ft_diis_num == 10:
-            fock = self.ft_diis.update(fock)
+            temp_fock = self.ft_diis.update(self.smat, dmat, fock)
+            if iter_num > diis_start_cycle:
+                fock = temp_fock
+        elif self.ft_diis_num > 3:
+            temp_fock = self.ft_diis.update(self.smat, dmat, fock, elec_proj_energy)
+            if iter_num > diis_start_cycle:
+                fock = temp_fock
+
+        if not(sub_unrestricted or self.fs_unrestricted):
+            fock = [fock, fock]
 
         for i, sub in enumerate(self.subsystems):
             sub_fock_0 = fock[0][np.ix_(s2s[i], s2s[i])]
@@ -1147,7 +1204,6 @@ class ClusterSuperSystem:
 
         ft_err = 1.
         ft_iter = 0
-        ft_diis_swap = 100
         while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
             ft_err = 0
@@ -1161,7 +1217,7 @@ class ClusterSuperSystem:
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)
-                proj_e = sub.get_env_proj_e()
+                proj_e = sub.get_env_proj_e() #When DIIS acceleration, this is not actually true because it is bound up in the acceleration.
                 # print output to console.
                 print(f"iter:{ft_iter:>3d}:{i:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
                 ft_err += ddm
@@ -1182,6 +1238,7 @@ class ClusterSuperSystem:
             print("Freeze-and-Thaw NOT converged".center(80))
 
         self.update_fock(diis=False)
+        self.update_proj_pot()
         # print subsystem energies
         for i in range(len(self.subsystems)):
             subsystem = self.subsystems[i]

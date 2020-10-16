@@ -1,0 +1,44 @@
+#Geometries taken from https://pubs.acs.org/doi/suppl/10.1021/ja4102979/suppl_file/ja4102979_si_001.pdf
+subsystem
+C          0.30670        0.41026       -0.00013
+H          0.32703        1.05915        0.89103
+H          0.32697        1.05905       -0.89138
+S          1.80538       -0.63374       -0.00009
+C          3.05881        0.69737       -0.00012
+H          2.89975        1.32508       -0.89080
+H          2.89934        1.32546        0.89022
+C          4.44876        0.09809        0.00030
+H          4.60830       -0.52855       -0.88884
+H          5.21101        0.88999        0.00002
+H          4.60810       -0.52781        0.88998
+charge -1
+hl_method_num 1
+end
+
+subsystem
+C         -0.94043       -0.45013       -0.00005
+H         -0.92971       -1.11229       -0.88277
+H         -0.92963       -1.11223        0.88271
+C         -2.21361        0.37907       -0.00003
+H         -2.22052        1.04539       -0.88179
+H         -2.22045        1.04543        0.88171
+H         -3.47356       -0.46945        0.00005
+charge +1
+end
+
+basis
+ default cc-pVDZ
+end
+
+env_method_settings
+ env_method m06
+ embed_settings
+  cycles 50
+  diis 5
+ end
+end
+
+hl_method_settings
+    hl_order 1
+    hl_method rhf
+end

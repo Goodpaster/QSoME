@@ -13,7 +13,7 @@ from pyscf import gto, scf, mp, cc, mcscf, mrpt, fci, tools
 from pyscf.cc import ccsd_t, uccsd_t
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
-from qsome import custom_pyscf_methods, comb_diis
+from qsome import custom_pyscf_methods, custom_diis
 from qsome.ext_methods.ext_factory import ExtFactory
 
 
@@ -264,9 +264,9 @@ class ClusterEnvSubSystem:
         elif diis == 4:
             self.diis = scf.diis.ADIIS()
         elif diis == 5:
-            self.diis = comb_diis.EDIIS_DIIS(self.env_scf)
+            self.diis = custom_diis.EDIIS_DIIS(self.env_scf)
         elif diis == 6:
-            self.diis = comb_diis.ADIIS_DIIS(self.env_scf)
+            self.diis = custom_diis.ADIIS_DIIS(self.env_scf)
         else:
             self.diis = None
 
@@ -592,6 +592,7 @@ class ClusterEnvSubSystem:
                            self.emb_fock[1] - fock[1]]
         if mol is None:
             mol = self.mol
+
         self.env_energy = (self.get_env_elec_energy(env_method=env_method,
                                                     fock=fock, dmat=dmat,
                                                     env_hcore=env_hcore,
@@ -910,7 +911,7 @@ class ClusterEnvSubSystem:
         sub_old_dm = self.get_dmat().copy()
         self.diagonalize()
 
-        new_dm = np.array([None, None])
+        new_dm = [None, None]
         if self.unrestricted or self.mol.spin != 0:
             ddm = sp.linalg.norm(self.get_dmat()[0] - sub_old_dm[0])
             ddm += sp.linalg.norm(self.get_dmat()[1] - sub_old_dm[1])
@@ -928,7 +929,7 @@ class ClusterEnvSubSystem:
                 #GET ODA DAMPING PARAMETER.
                 pass
             new_dm = ((1. - damp) * self.get_dmat() + (damp * sub_old_dm))
-            self.env_dmat = np.array([new_dm/2., new_dm/2.])
+            self.env_dmat = [new_dm/2., new_dm/2.]
         return ddm
 
     def __set_fermi(self, e_sorted):
