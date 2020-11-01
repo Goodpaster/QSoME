@@ -1,8 +1,12 @@
 #Implement EDIIS+DIIS and ADIIS+DIIS
 #By Daniel Graham
 
+import scipy
 import numpy as np
 from pyscf import lib, scf
+
+
+DEBUG = True
 
 class EDIIS(scf.diis.EDIIS):
 
@@ -22,16 +26,46 @@ class EDIIS(scf.diis.EDIIS):
         ds = self._buffer['dm'  ]
         fs = self._buffer['fock']
         es = self._buffer['etot']
-        etot, c = scf.diis.ediis_minimize(es, ds, fs)
-        print (es)
-        print (etot)
-        print (c)
+        etot, c = ediis_minimize(es, ds, fs)
         lib.logger.debug1(self, 'E %s  diis-c %s', etot, c)
         fock = np.einsum('i,i...pq->...pq', c, fs)
-        print ('here3')
-        print (f)
-        print (fock)
         return fock
+
+def ediis_minimize(es, ds, fs):
+    nx = es.size
+    nao = ds.shape[-1]
+    ds = ds.reshape(nx,-1,nao,nao)
+    fs = fs.reshape(nx,-1,nao,nao)
+    df = np.einsum('inpq,jnqp->ij', ds, fs).real
+    diag = df.diagonal()
+    df = diag[:,None] + diag - df - df.T
+
+    def costf(x):
+        c = x**2 / (x**2).sum()
+        return np.einsum('i,i', c, es) - np.einsum('i,ij,j', c, df, c)
+
+    def grad(x):
+        x2sum = (x**2).sum()
+        c = x**2 / x2sum
+        fc = es - 2*np.einsum('i,ik->k', c, df)
+        cx = np.diag(x*x2sum) - np.einsum('k,n->kn', x**2, x)
+        cx *= 2/x2sum**2
+        return np.einsum('k,kn->n', fc, cx)
+
+    if DEBUG:
+        x0 = np.random.random(nx)
+        dfx0 = np.zeros_like(x0)
+        for i in range(nx):
+            x1 = x0.copy()
+            x1[i] += 1e-4
+            dfx0[i] = (costf(x1) - costf(x0))*1e4
+            print((dfx0 - grad(x0)) / dfx0)
+
+    #res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS',
+    #                              jac=grad, tol=1e-9)
+    res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS', tol=1e-9)
+    return res.fun, (res.x**2)/(res.x**2).sum()
+
 
 class ADIIS(scf.diis.ADIIS):
 
@@ -47,13 +81,52 @@ class ADIIS(scf.diis.ADIIS):
 
         ds = self._buffer['dm'  ]
         fs = self._buffer['fock']
-        fun, c = scf.diis.adiis_minimize(ds, fs, self._head)
+        fun, c = adiis_minimize(ds, fs, self._head)
         if self.verbose >= lib.logger.DEBUG1:
             etot = elec_e + fun
             lib.logger.debug1(self, 'E %s  diis-c %s', etot, c)
         fock = np.einsum('i,i...pq->...pq', c, fs)
         self._head += 1
         return fock
+
+def adiis_minimize(ds, fs, idnewest):
+    nx = ds.shape[0]
+    nao = ds.shape[-1]
+    ds = ds.reshape(nx,-1,nao,nao)
+    fs = fs.reshape(nx,-1,nao,nao)
+    df = np.einsum('inpq,jnqp->ij', ds, fs).real
+    d_fn = df[:,idnewest]
+    dn_f = df[idnewest]
+    dn_fn = df[idnewest,idnewest]
+    dd_fn = d_fn - dn_fn
+    df = df - d_fn[:,None] - dn_f + dn_fn
+
+    def costf(x):
+        c = x**2 / (x**2).sum()
+        return (np.einsum('i,i', c, dd_fn) * 2 +
+                np.einsum('i,ij,j', c, df, c))
+
+    #def grad(x):
+    #    x2sum = (x**2).sum()
+    #    c = x**2 / x2sum
+    #    fc = es - 2*np.einsum('i,ik->k', c, df)
+    #    cx = np.diag(x*x2sum) - np.einsum('k,n->kn', x**2, x)
+    #    cx *= 2/x2sum**2
+    #    return np.einsum('k,kn->n', fc, cx)
+
+    #if DEBUG:
+    #    x0 = np.random.random(nx)
+    #    dfx0 = np.zeros_like(x0)
+    #    for i in range(nx):
+    #        x1 = x0.copy()
+    #        x1[i] += 1e-4
+    #        dfx0[i] = (costf(x1) - costf(x0))*1e4
+    #        print((dfx0 - grad(x0)) / dfx0)
+
+    #res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS',
+    #                              jac=grad, tol=1e-9)
+    res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS', tol=1e-9)
+    return res.fun, (res.x**2)/(res.x**2).sum()
 
 class DIIS_CDIIS():
 

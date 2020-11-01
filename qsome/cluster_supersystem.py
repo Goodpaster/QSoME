@@ -3,14 +3,14 @@ Daniel Graham
 Dhabih V. Chulhai"""
 
 import os
+import copy as copy
 import numpy as np
 import h5py
-import copy as copy
 
-from pyscf import gto, scf, dft, lib, lo
+from pyscf import scf, dft, lib, lo
 from pyscf.tools import cubegen, molden
 
-from qsome import custom_pyscf_methods, cluster_subsystem, custom_diis
+from qsome import custom_diis
 from qsome.helpers import concat_mols
 from qsome.utilities import time_method
 
@@ -133,7 +133,7 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None,
-                 ft_damp=0, ft_diis=2, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
+                 ft_damp=0, ft_diis=1, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
                  ft_initguess=None, ft_unrestricted=False, ft_save_orbs=False,
                  ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
@@ -884,13 +884,11 @@ class ClusterSuperSystem:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
-        if (not self.ft_diis is None) and diis and (self.ft_diis_num == 1 or self.ft_diis_num == 3):
+        if (not self.ft_diis is None) and diis:
             if self.fs_unrestricted or sub_unrestricted:
                 new_fock = self.ft_diis.update(self.fock)
                 self.fock[0] = new_fock[0]
                 self.fock[1] = new_fock[1]
-                #self.fock[0] = self.ft_diis[0].update(self.fock[0]
-                #self.fock[1] = self.ft_diis[1].update(self.fock[1]
             else:
                 new_fock = self.ft_diis.update(self.fock[0])
                 self.fock[0] = new_fock
@@ -899,10 +897,10 @@ class ClusterSuperSystem:
         #Add the external potential to each fock.
         self.fock[0] += self.ext_pot[0]
         self.fock[1] += self.ext_pot[1]
-        for i, subsystem in enumerate(self.subsystems):
+        for i, sub in enumerate(self.subsystems):
             sub_fock_0 = self.fock[0][np.ix_(s2s[i], s2s[i])]
             sub_fock_1 = self.fock[1][np.ix_(s2s[i], s2s[i])]
-            subsystem.emb_fock = [sub_fock_0, sub_fock_1]
+            sub.emb_fock = [sub_fock_0, sub_fock_1]
 
         return True
 
@@ -966,15 +964,18 @@ class ClusterSuperSystem:
         return True
 
     def update_fock_proj_diis(self, iter_num):
+        """Updates the fock matrix and the projection potential together
+           using a diis algorithm. Then subdivided into subsystems for density
+           relaxation. This only works in the absolutely localized basis."""
+
         fock = copy.copy(self.fock)
         fock = np.array(fock)
         num_rank = self.mol.nao_nr()
         dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
         s2s = self.sub2sup
         sub_unrestricted = False
-        diis_start_cycle = 1
+        diis_start_cycle = 10
         proj_energy = 0.
-        old_fock = copy.copy(fock)
         for i, sub in enumerate(self.subsystems):
             if sub.unrestricted:
                 sub_unrestricted = True
@@ -986,12 +987,12 @@ class ClusterSuperSystem:
                             np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1]))
                             
         #remove off diagonal elements of fock matrix
-        new_fock = np.zeros_like(fock)
-        for i, sub in enumerate(self.subsystems):
-            new_fock[0][np.ix_(s2s[i], s2s[i])] = fock[0][np.ix_(s2s[i], s2s[i])]
-            new_fock[1][np.ix_(s2s[i], s2s[i])] = fock[1][np.ix_(s2s[i], s2s[i])]
+        #new_fock = np.zeros_like(fock)
+        #for i, sub in enumerate(self.subsystems):
+        #    new_fock[0][np.ix_(s2s[i], s2s[i])] = fock[0][np.ix_(s2s[i], s2s[i])]
+        #    new_fock[1][np.ix_(s2s[i], s2s[i])] = fock[1][np.ix_(s2s[i], s2s[i])]
 
-        fock = new_fock
+        #fock = new_fock
 
         if self.mol.spin == 0 and not(sub_unrestricted or self.fs_unrestricted):
             elec_dmat = dmat[0] + dmat[1]
@@ -1013,10 +1014,10 @@ class ClusterSuperSystem:
             #temp_fock = self.ft_diis.update(self.smat, dmat, fock)
             #if iter_num > diis_start_cycle:
             #    fock = temp_fock
-        elif self.ft_diis_num > 3:
-            temp_fock = self.ft_diis.update(self.smat, dmat, fock, elec_proj_energy)
-            if iter_num > diis_start_cycle:
-                fock = temp_fock
+        #elif self.ft_diis_num > 3:
+        #    temp_fock = self.ft_diis.update(self.smat, dmat, fock, elec_proj_energy)
+        #    if iter_num > diis_start_cycle:
+        #        fock = temp_fock
 
         if not(sub_unrestricted or self.fs_unrestricted):
             fock = [fock, fock]
@@ -1162,12 +1163,12 @@ class ClusterSuperSystem:
             dmat = [np.zeros((mat_rank, mat_rank)), np.zeros((mat_rank, mat_rank))]
             s2s = self.sub2sup
             for i, sub in enumerate(self.subsystems):
-                if self.subsystems[i].unrestricted or self.subsystems[i].mol.spin != 0:
-                    dmat[0][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[0]
-                    dmat[1][np.ix_(s2s[i], s2s[i])] += self.subsystems[i].get_dmat()[1]
+                if sub.unrestricted or sub.mol.spin != 0:
+                    dmat[0][np.ix_(s2s[i], s2s[i])] += sub.get_dmat()[0]
+                    dmat[1][np.ix_(s2s[i], s2s[i])] += sub.get_dmat()[1]
                 else:
-                    dmat[0][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
-                    dmat[1][np.ix_(s2s[i], s2s[i])] += (self.subsystems[i].get_dmat()/2.)
+                    dmat[0][np.ix_(s2s[i], s2s[i])] += (sub.get_dmat()/2.)
+                    dmat[1][np.ix_(s2s[i], s2s[i])] += (sub.get_dmat()/2.)
         if self.mol.spin != 0 or self.ft_unrestricted or self.fs_unrestricted:
             print('Writing DFT-in-DFT Density'.center(80))
             cubegen_fn = (os.path.splitext(filename)[0] + '_' +
@@ -1196,16 +1197,16 @@ class ClusterSuperSystem:
             ft_iter += 1
             #Correct for DIIS
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
-            if self.ft_diis_num == 3 and swap_diis:
+            if self.ft_diis_num == 2 or (self.ft_diis_num == 3 and swap_diis):
                 self.update_fock(diis=False)
             else:
                 self.update_fock()
             self.update_proj_pot()
-            if self.ft_diis_num > 1:
-                if self.ft_diis_num == 3 and swap_diis:
-                    self.update_fock_proj_diis(ft_iter)
-                elif self.ft_diis_num != 3:
-                    self.update_fock_proj_diis(ft_iter)
+            if self.ft_diis_num == 3 and swap_diis:
+                self.update_fock_proj_diis(ft_iter)
+            elif self.ft_diis_num == 2:
+                self.update_fock_proj_diis(ft_iter)
+
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)

@@ -143,7 +143,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol8.build()
         self.cs_mol13 = mol8
 
-    @unittest.skip
+    #@unittest.skip
     def test_init_densities(self):
 
         env_method = 'lda'
@@ -201,7 +201,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
     def test_get_emb_ext_pot(self):
         pass
 
-    @unittest.skip
+    #@unittest.skip
     def test_get_supersystem_energy(self):
 
         #Closed Shell

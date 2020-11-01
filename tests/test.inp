@@ -28,7 +28,7 @@ env_method_settings
  env_method m06
  embed_settings
   cycles 50
-  diis 2
+  diis 5
  end
 end
 
