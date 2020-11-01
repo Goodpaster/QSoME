@@ -1472,6 +1472,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
     def __do_casscf(self):
         """Perform the requested casscf calculation"""
+        #NEED TO MAKE CUSTOM casscf.get_hcore() adding the projection operator.
 
         str_start = self.hl_method.find("[") + 1
         str_end = self.hl_method.find("]")
@@ -1484,6 +1485,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_casscf.max_cycle = self.hl_cycles
 
         self.hl_energy = hl_casscf.kernel()[0]
+
+        #Does not have unrestricted nevpt2
+        if 'nevpt' in self.hl_method:
+            self.hl_energy += mrpt.NEVPT(hl_casscf).kernel()
 
     def __do_fci(self):
         """Perform the requested fci calculation. This is incomplete."""

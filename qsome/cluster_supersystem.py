@@ -133,7 +133,7 @@ class ClusterSuperSystem:
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
                  ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None,
-                 ft_damp=0, ft_diis=1, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
+                 ft_damp=0, ft_diis=2, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
                  ft_initguess=None, ft_unrestricted=False, ft_save_orbs=False,
                  ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
                  filename=None, scr_dir=None, nproc=None, pmem=None):
@@ -310,25 +310,9 @@ class ClusterSuperSystem:
             self.ft_diis = lib.diis.DIIS()
             self.ft_diis.space = 15
         elif ft_diis == 3:
-            self.ft_diis = scf.diis.CDIIS()
-            self.ft_diis.space = 20
-        elif ft_diis == 4:
-            self.ft_diis = custom_diis.EDIIS()
-            self.ft_diis.space = 10
-        elif ft_diis == 5:
-            self.ft_diis = custom_diis.ADIIS()
+            self.ft_diis = lib.diis.DIIS()
             self.ft_diis.space = 15
-        elif ft_diis == 6:
-            self.ft_diis = custom_diis.EDIIS_DIIS()
-            self.ft_diis.space = 15
-        elif ft_diis == 7:
-            self.ft_diis = custom_diis.ADIIS_DIIS()
-            self.ft_diis.space = 15
-        elif ft_diis == 8:
-            self.ft_diis = custom_diis.EDIIS_CDIIS()
-            self.ft_diis.space = 15
-        elif ft_diis == 9:
-            self.ft_diis = custom_diis.ADIIS_CDIIS()
+            self.ft_diis_2 = lib.diis.DIIS()
             self.ft_diis.space = 15
 
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
@@ -900,7 +884,7 @@ class ClusterSuperSystem:
             temp_fock = self.fs_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
-        if (not self.ft_diis is None) and diis and self.ft_diis_num == 1:
+        if (not self.ft_diis is None) and diis and (self.ft_diis_num == 1 or self.ft_diis_num == 3):
             if self.fs_unrestricted or sub_unrestricted:
                 new_fock = self.ft_diis.update(self.fock)
                 self.fock[0] = new_fock[0]
@@ -1025,9 +1009,10 @@ class ClusterSuperSystem:
         if self.ft_diis_num == 2:
             fock = self.ft_diis.update(fock)
         elif self.ft_diis_num == 3:
-            temp_fock = self.ft_diis.update(self.smat, dmat, fock)
-            if iter_num > diis_start_cycle:
-                fock = temp_fock
+            fock = self.ft_diis_2.update(fock)
+            #temp_fock = self.ft_diis.update(self.smat, dmat, fock)
+            #if iter_num > diis_start_cycle:
+            #    fock = temp_fock
         elif self.ft_diis_num > 3:
             temp_fock = self.ft_diis.update(self.smat, dmat, fock, elec_proj_energy)
             if iter_num > diis_start_cycle:
@@ -1204,16 +1189,23 @@ class ClusterSuperSystem:
 
         ft_err = 1.
         ft_iter = 0
+        swap_diis = False
         while((ft_err > self.ft_conv) and (ft_iter < self.ft_cycles)):
             # cycle over subsystems
             ft_err = 0
             ft_iter += 1
             #Correct for DIIS
             # If fock only updates after cycling, then use python multiprocess todo simultaneously.
-            self.update_fock()
+            if self.ft_diis_num == 3 and swap_diis:
+                self.update_fock(diis=False)
+            else:
+                self.update_fock()
             self.update_proj_pot()
             if self.ft_diis_num > 1:
-                self.update_fock_proj_diis(ft_iter)
+                if self.ft_diis_num == 3 and swap_diis:
+                    self.update_fock_proj_diis(ft_iter)
+                elif self.ft_diis_num != 3:
+                    self.update_fock_proj_diis(ft_iter)
             for i, sub in enumerate(self.subsystems):
                 sub.proj_pot = self.proj_pot[i]
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)
@@ -1229,6 +1221,9 @@ class ClusterSuperSystem:
                 if self.ft_updateproj > 0 and ((i + 1) % self.ft_updateproj) == 0:
                     self.update_proj_pot()
 
+            if (ft_err < 1e-2):
+                swap_diis = True
+            
             self.save_chkfile()
 
         print("".center(80))

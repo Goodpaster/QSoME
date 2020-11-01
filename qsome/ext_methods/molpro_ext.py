@@ -320,7 +320,7 @@ class MolproExt:
             method_string += "}"
 
             if re.match(re.compile('caspt2\[.*\]'), self.method):
-                method_string += "\n{rs2c,maxiti=100}"
+                method_string += "\n{rs2c,maxiti=100;core}"
 
             if ('nevpt2' in self.method.lower()):
                 method_string += '\nnevpt2'
