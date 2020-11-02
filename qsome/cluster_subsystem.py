@@ -242,14 +242,14 @@ class ClusterEnvSubSystem:
         self.subsys_fock = np.array([None, None])
 
         self.emb_pot = np.array([np.zeros_like(self.env_hcore),
-                        np.zeros_like(self.env_hcore)])
+                                 np.zeros_like(self.env_hcore)])
         self.proj_pot = np.array([np.zeros_like(self.env_hcore),
-                         np.zeros_like(self.env_hcore)])
+                                  np.zeros_like(self.env_hcore)])
 
         self.env_mo_coeff = np.array([np.zeros_like(self.env_hcore),
-                             np.zeros_like(self.env_hcore)])
+                                      np.zeros_like(self.env_hcore)])
         self.env_mo_occ = np.array([np.zeros_like(self.env_hcore[0]),
-                           np.zeros_like(self.env_hcore[0])])
+                                    np.zeros_like(self.env_hcore[0])])
         self.env_mo_energy = self.env_mo_occ.copy()
         self.env_energy = 0.0
 
@@ -1086,12 +1086,12 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
-                 hl_sr_method=None, hl_spin=None, hl_conv=None, hl_grad=None,
+                 hl_sr_method=None, hl_excited=False, hl_spin=None, hl_conv=None, hl_grad=None,
                  hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
                  hl_density_fitting=False, hl_save_orbs=False,
                  hl_save_density=False, hl_save_spin_density=False,
-                 hl_dict=None, **kwargs):
+                 hl_dict=None, hl_excited_dict=None, **kwargs):
         """
         Parameters
         ----------
@@ -1162,6 +1162,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_method = hl_method
         self.hl_initguess = hl_initguess
         self.hl_sr_method = hl_sr_method
+        self.hl_excited = hl_excited
         if hl_spin:
             self.hl_spin = hl_spin
         else:
@@ -1180,6 +1181,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_save_density = hl_save_density
         self.hl_save_spin_density = hl_save_spin_density
         self.__set_hl_method_settings(hl_dict)
+        self.__set_hl_excited_settings(hl_excited_dict)
 
         self.hl_mo_coeff = None
         self.hl_mo_occ = None
@@ -1220,6 +1222,21 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             self.shci_no_stochastic = hl_dict.get("no_stochastic")
             self.shci_npt_iter = hl_dict.get("NPTiter")
             self.shci_no_rdm = hl_dict.get("NoRDM")
+
+    def __set_hl_excited_settings(self, hl_excited_dict):
+        """Sets the object parameters based on the excited settings
+
+        Parameters
+        ----------
+        hl_excited_dict : dict
+            A dictionary containing the hl excited state specific settings.
+        """
+
+        if hl_excited_dict is None:
+            hl_excited_dict = {}
+        self.hl_excited_dict = hl_excited_dict
+        self.hl_excited_nroots = hl_excited_dict.get('nroots')
+        self.hl_excited_conv = hl_excited_dict.get('conv')
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
         """Return the projection energy
@@ -1451,6 +1468,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             else:
                 ecc_t = ccsd_t.kernel(hl_cc, eris)
             self.hl_energy += ecc_t
+
+        if self.hl_excited:
+            #DO excited state embedding here.
+            pass
 
     def __do_mp(self):
         """Perform the requested perturbation calculation"""

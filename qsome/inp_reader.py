@@ -61,10 +61,14 @@ def read_input(filename):
     env_settings.add_line_key('rhocutoff', type=float)
     env_settings.add_line_key('verbose', type=int)
     env_settings.add_boolean_key('compare_density')
+    excited_settings = env_settings.add_block_key('excited_settings')
+    add_excited_settings(excited_settings)
     add_env_settings(env_settings)
 
     # Freeze and thaw settings
     embed = env_settings.add_block_key('embed_settings')
+    excited_settings = embed.add_block_key('excited_settings')
+    add_excited_settings(excited_settings)
     add_embed_settings(embed)
 
     # Define the high level calculation settings.
@@ -73,6 +77,7 @@ def read_input(filename):
     hl_settings.add_line_key('hl_order', type=int)
     hl_settings.add_line_key('hl_method', type=str)
     add_hl_settings(hl_settings)
+
 
     cc_settings = hl_settings.add_block_key('cc_settings')
     add_cc_settings(cc_settings)
@@ -86,6 +91,9 @@ def read_input(filename):
     dmrg_settings = hl_settings.add_block_key('dmrg_settings')
     dmrg_settings.add_line_key('maxM', type=int)
     dmrg_settings.add_line_key('num_thirds', type=int)
+
+    excited_settings = hl_settings.add_block_key('excited_settings')
+    add_excited_settings(excited_settings)
 
     basis = reader.add_block_key('basis')
     basis.add_regex_line('basis_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
@@ -146,6 +154,9 @@ def add_subsys_settings(subsys_block):
     sub_env_settings.add_boolean_key('freeze')
     add_env_settings(sub_env_settings)
 
+    excited_settings = sub_env_settings.add_block_key('excited_settings')
+    add_excited_settings(excited_settings)
+
     # Override default high level method settings.
     sub_hl_settings = subsys_block.add_block_key('hl_method_settings')
     add_hl_settings(sub_hl_settings)
@@ -162,6 +173,9 @@ def add_subsys_settings(subsys_block):
     sub_dmrg_settings = sub_hl_settings.add_block_key('dmrg_settings')
     sub_dmrg_settings.add_line_key('maxM', type=int)
     sub_dmrg_settings.add_line_key('num_thirds', type=int)
+
+    excited_settings = sub_hl_settings.add_block_key('excited_settings')
+    add_excited_settings(excited_settings)
 
 def add_embed_settings(embed_block):
     """Adds the embedding settings to the input reader block.
@@ -205,6 +219,8 @@ def add_embed_settings(embed_block):
     operator.add_boolean_key('huzinagafermi', action='huzfermi')
     operator.add_boolean_key('huzfermi', action='huzfermi')
 
+    embed_block.add_boolean_key('excited_relax')
+
 def add_env_settings(inp_block):
     """Adds the environment subsystem settings to the block.
 
@@ -226,6 +242,7 @@ def add_env_settings(inp_block):
     inp_block.add_boolean_key('save_orbs')
     inp_block.add_boolean_key('save_density')
     inp_block.add_boolean_key('save_spin_density')
+    inp_block.add_boolean_key('excited')
 
 def add_hl_settings(inp_block):
     """Adds the high level subsystem settings to the block.
@@ -252,6 +269,7 @@ def add_hl_settings(inp_block):
     inp_block.add_boolean_key('save_orbs')
     inp_block.add_boolean_key('save_density')
     inp_block.add_boolean_key('save_spin_density')
+    inp_block.add_boolean_key('excited')
 
 def add_cc_settings(inp_block):
     """Adds the high level CC settings to the block.
@@ -295,6 +313,18 @@ def add_shci_settings(inp_block):
     inp_block.add_line_key('nPTiter', type=int)
     inp_block.add_boolean_key('no_stochastic')
     inp_block.add_boolean_key('NoRDM')
+
+def add_excited_settings(inp_block):
+    """Adds the excited state settings to the block.
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add excited state setting options.
+    """
+
+    inp_block.add_line_key('nroots', type=int)
+    inp_block.add_line_key('conv', type=float)
 
 def cleanup_keys(settings_dict, key_correct=None):
     """Removes unnessecary keys created by input_reader.
@@ -351,7 +381,7 @@ def build_hl_dict(hl_settings, hl_params):
                            'grad', 'cycles', 'damp', 'shift',
                            'compress_approx', 'unrestricted',
                            'density_fitting', 'save_orbs', 'save_density',
-                           'save_spin_density', 'use_ext']
+                           'save_spin_density', 'use_ext', 'excited']
 
     for base_kwarg in base_setting_kwargs:
         if base_kwarg in hl_params and hl_params[base_kwarg]:
@@ -386,6 +416,10 @@ def build_hl_dict(hl_settings, hl_params):
         dmrg_dict = vars(hl_params['dmrg_settings'])
         cleanup_keys(dmrg_dict)
         hl_settings['hl_dict'] = dmrg_dict
+    if hl_params['excited_settings']:
+        excited_dict = vars(hl_params['excited_settings'])
+        cleanup_keys(excited_dict)
+        hl_settings['hl_excited_dict'] = excited_dict
 
 def add_ghost_link(subsys_mols, sub_settings):
     """Adds linking ghost atoms to the subsystem mol objects.
@@ -510,7 +544,9 @@ class InpReader:
                    'compare_density'      :       'compare_density',
                    'save_orbs'            :       'fs_save_orbs',
                    'save_density'         :       'fs_save_density',
-                   'save_spin_density'    :       'fs_save_spin_density'}
+                   'save_spin_density'    :       'fs_save_spin_density',
+                   'excited'              :       'fs_excited',
+                   'excited_settings'     :       'fs_excited_dict'}
 
         ft_dict = {'cycles'               :       'ft_cycles',
                    'subcycles'            :       'ft_subcycles',
@@ -526,17 +562,26 @@ class InpReader:
                    'save_orbs'            :       'ft_save_orbs',
                    'save_density'         :       'ft_save_density',
                    'save_spin_density'    :       'ft_save_spin_density',
-                   'proj_oper'            :       'ft_proj_oper'}
+                   'proj_oper'            :       'ft_proj_oper',
+                   'excited_relax'        :       'ft_excited_relax',
+                   'excited_settings'     :       'ft_excited_dict'}
 
         for supersystem in inp.env_method_settings:
             sup_settings_dict = vars(supersystem)
             sup_kwargs = {}
             for set_key in fs_dict:
                 if sup_settings_dict[set_key] is not None:
+                    if set_key == 'excited_settings':
+                        sup_settings_dict[set_key] = vars(sup_settings_dict[set_key])
+                        cleanup_keys(sup_settings_dict[set_key])
                     sup_kwargs[fs_dict[set_key]] = sup_settings_dict[set_key]
 
             if sup_settings_dict['embed_settings'] is not None:
                 emb_set_dict = vars(sup_settings_dict['embed_settings'])
+                if emb_set_dict['excited_settings']:
+                    excited_dict = vars(emb_set_dict['excited_settings'])
+                    cleanup_keys(excited_dict)
+                    emb_set_dict['excited_settings'] = excited_dict
                 for s_key in ft_dict:
                     if emb_set_dict[s_key] is not None:
                         sup_kwargs[ft_dict[s_key]] = emb_set_dict[s_key]
@@ -648,6 +693,7 @@ class InpReader:
                    'save_spin_density': 'hl_save_spin_density',
                    'density_fitting': 'hl_density_fitting',
                    'use_ext': 'hl_ext',
+                   'excited': 'hl_excited'
                    }
 
 

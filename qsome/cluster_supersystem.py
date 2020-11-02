@@ -128,15 +128,18 @@ class ClusterSuperSystem:
 
     def __init__(self, subsystems, fs_method, env_order=1., fs_smearsigma=0.,
                  fs_initguess=None, fs_conv=None, fs_grad=None, fs_cycles=None,
-                 fs_damp=0., fs_shift=0., fs_diis=1, fs_grid_level=None,
-                 fs_rhocutoff=None, fs_verbose=None, fs_unrestricted=False,
+                 fs_excited=False, fs_excited_dict=None, fs_damp=0.,
+                 fs_shift=0., fs_diis=1, fs_grid_level=None, fs_rhocutoff=None,
+                 fs_verbose=None, fs_unrestricted=False,
                  fs_density_fitting=False, compare_density=False, chkfile_index=0,
                  fs_save_orbs=False, fs_save_density=False, fs_save_spin_density=False,
-                 ft_cycles=100, ft_basis_tau=1., ft_conv=1e-8, ft_grad=None,
-                 ft_damp=0, ft_diis=1, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
+                 ft_cycles=100, ft_excited_relax=False, ft_excited_dict=None,
+                 ft_basis_tau=1., ft_conv=1e-8, ft_grad=None, ft_damp=0,
+                 ft_diis=1, ft_setfermi=None, ft_updatefock=0, ft_updateproj=1,
                  ft_initguess=None, ft_unrestricted=False, ft_save_orbs=False,
-                 ft_save_density=False, ft_save_spin_density=False, ft_proj_oper='huz',
-                 filename=None, scr_dir=None, nproc=None, pmem=None):
+                 ft_save_density=False, ft_save_spin_density=False,
+                 ft_proj_oper='huz', filename=None, scr_dir=None, nproc=None,
+                 pmem=None):
 
         """
         Parameters
@@ -234,6 +237,11 @@ class ClusterSuperSystem:
         self.fs_method = fs_method
         self.fs_smearsigma = fs_smearsigma
         self.fs_initguess = fs_initguess
+        self.fs_excited = fs_excited
+        self.fs_excited_dict = {}
+        if fs_excited_dict:
+            self.fs_excited_dict = fs_excited_dict
+            self.fs_excited_nroots = fs_excited_dict.get('nroots')
         self.fs_conv = fs_conv
         self.fs_grad = fs_grad
         self.fs_cycles = fs_cycles
@@ -253,6 +261,11 @@ class ClusterSuperSystem:
 
 
         # freeze and thaw settings
+        self.ft_excited_relax = ft_excited_relax
+        self.ft_excited_dict = {}
+        if ft_excited_dict:
+            self.ft_excited_dict = ft_excited_dict
+            self.ft_excited_nroots = ft_excited_dict.get('nroots')
         self.ft_cycles = ft_cycles
         self.ft_basis_tau = ft_basis_tau
         self.ft_conv = ft_conv
@@ -658,6 +671,10 @@ class ClusterSuperSystem:
                 nelec_a = scf_obj.mol.nelec[0]
                 self.local_mo_coeff[0] = lo.ER(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 self.local_mo_coeff[1] = self.local_mo_coeff[0]
+
+        if self.fs_excited:
+            #Run the Excited state calculation on the self.fs_scf object.  
+            pass
 
         return self.fs_energy
 
@@ -1196,7 +1213,7 @@ class ClusterSuperSystem:
             ft_err = 0
             ft_iter += 1
             #Correct for DIIS
-            # If fock only updates after cycling, then use python multiprocess todo simultaneously.
+            # If fock only updates after cycling, then use python multiprocess todo simultaneously. python multiprocess may not be able to do what I want here. 
             if self.ft_diis_num == 2 or (self.ft_diis_num == 3 and swap_diis):
                 self.update_fock(diis=False)
             else:
@@ -1217,10 +1234,10 @@ class ClusterSuperSystem:
                 self.ft_fermi[i] = sub.fermi
 
                 #Check if need to update fock or proj pot.
-                if self.ft_updatefock > 0 and ((i + 1) % self.ft_updatefock) == 0:
-                    self.update_fock()
-                if self.ft_updateproj > 0 and ((i + 1) % self.ft_updateproj) == 0:
-                    self.update_proj_pot()
+                #if self.ft_updatefock > 0 and ((i + 1) % self.ft_updatefock) == 0:
+                #    self.update_fock()
+                #if self.ft_updateproj > 0 and ((i + 1) % self.ft_updateproj) == 0:
+                #    self.update_proj_pot()
 
             if (ft_err < 1e-2):
                 swap_diis = True
