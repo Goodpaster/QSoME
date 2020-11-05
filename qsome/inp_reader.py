@@ -325,6 +325,10 @@ def add_excited_settings(inp_block):
 
     inp_block.add_line_key('nroots', type=int)
     inp_block.add_line_key('conv', type=float)
+    inp_block.add_line_key('cycles', type=int)
+    inp_block.add_line_key('eom_type', type=('ee', 'ea', 'ip', str),
+                        default='ee')
+    inp_block.add_boolean_key('koopmans')
 
 def cleanup_keys(settings_dict, key_correct=None):
     """Removes unnessecary keys created by input_reader.

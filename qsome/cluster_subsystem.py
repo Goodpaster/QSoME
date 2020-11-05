@@ -11,6 +11,7 @@ import numpy as np
 import scipy as sp
 from pyscf import gto, scf, mp, cc, mcscf, mrpt, fci, tools
 from pyscf.cc import ccsd_t, uccsd_t
+from pyscf.cc import eom_uccsd, eom_rccsd
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
 from qsome import custom_pyscf_methods, custom_diis
@@ -1237,6 +1238,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_dict = hl_excited_dict
         self.hl_excited_nroots = hl_excited_dict.get('nroots')
         self.hl_excited_conv = hl_excited_dict.get('conv')
+        self.hl_excited_cycles = hl_excited_dict.get('cycles')
+        self.hl_excited_type = hl_excited_dict.get('eom_type')
+        self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
+
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
         """Return the projection energy
@@ -1459,19 +1464,37 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_cc.conv_tol = self.hl_conv
         if self.hl_cycles is not None:
             hl_cc.max_cycle = self.hl_cycles
-        ecc = hl_cc.kernel()[0]
-        self.hl_energy += ecc
-        if "(t)" in self.hl_method:
+        if "(t)" in self.hl_method or self.hl_excited:
             eris = hl_cc.ao2mo()
+            ecc = hl_cc.kernel(eris=eris)[0]
+        else:
+            ecc = hl_cc.kernel()[0]
+        self.hl_energy += ecc
+
+        if "(t)" in self.hl_method:
             if self.hl_unrestricted or self.mol.spin != 0:
-                ecc_t = uccsd_t.kernel(hl_cc, eris)
+                ecc_t = uccsd_t.kernel(hl_cc, eris=eris)
             else:
-                ecc_t = ccsd_t.kernel(hl_cc, eris)
+                ecc_t = ccsd_t.kernel(hl_cc, eris=eris)
             self.hl_energy += ecc_t
 
         if self.hl_excited:
             #DO excited state embedding here.
-            pass
+            # in PySCF v1.7, available CC methods are
+            # EE/IP/EA/SF-EOM-CCSD, EA/IP-EOM-CCSD_Ta
+            # no need to distinguish RCCSD and UCCSD, it is inherited
+            hl_cc.conv_tol = self.hl_excited_conv
+            hl_cc.max_cycle = self.hl_excited_cycles 
+            if 'ee' in self.hl_excited_type:
+                eee,cee = mycc.eeccsd(nroots=self.hl_excited_nroots, eris=eris)
+            if 'ea' in self.hl_excited_type:
+                eea,cea = mycc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
+                if "(t)" in self.hl_method:
+                    eea_star = mycc.eaccsd_star(nroots=self.hl_excited_nroots, eris=eris)
+            if 'ip' in self.hl_excited_type:
+                eip,cip = mycc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
+                if "(t)" in self.hl_method:
+                    eip_star = mycc.ipccsd_star(nroots=self.hl_excited_nroots, eris=eris)
 
     def __do_mp(self):
         """Perform the requested perturbation calculation"""
