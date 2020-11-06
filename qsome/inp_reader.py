@@ -326,12 +326,11 @@ def add_excited_settings(inp_block):
     inp_block.add_line_key('nroots', type=int)
     inp_block.add_line_key('conv', type=float)
     inp_block.add_line_key('cycles', type=int)
-    inp_block.add_line_key('eom_type', type=('ee', 'ea', 'ip', str),
-                        default='ee')
+    inp_block.add_line_key('eom_type', type=str)
     # koopmans excitation or not for EOM-CC
     inp_block.add_boolean_key('koopmans')
-    # TDA or not for TDDFT
-    inp_block.add_boolean_key('tda')
+    # TDA or not for TDDFT I don't think this is necessary. If the hl method is a cc method you will be doing only eom and if the hl method is dft shouldn't it be tda by default?
+    #inp_block.add_boolean_key('tda')
 
 
 def cleanup_keys(settings_dict, key_correct=None):
@@ -701,7 +700,9 @@ class InpReader:
                    'save_spin_density': 'hl_save_spin_density',
                    'density_fitting': 'hl_density_fitting',
                    'use_ext': 'hl_ext',
-                   'excited': 'hl_excited'
+                   'excited': 'hl_excited',
+                   'eom_type': 'eom_type',
+                   'koopman': 'koopman'
                    }
 
 

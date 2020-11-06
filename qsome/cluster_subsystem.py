@@ -1240,8 +1240,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_conv = hl_excited_dict.get('conv')
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
+        if self.hl_excited_type is None:
+            self.hl_excited_type = 'ee'
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
-        self.hl_excited_tda = hl_excited_dict.get('tda')
+        #self.hl_excited_tda = hl_excited_dict.get('tda')
 
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
@@ -1493,6 +1495,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             # in PySCF v1.7, available CC methods are
             # EE/IP/EA/SF-EOM-CCSD, EA/IP-EOM-CCSD_Ta
             # no need to distinguish RCCSD and UCCSD, it is inherited
+            eris = hl_cc.ao2mo()
             hl_cc.conv_tol = self.hl_excited_conv
             hl_cc.max_cycle = self.hl_excited_cycles 
             if 'ee' in self.hl_excited_type:
