@@ -1241,6 +1241,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
+        self.hl_excited_tda = hl_excited_dict.get('tda')
 
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
@@ -1449,6 +1450,15 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         #Set grid, rho and xc
         hl_sr_scf.xc = self.hl_sr_method
         self.hl_sr_scf = hl_sr_scf
+
+        #DO TDDFT embedding here.
+        if self.hl_excited:
+            if hl_excited_tda: hl_sr_tdscf = hl_sr_scf.TDA()
+            else: hl_sr_tdscf = hl_sr_scf.TDDFT()
+            hl_sr_tdscf.nroots = self.hl_excited_nroots
+            hl_sr_tdscf.conv_tol = self.hl_excited_conv
+            hl_sr_tdscf.max_cycle = self.hl_excited_cycles 
+            etd = hl_sr_tdscf.kernel()[0] 
 
     def __do_cc(self):
         """Perform the requested coupled cluster calculation."""

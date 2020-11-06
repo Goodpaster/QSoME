@@ -328,7 +328,11 @@ def add_excited_settings(inp_block):
     inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('eom_type', type=('ee', 'ea', 'ip', str),
                         default='ee')
+    # koopmans excitation or not for EOM-CC
     inp_block.add_boolean_key('koopmans')
+    # TDA or not for TDDFT
+    inp_block.add_boolean_key('tda')
+
 
 def cleanup_keys(settings_dict, key_correct=None):
     """Removes unnessecary keys created by input_reader.
