@@ -702,8 +702,6 @@ class InpReader:
                    'density_fitting': 'hl_density_fitting',
                    'use_ext': 'hl_ext',
                    'excited': 'hl_excited',
-                   'eom_type': 'eom_type',
-                   'koopman': 'koopman'
                    }
 
 
