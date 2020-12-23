@@ -1507,8 +1507,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             # import constant to convert hartree to eV and cm-1
             from pyscf.data import nist
             eris = hl_cc.ao2mo()
-            hl_cc.conv_tol = self.hl_excited_conv
-            hl_cc.max_cycle = self.hl_excited_cycles 
             if 'ee' in self.hl_excited_type:
                 print('Only singlet excitations are considered')
                 print('Spin-flip excitations are available in PySCF if wanted')
