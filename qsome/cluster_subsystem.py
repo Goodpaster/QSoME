@@ -1240,7 +1240,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_conv = hl_excited_dict.get('conv')
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
+        if self.hl_excited_type is None:
+            self.hl_excited_type = 'ee'
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
+        self.hl_excited_tda = hl_excited_dict.get('tda')
         self.hl_excited_triple = hl_excited_dict.get('Ta_star')
 
         # set default number of excited states to 3
@@ -1455,6 +1458,15 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hl_sr_scf.xc = self.hl_sr_method
         self.hl_sr_scf = hl_sr_scf
 
+        #DO TDDFT embedding here.
+        if self.hl_excited:
+            if hl_excited_tda: hl_sr_tdscf = hl_sr_scf.TDA()
+            else: hl_sr_tdscf = hl_sr_scf.TDDFT()
+            hl_sr_tdscf.nroots = self.hl_excited_nroots
+            hl_sr_tdscf.conv_tol = self.hl_excited_conv
+            hl_sr_tdscf.max_cycle = self.hl_excited_cycles 
+            etd = hl_sr_tdscf.kernel()[0] 
+
     def __do_cc(self):
         """Perform the requested coupled cluster calculation."""
 
@@ -1494,6 +1506,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 hl_cc.max_cycle = self.hl_excited_cycles 
             # import constant to convert hartree to eV and cm-1
             from pyscf.data import nist
+            eris = hl_cc.ao2mo()
+            hl_cc.conv_tol = self.hl_excited_conv
+            hl_cc.max_cycle = self.hl_excited_cycles 
             if 'ee' in self.hl_excited_type:
                 print('Only singlet excitations are considered')
                 print('Spin-flip excitations are available in PySCF if wanted')
