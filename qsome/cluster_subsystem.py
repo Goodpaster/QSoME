@@ -1087,7 +1087,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
-                 hl_sr_method=None, hl_excited=False, hl_spin=None, hl_conv=None, hl_grad=None,
+                 hl_sr_method=None, hl_excited=None, hl_spin=None, hl_conv=None, hl_grad=None,
                  hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
                  hl_density_fitting=False, hl_save_orbs=False,
@@ -1241,6 +1241,11 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
+        self.hl_excited_triple = hl_excited_dict.get('Ta_star')
+
+        # set default number of excited states to 3
+        if self.hl_excited_nroots is None: self.hl_excited_nroots=3
+        if self.hl_excited_type is None: self.hl_excited_type = 'ee'
 
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
@@ -1483,18 +1488,58 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             # in PySCF v1.7, available CC methods are
             # EE/IP/EA/SF-EOM-CCSD, EA/IP-EOM-CCSD_Ta
             # no need to distinguish RCCSD and UCCSD, it is inherited
-            hl_cc.conv_tol = self.hl_excited_conv
-            hl_cc.max_cycle = self.hl_excited_cycles 
+            if self.hl_excited_conv is not None:
+                hl_cc.conv_tol = self.hl_excited_conv
+            if self.hl_excited_cycles is not None:
+                hl_cc.max_cycle = self.hl_excited_cycles 
+            # import constant to convert hartree to eV and cm-1
+            from pyscf.data import nist
             if 'ee' in self.hl_excited_type:
-                eee,cee = mycc.eeccsd(nroots=self.hl_excited_nroots, eris=eris)
+                print('Only singlet excitations are considered')
+                print('Spin-flip excitations are available in PySCF if wanted')
+                eee,cee = hl_cc.eomee_ccsd_singlet(nroots=self.hl_excited_nroots,eris=eris)
+                print(f"Embedded EE-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{eee:>58.8f}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print("".center(80, '*'))
             if 'ea' in self.hl_excited_type:
-                eea,cea = mycc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
-                if "(t)" in self.hl_method:
-                    eea_star = mycc.eaccsd_star(nroots=self.hl_excited_nroots, eris=eris)
+                eea,cea = hl_cc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
+                print(f"Embedded EA-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{eee:>58.8f}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print("".center(80, '*'))
+                if self.hl_excited_triple:
+                    from pyscf.pbc.cc import eom_kccsd_rhf
+                    imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                    imds = imds.make_t3p2_ip_ea(mykcc)
+                    myeom = EOMIP_Ta(mykcc)
+                    eea = myeom.eaccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
+                    print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
+                    print(f"Results in hartree   :{eea:>58.8f}")
+                    print(f"Results in eV        :{eea*nist.HARTREE2EV:>58.2f}")
+                    print(f"Results in wavenumber:{eea*nist.HARTREE2WAVENUMBER:>58.1f}")
+                    print("".center(80, '*'))
             if 'ip' in self.hl_excited_type:
-                eip,cip = mycc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
-                if "(t)" in self.hl_method:
-                    eip_star = mycc.ipccsd_star(nroots=self.hl_excited_nroots, eris=eris)
+                eip,cip = hl_cc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
+                print(f"Embedded IP-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{eee:>58.8f}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print("".center(80, '*'))
+                if self.hl_excited_triple:
+                    if not 'ea' in self.hl_excited_type:
+                        from pyscf.pbc.cc import eom_kccsd_rhf
+                        imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                        imds = imds.make_t3p2_ip_ea(mykcc)
+                        eip = myeom = EOMIP_Ta(mykcc)
+                    myeom.ipccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
+                    print(f"Embedded IP-EOM-CCSD(T)(a)* excitation energy:")
+                    print(f"Results in hartree   :{eip:>58.8f}")
+                    print(f"Results in eV        :{eip*nist.HARTREE2EV:>58.2f}")
+                    print(f"Results in wavenumber:{eip*nist.HARTREE2WAVENUMBER:>58.1f}")
+                    print("".center(80, '*'))
 
     def __do_mp(self):
         """Perform the requested perturbation calculation"""

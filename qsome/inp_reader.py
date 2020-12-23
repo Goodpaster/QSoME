@@ -323,12 +323,16 @@ def add_excited_settings(inp_block):
         The input block to add excited state setting options.
     """
 
-    inp_block.add_line_key('nroots', type=int)
+    inp_block.add_line_key('nroots', type=int, default=3)
     inp_block.add_line_key('conv', type=float)
     inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('eom_type', type=('ee', 'ea', 'ip', str),
                         default='ee')
     inp_block.add_boolean_key('koopmans')
+    # IP/EA-EOM-CCSD(T)*a by Matthews and Stanton
+    # https://github.com/pyscf/pyscf-doc/blob/master/examples/pbc/29-eom_ccsd_Ta.py
+    # https://aip.scitation.org/doi/10.1063/1.4962910
+    inp_block.add_boolean_key('Ta_star')
 
 def cleanup_keys(settings_dict, key_correct=None):
     """Removes unnessecary keys created by input_reader.
