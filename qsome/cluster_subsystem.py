@@ -1240,15 +1240,15 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_conv = hl_excited_dict.get('conv')
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
-        if self.hl_excited_type is None:
-            self.hl_excited_type = 'ee'
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
         self.hl_excited_tda = hl_excited_dict.get('tda')
+        self.hl_excited_tda = hl_excited_dict.get('analyze')
         self.hl_excited_triple = hl_excited_dict.get('Ta_star')
 
         # set default number of excited states to 3
         if self.hl_excited_nroots is None: self.hl_excited_nroots=3
         if self.hl_excited_type is None: self.hl_excited_type = 'ee'
+        if self.hl_excited_type is None: self.hl_excited_type = True
 
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
@@ -1384,6 +1384,25 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_energy = self.hl_sr_scf.kernel(dm0=dmat)
 
+        #DO TDDFT or TDHF here.
+        if self.hl_excited:
+            from pyscf import tdscf
+            if self.hl_excited_tda: hl_sr_tdscf = tdscf.TDA(self.hl_sr_scf)
+            else: 
+                try:
+                    hl_sr_tdscf = tdscf.TDHF(self.hl_sr_scf)
+                except:
+                    hl_sr_tdscf = tdscf.TDDFT(self.hl_sr_scf)
+            if self.hl_excited_conv is not None: 
+                hl_sr_tdscf.conv_tol=self.hl_excited_conv
+            if self.hl_excited_nroots is not None: 
+                hl_sr_tdscf.nroots = self.hl_excited_nroots
+            if self.hl_excited_cycles is not None: 
+                hl_sr_tdscf.max_cycle = self.hl_excited_cycles 
+            etd = hl_sr_tdscf.kernel()[0] 
+            if self.hl_excited_analyze:
+                hl_sr_tdscf.analyze()
+
     def __gen_hf_scf(self):
         """Initializes the single reference hartree-fock object.
         """
@@ -1458,15 +1477,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hl_sr_scf.xc = self.hl_sr_method
         self.hl_sr_scf = hl_sr_scf
 
-        #DO TDDFT embedding here.
-        if self.hl_excited:
-            if hl_excited_tda: hl_sr_tdscf = hl_sr_scf.TDA()
-            else: hl_sr_tdscf = hl_sr_scf.TDDFT()
-            hl_sr_tdscf.nroots = self.hl_excited_nroots
-            hl_sr_tdscf.conv_tol = self.hl_excited_conv
-            hl_sr_tdscf.max_cycle = self.hl_excited_cycles 
-            etd = hl_sr_tdscf.kernel()[0] 
-
     def __do_cc(self):
         """Perform the requested coupled cluster calculation."""
 
@@ -1504,6 +1514,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 hl_cc.conv_tol = self.hl_excited_conv
             if self.hl_excited_cycles is not None:
                 hl_cc.max_cycle = self.hl_excited_cycles 
+            print('hl_cc.conv_tol:',hl_cc.conv_tol)
             # import constant to convert hartree to eV and cm-1
             from pyscf.data import nist
             eris = hl_cc.ao2mo()
@@ -1512,16 +1523,17 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 print('Spin-flip excitations are available in PySCF if wanted')
                 eee,cee = hl_cc.eomee_ccsd_singlet(nroots=self.hl_excited_nroots,eris=eris)
                 print(f"Embedded EE-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eee:>58.8f}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print(f"Results in hartree   :{eee}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
+                print(f"Roots converged?     :{hl_cc.converged}")
                 print("".center(80, '*'))
             if 'ea' in self.hl_excited_type:
                 eea,cea = hl_cc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
                 print(f"Embedded EA-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eee:>58.8f}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print(f"Results in hartree   :{eee}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
                 print("".center(80, '*'))
                 if self.hl_excited_triple:
                     from pyscf.pbc.cc import eom_kccsd_rhf
@@ -1530,16 +1542,16 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     myeom = EOMIP_Ta(mykcc)
                     eea = myeom.eaccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
                     print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
-                    print(f"Results in hartree   :{eea:>58.8f}")
-                    print(f"Results in eV        :{eea*nist.HARTREE2EV:>58.2f}")
-                    print(f"Results in wavenumber:{eea*nist.HARTREE2WAVENUMBER:>58.1f}")
+                    print(f"Results in hartree   :{eea}")
+                    print(f"Results in eV        :{eea*nist.HARTREE2EV}")
+                    print(f"Results in wavenumber:{eea*nist.HARTREE2WAVENUMBER}")
                     print("".center(80, '*'))
             if 'ip' in self.hl_excited_type:
                 eip,cip = hl_cc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
                 print(f"Embedded IP-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eee:>58.8f}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV:>58.2f}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER:>58.1f}")
+                print(f"Results in hartree   :{eee}")
+                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
+                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
                 print("".center(80, '*'))
                 if self.hl_excited_triple:
                     if not 'ea' in self.hl_excited_type:
@@ -1549,9 +1561,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                         eip = myeom = EOMIP_Ta(mykcc)
                     myeom.ipccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
                     print(f"Embedded IP-EOM-CCSD(T)(a)* excitation energy:")
-                    print(f"Results in hartree   :{eip:>58.8f}")
-                    print(f"Results in eV        :{eip*nist.HARTREE2EV:>58.2f}")
-                    print(f"Results in wavenumber:{eip*nist.HARTREE2WAVENUMBER:>58.1f}")
+                    print(f"Results in hartree   :{eip}")
+                    print(f"Results in eV        :{eip*nist.HARTREE2EV}")
+                    print(f"Results in wavenumber:{eip*nist.HARTREE2WAVENUMBER}")
                     print("".center(80, '*'))
 
     def __do_mp(self):
