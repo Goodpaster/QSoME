@@ -1242,7 +1242,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_type = hl_excited_dict.get('eom_type')
         self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
         self.hl_excited_tda = hl_excited_dict.get('tda')
-        self.hl_excited_tda = hl_excited_dict.get('analyze')
+        self.hl_excited_analyze = hl_excited_dict.get('analyze')
         self.hl_excited_triple = hl_excited_dict.get('Ta_star')
 
         # set default number of excited states to 3
@@ -1385,14 +1385,18 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_energy = self.hl_sr_scf.kernel(dm0=dmat)
 
         #DO TDDFT or TDHF here.
-        if self.hl_excited:
+        if self.hl_excited and 'cc' not in self.hl_method:
             from pyscf import tdscf
-            if self.hl_excited_tda: hl_sr_tdscf = tdscf.TDA(self.hl_sr_scf)
+            if self.hl_excited_tda: 
+                hl_sr_tdscf = tdscf.TDA(self.hl_sr_scf)
+                print("TDA calculations:") 
             else: 
                 try:
                     hl_sr_tdscf = tdscf.TDHF(self.hl_sr_scf)
+                    print("TDHF calculations:") 
                 except:
                     hl_sr_tdscf = tdscf.TDDFT(self.hl_sr_scf)
+                    print("TDDFT calculations:") 
             if self.hl_excited_conv is not None: 
                 hl_sr_tdscf.conv_tol=self.hl_excited_conv
             if self.hl_excited_nroots is not None: 
@@ -1514,7 +1518,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 hl_cc.conv_tol = self.hl_excited_conv
             if self.hl_excited_cycles is not None:
                 hl_cc.max_cycle = self.hl_excited_cycles 
-            print('hl_cc.conv_tol:',hl_cc.conv_tol)
             # import constant to convert hartree to eV and cm-1
             from pyscf.data import nist
             eris = hl_cc.ao2mo()
@@ -1522,18 +1525,25 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 print('Only singlet excitations are considered')
                 print('Spin-flip excitations are available in PySCF if wanted')
                 eee,cee = hl_cc.eomee_ccsd_singlet(nroots=self.hl_excited_nroots,eris=eris)
+                eee = np.around(eee,3)
+                eev = np.around(eee*nist.HARTREE2EV,3)
+                ecm = np.around(eee*nist.HARTREE2WAVENUMBER,3)
                 print(f"Embedded EE-EOM-CCSD excitation energy:")
                 print(f"Results in hartree   :{eee}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
                 print(f"Roots converged?     :{hl_cc.converged}")
                 print("".center(80, '*'))
             if 'ea' in self.hl_excited_type:
                 eea,cea = hl_cc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
+                eea = np.around(eea,3)
+                eev = np.around(eea*nist.HARTREE2EV,3)
+                ecm = np.around(eea*nist.HARTREE2WAVENUMBER,3)
                 print(f"Embedded EA-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eee}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
+                print(f"Results in hartree   :{eea}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_cc.converged}")
                 print("".center(80, '*'))
                 if self.hl_excited_triple:
                     from pyscf.pbc.cc import eom_kccsd_rhf
@@ -1548,10 +1558,14 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     print("".center(80, '*'))
             if 'ip' in self.hl_excited_type:
                 eip,cip = hl_cc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
-                print(f"Embedded IP-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eee}")
-                print(f"Results in eV        :{eee*nist.HARTREE2EV}")
-                print(f"Results in wavenumber:{eee*nist.HARTREE2WAVENUMBER}")
+                eip = np.around(eip,3)
+                eev = np.around(eip*nist.HARTREE2EV,3)
+                ecm = np.around(eip*nist.HARTREE2WAVENUMBER,3)
+                print(f"Embedded EA-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{eip}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_cc.converged}")
                 print("".center(80, '*'))
                 if self.hl_excited_triple:
                     if not 'ea' in self.hl_excited_type:
