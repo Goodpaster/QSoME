@@ -1520,14 +1520,13 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 hl_cc.max_cycle = self.hl_excited_cycles 
             # import constant to convert hartree to eV and cm-1
             from pyscf.data import nist
+            from pyscf.cc import eom_rccsd
             eris = hl_cc.ao2mo()
             if 'ee' in self.hl_excited_type:
                 print('Only singlet excitations are considered')
                 print('Spin-flip excitations are available in PySCF if wanted')
-                from pyscf.cc import eom_rccsd
                 hl_eom = eom_rccsd.EOMEESinglet(hl_cc)
                 hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
-                print('conv_tol for EOM:', hl_eom.conv_tol)
                 eev = np.around(hl_eom.eee*nist.HARTREE2EV,3)
                 ecm = np.around(hl_eom.eee*nist.HARTREE2WAVENUMBER,3)
                 print(f"Embedded EE-EOM-CCSD excitation energy:")
@@ -1537,47 +1536,52 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                 print(f"Roots converged?     :{hl_eom.converged}")
                 print("".center(80, '*'))
             if 'ea' in self.hl_excited_type:
-                eea,cea = hl_cc.eaccsd(nroots=self.hl_excited_nroots, eris=eris)
-                eev = np.around(eea*nist.HARTREE2EV,3)
-                ecm = np.around(eea*nist.HARTREE2WAVENUMBER,3)
+                hl_eom = eom_rccsd.EOMEA(hl_cc)
+                hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
+                eev = np.around(hl_eom.eea*nist.HARTREE2EV,3)
+                ecm = np.around(hl_eom.eea*nist.HARTREE2WAVENUMBER,3)
                 print(f"Embedded EA-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eea}")
+                print(f"Results in hartree   :{hl_eom.eea}")
                 print(f"Results in eV        :{eev}")
                 print(f"Results in wavenumber:{ecm}")
-                print(f"Roots converged?     :{hl_cc.converged}")
+                print(f"Roots converged?     :{hl_eom.converged}")
+                print("".center(80, '*'))
+                if self.hl_excited_triple:
+                    from pyscf.cc import eom_kccsd_rhf
+                    #imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                    #imds = imds.make_t3p2_ip_ea(mykcc)
+                    myeom = eom_kccsd_rhf.EOMEA_Ta(hl_cc)
+                    eea = myeom.eaccsd_star(nroots=self.hl_excited_nroots) 
+                    eev = np.around(eea*nist.HARTREE2EV,3)
+                    ecm = np.around(eea*nist.HARTREE2WAVENUMBER,3)
+                    print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
+                    print(f"Results in hartree   :{eea}")
+                    print(f"Results in eV        :{eev")
+                    print(f"Results in wavenumber:{ecm}")
+                    print("".center(80, '*'))
+            if 'ip' in self.hl_excited_type:
+                hl_eom = eom_rccsd.EOMIP(hl_cc)
+                hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
+                eev = np.around(hl_eom.eip*nist.HARTREE2EV,3)
+                ecm = np.around(hl_eom.eip*nist.HARTREE2WAVENUMBER,3)
+                print(f"Embedded EA-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{hl_eom.eip}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_eom.converged}")
                 print("".center(80, '*'))
                 if self.hl_excited_triple:
                     from pyscf.pbc.cc import eom_kccsd_rhf
-                    imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
-                    imds = imds.make_t3p2_ip_ea(mykcc)
-                    myeom = EOMIP_Ta(mykcc)
-                    eea = myeom.eaccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
-                    print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
-                    print(f"Results in hartree   :{eea}")
-                    print(f"Results in eV        :{eea*nist.HARTREE2EV}")
-                    print(f"Results in wavenumber:{eea*nist.HARTREE2WAVENUMBER}")
-                    print("".center(80, '*'))
-            if 'ip' in self.hl_excited_type:
-                eip,cip = hl_cc.ipccsd(nroots=self.hl_excited_nroots, eris=eris)
-                eev = np.around(eip*nist.HARTREE2EV,3)
-                ecm = np.around(eip*nist.HARTREE2WAVENUMBER,3)
-                print(f"Embedded EA-EOM-CCSD excitation energy:")
-                print(f"Results in hartree   :{eip}")
-                print(f"Results in eV        :{eev}")
-                print(f"Results in wavenumber:{ecm}")
-                print(f"Roots converged?     :{hl_cc.converged}")
-                print("".center(80, '*'))
-                if self.hl_excited_triple:
-                    if not 'ea' in self.hl_excited_type:
-                        from pyscf.pbc.cc import eom_kccsd_rhf
-                        imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
-                        imds = imds.make_t3p2_ip_ea(mykcc)
-                        eip = myeom = EOMIP_Ta(mykcc)
-                    myeom.ipccsd_star(nroots=self.hl_excited_nroots, imds=imds) 
+                    #imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                    #imds = imds.make_t3p2_ip_ea(mykcc)
+                    myeom = eom_kccsd_rhf.EOMIP_Ta(hl_cc)
+                    eip = myeom.ipccsd_star(nroots=self.hl_excited_nroots) 
+                    eev = np.around(eip*nist.HARTREE2EV,3)
+                    ecm = np.around(eip*nist.HARTREE2WAVENUMBER,3)
                     print(f"Embedded IP-EOM-CCSD(T)(a)* excitation energy:")
                     print(f"Results in hartree   :{eip}")
-                    print(f"Results in eV        :{eip*nist.HARTREE2EV}")
-                    print(f"Results in wavenumber:{eip*nist.HARTREE2WAVENUMBER}")
+		    print(f"Results in eV        :{eev")
+		    print(f"Results in wavenumber:{ecm}")
                     print("".center(80, '*'))
 
     def __do_mp(self):
