@@ -1556,7 +1556,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     ecm = np.around(eea*nist.HARTREE2WAVENUMBER,3)
                     print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
                     print(f"Results in hartree   :{eea}")
-                    print(f"Results in eV        :{eev")
+                    print(f"Results in eV        :{eev}")
                     print(f"Results in wavenumber:{ecm}")
                     print("".center(80, '*'))
             if 'ip' in self.hl_excited_type:
@@ -1580,8 +1580,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                     ecm = np.around(eip*nist.HARTREE2WAVENUMBER,3)
                     print(f"Embedded IP-EOM-CCSD(T)(a)* excitation energy:")
                     print(f"Results in hartree   :{eip}")
-		    print(f"Results in eV        :{eev")
-		    print(f"Results in wavenumber:{ecm}")
+                    print(f"Results in eV        :{eev}")
+                    print(f"Results in wavenumber:{ecm}")
                     print("".center(80, '*'))
 
     def __do_mp(self):
