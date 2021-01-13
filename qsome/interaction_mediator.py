@@ -136,8 +136,8 @@ class InteractionMediator:
         Array of supersystem objects which are combinations of subsystems
     """
 
-    def __init__(self, subsystems, supersystem_kwargs=None, filename=None,
-                 nproc=None, pmem=None, scrdir=None):
+    def __init__(self, subsystems, supersystem_kwargs=None, opt_geom_kwargs=None,
+                 filename=None, nproc=None, pmem=None, scrdir=None):
 
         self.subsystems = subsystems
         self.nproc = nproc
@@ -147,6 +147,7 @@ class InteractionMediator:
                                              scrdir)
         self.set_chkfile_index()
         self.init_density()
+        self.set_opt_geom_settings(opt_geom_kwargs)
 
     def set_chkfile_index(self, index=0):
         """Sets the index for each supersystem in the checkpoint file.
@@ -168,6 +169,16 @@ class InteractionMediator:
 
         for sup in self.supersystems:
             sup.init_density()
+
+    def set_opt_geom_settings(self, opt_geom_dict):
+        """Generates the settings for optimizing the geometry of the molecule"""
+        if opt_geom_dict:
+            self.opt_geom = True
+            self.opt_geom_cycles = opt_geom_dict.get('cycles')
+            self.opt_geom_conv = opt_geom_dict.get('conv')
+        else:
+            self.opt_geom = False
+
 
     def do_embedding(self):
         """Perform the embedding calculation for the full system.
@@ -223,3 +234,15 @@ class InteractionMediator:
         print(f"Total Embedding Energy:     {energy_tot}")
         print("".center(80, '*'))
         return energy_tot
+
+    def optimize_geom(self):
+        #1. Get emb energy
+        #2. Get gradients
+        #3. Use gradients to update nuclear positions
+        #4. Iterate convergence.
+        pass
+    def get_nuc_grad(self):
+        pass
+    def update_geom(self):
+        #Step 1. 
+        pass

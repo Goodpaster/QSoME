@@ -95,6 +95,9 @@ def read_input(filename):
     excited_settings = hl_settings.add_block_key('excited_settings')
     add_excited_settings(excited_settings)
 
+    opt_geom_settings = reader.add_block_key('opt_geom_settings')
+    add_opt_geom_settings(opt_geom_settings)
+
     basis = reader.add_block_key('basis')
     basis.add_regex_line('basis_def', r'\s*([A-Za-z.:]+[.:\-]?\d*)\s+.+',
                          repeat=True)
@@ -324,6 +327,18 @@ def add_excited_settings(inp_block):
     """
 
     inp_block.add_line_key('nroots', type=int)
+    inp_block.add_line_key('conv', type=float)
+
+def add_opt_geom_settings(inp_block):
+    """Adds the block for optimizing the geometry
+
+    Parameters
+    ----------
+    inp_block : input_reader block object
+        The input block to add geometry optimization setting options.
+    """
+
+    inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('conv', type=float)
 
 def cleanup_keys(settings_dict, key_correct=None):
