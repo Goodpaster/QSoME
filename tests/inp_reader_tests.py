@@ -554,6 +554,55 @@ basis
 end
 """
 
+excited_filename = "excited.inp"
+excited_str = """
+subsystem
+He    0.0000    0.0000    0.0000
+hl_method_num 1
+end
+
+subsystem
+C    2.0000    0.0000    0.0000
+end
+
+subsystem
+C    2.0000    2.0000    0.0000
+end
+
+subsystem
+C    2.0000    2.0000    2.0000
+end
+
+env_method_settings
+ env_method pbe
+ excited
+ excited_settings
+  conv 1e-9
+  nroots 4
+ end
+ embed_settings
+  excited_relax
+  excited_settings
+   conv 1e-9
+   nroots 4
+  end
+ end
+end
+
+hl_method_settings
+ hl_order 1
+ hl_method ccsd
+ excited
+ excited_settings
+  nroots 4
+ end
+end
+
+basis
+ default 3-21g
+end
+"""
+
 temp_inp_dir = "/temp_input/"
 class TestGenerateInputReaderObject(unittest.TestCase):
 
@@ -620,6 +669,9 @@ class TestKwargCreation(unittest.TestCase):
 
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
+
+        with open(path+excited_filename, "w") as f:
+            f.write(excited_str)
 
 
 
@@ -897,6 +949,36 @@ class TestKwargCreation(unittest.TestCase):
             test = in_obj.supersystem_kwargs[i]
             self.assertDictEqual(test, sup_list[i])
             print (f"SUPERSYSTEM {i} GOOD")
+
+    def test_excited_kwargs(self):
+        path = os.getcwd() + temp_inp_dir
+        in_obj = inp_reader.InpReader(path + excited_filename)
+        correct_env_kwargs = {'env_order': 1, 
+                              'env_method': 'pbe',
+                              'filename': path + excited_filename}
+        correct_hl_kwargs = {'hl_order': 1,
+                             'hl_method': 'ccsd',
+                             'hl_excited': True,
+                             'excited_dict': {'nroots': 4}}
+        correct_supersystem_kwargs = {'env_order': 1,
+                                      'fs_method': 'pbe',
+                                      'fs_excited_dict': {'conv': 1e-9, 'nroots': 4},
+                                      'fs_excited': True,
+                                      'ft_excited_dict': {'conv': 1e-9, 'nroots': 4},
+                                      'ft_excited_relax': True,
+                                      'filename': path + excited_filename}
+        self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
+        self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
+        self.assertEqual(len(in_obj.supersystem_kwargs), 1)
+        for n in in_obj.env_subsystem_kwargs:
+            self.assertDictEqual(n, correct_env_kwargs)
+        for i, n in enumerate(in_obj.hl_subsystem_kwargs):
+            if i == 0:
+                self.assertDictEqual(n, correct_hl_kwargs)
+            else:
+                self.assertIsNone(n)
+        for n in in_obj.supersystem_kwargs:
+            self.assertDictEqual(n, correct_supersystem_kwargs)
          
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.

@@ -342,6 +342,20 @@ def add_excited_settings(inp_block):
 
     inp_block.add_line_key('nroots', type=int)
     inp_block.add_line_key('conv_tol', type=float)
+    inp_block.add_line_key('nroots', type=int, default=3)
+    inp_block.add_line_key('conv', type=float)
+    inp_block.add_line_key('cycles', type=int)
+    inp_block.add_line_key('eom_type', type=str)
+    # koopmans excitation or not for EOM-CC, default False
+    inp_block.add_boolean_key('koopmans')
+    # TDDFT or TDA, default False
+    inp_block.add_boolean_key('tda')
+    # ocsillator strength for TDDFT/TDA, default True 
+    inp_block.add_boolean_key('analyze')
+    # IP/EA-EOM-CCSD(T)*a by Matthews and Stanton
+    # https://github.com/pyscf/pyscf-doc/blob/master/examples/pbc/29-eom_ccsd_Ta.py
+    # https://aip.scitation.org/doi/10.1063/1.4962910
+    inp_block.add_boolean_key('Ta_star')
 
 def add_opt_geom_settings(inp_block):
     """Adds the block for optimizing the geometry
@@ -351,7 +365,6 @@ def add_opt_geom_settings(inp_block):
     inp_block : input_reader block object
         The input block to add geometry optimization setting options.
     """
-
     inp_block.add_line_key('max_cycle', type=int)
     inp_block.add_line_key('conv_tol', type=float)
 

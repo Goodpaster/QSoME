@@ -217,12 +217,18 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.hl_save_orbs, True)
         self.assertEqual(subsys.hl_save_density, True)
 
+    def test_excited_hl_subsystem(self):
+        t_file = tempfile.NamedTemporaryFile()
+        hl_method  = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method,
+                     hl_method, hl_excited=True, hl_excited_dict={'conv':1e-9, 'nroots': 4})
 
-class TestExcitedSubSystem(unittest.TestCase):
-    def setUp(self):
-        pass
-    def tearDown(self):
-        pass
+        self.assertTrue(subsys.hl_excited)
+        self.assertDictEqual(subsys.hl_excited_dict, {'conv':1e-9,'nroots':4})
+        self.assertEqual(subsys.hl_excited_nroots, 4)
+        self.assertEqual(subsys.hl_excited_conv, 1e-9)
+
+
         
 class TestSuperSystem(unittest.TestCase):
 
@@ -568,6 +574,39 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(supersystem.fs_verbose, None)
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
+
+    def test_excited_supersystem(self):
+        mol = gto.Mole()
+        mol.verbose = 3
+        mol.atom = '''
+        H 0. -2.757 2.857
+        H 0. 2.757 2.857
+        '''
+        mol.basis = '3-21g'
+        mol.build()
+        env_method = 'm06'
+        hl_method = 'ccsd'
+        subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, hl_method)
+
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        He 1.0 20.0 0.0
+        He 3.0 20.0 0.0'''
+        mol2.basis = '3-21g'
+        mol2.build()
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao',
+                fs_excited=True, fs_excited_dict={'nroots':4}, ft_excited_relax=True, ft_excited_dict={'nroots':2})
+
+        self.assertTrue(supersystem.fs_excited)
+        self.assertTrue(supersystem.ft_excited_relax)
+        self.assertDictEqual(supersystem.fs_excited_dict, {'nroots':4})
+        self.assertDictEqual(supersystem.ft_excited_dict, {'nroots':2})
+        self.assertEqual(supersystem.fs_excited_nroots, 4)
+        self.assertEqual(supersystem.ft_excited_nroots, 2)
 
 class TestInteractionMediator(unittest.TestCase):
 

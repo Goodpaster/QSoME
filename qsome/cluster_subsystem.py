@@ -12,6 +12,7 @@ import scipy as sp
 from pyscf import gto, scf, mp, cc, mcscf, mrpt, fci, tools
 from pyscf import hessian
 from pyscf.cc import ccsd_t, uccsd_t
+from pyscf.cc import eom_uccsd, eom_rccsd
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
 from qsome import custom_pyscf_methods, custom_diis
@@ -1097,7 +1098,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
-                 hl_sr_method=None, hl_excited=False, hl_spin=None, hl_conv=None, hl_grad=None,
+                 hl_sr_method=None, hl_excited=None, hl_spin=None, hl_conv=None, hl_grad=None,
                  hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
                  hl_density_fitting=False, hl_save_orbs=False,
@@ -1248,6 +1249,18 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_excited_dict = hl_excited_dict
         self.hl_excited_nroots = hl_excited_dict.get('nroots')
         self.hl_excited_conv = hl_excited_dict.get('conv')
+        self.hl_excited_cycles = hl_excited_dict.get('cycles')
+        self.hl_excited_type = hl_excited_dict.get('eom_type')
+        self.hl_excited_koopmans = hl_excited_dict.get('koopmans')
+        self.hl_excited_tda = hl_excited_dict.get('tda')
+        self.hl_excited_analyze = hl_excited_dict.get('analyze')
+        self.hl_excited_triple = hl_excited_dict.get('Ta_star')
+
+        # set default number of excited states to 3
+        if self.hl_excited_nroots is None: self.hl_excited_nroots=3
+        if self.hl_excited_type is None: self.hl_excited_type = 'ee'
+        if self.hl_excited_type is None: self.hl_excited_type = True
+
 
     def get_hl_proj_energy(self, dmat=None, proj_pot=None):
         """Return the projection energy
@@ -1545,6 +1558,29 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         self.hl_energy = self.hl_sr_scf.scf(dm0=dmat)
 
+        #DO TDDFT or TDHF here.
+        if self.hl_excited and 'cc' not in self.hl_method:
+            from pyscf import tdscf
+            if self.hl_excited_tda: 
+                hl_sr_tdscf = tdscf.TDA(self.hl_sr_scf)
+                print("TDA calculations:") 
+            else: 
+                try:
+                    hl_sr_tdscf = tdscf.TDHF(self.hl_sr_scf)
+                    print("TDHF calculations:") 
+                except:
+                    hl_sr_tdscf = tdscf.TDDFT(self.hl_sr_scf)
+                    print("TDDFT calculations:") 
+            if self.hl_excited_conv is not None: 
+                hl_sr_tdscf.conv_tol=self.hl_excited_conv
+            if self.hl_excited_nroots is not None: 
+                hl_sr_tdscf.nroots = self.hl_excited_nroots
+            if self.hl_excited_cycles is not None: 
+                hl_sr_tdscf.max_cycle = self.hl_excited_cycles 
+            etd = hl_sr_tdscf.kernel()[0] 
+            if self.hl_excited_analyze:
+                hl_sr_tdscf.analyze()
+
     def __gen_hf_scf(self):
         """Initializes the single reference hartree-fock object.
         """
@@ -1633,19 +1669,94 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_cc.conv_tol = self.hl_conv
         if self.hl_cycles is not None:
             hl_cc.max_cycle = self.hl_cycles
-        ecc = hl_cc.kernel()[0]
-        self.hl_energy += ecc
-        if "(t)" in self.hl_method:
+        if "(t)" in self.hl_method or self.hl_excited:
             eris = hl_cc.ao2mo()
+            ecc = hl_cc.kernel(eris=eris)[0]
+        else:
+            ecc = hl_cc.kernel()[0]
+        self.hl_energy += ecc
+
+        if "(t)" in self.hl_method:
             if self.hl_unrestricted or self.mol.spin != 0:
-                ecc_t = uccsd_t.kernel(hl_cc, eris)
+                ecc_t = uccsd_t.kernel(hl_cc, eris=eris)
             else:
-                ecc_t = ccsd_t.kernel(hl_cc, eris)
+                ecc_t = ccsd_t.kernel(hl_cc, eris=eris)
             self.hl_energy += ecc_t
 
         if self.hl_excited:
             #DO excited state embedding here.
-            pass
+            # in PySCF v1.7, available CC methods are
+            # EE/IP/EA/SF-EOM-CCSD, EA/IP-EOM-CCSD_Ta
+            # no need to distinguish RCCSD and UCCSD, it is inherited
+            if self.hl_excited_conv is not None:
+                hl_cc.conv_tol = self.hl_excited_conv
+            if self.hl_excited_cycles is not None:
+                hl_cc.max_cycle = self.hl_excited_cycles 
+            # import constant to convert hartree to eV and cm-1
+            from pyscf.data import nist
+            from pyscf.cc import eom_rccsd
+            eris = hl_cc.ao2mo()
+            if 'ee' in self.hl_excited_type:
+                print('Only singlet excitations are considered')
+                print('Spin-flip excitations are available in PySCF if wanted')
+                hl_eom = eom_rccsd.EOMEESinglet(hl_cc)
+                hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
+                eev = np.around(hl_eom.eee*nist.HARTREE2EV,3)
+                ecm = np.around(hl_eom.eee*nist.HARTREE2WAVENUMBER,3)
+                print(f"Embedded EE-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{hl_eom.eee}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_eom.converged}")
+                print("".center(80, '*'))
+            if 'ea' in self.hl_excited_type:
+                hl_eom = eom_rccsd.EOMEA(hl_cc)
+                hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
+                eev = np.around(hl_eom.eea*nist.HARTREE2EV,3)
+                ecm = np.around(hl_eom.eea*nist.HARTREE2WAVENUMBER,3)
+                print(f"Embedded EA-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{hl_eom.eea}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_eom.converged}")
+                print("".center(80, '*'))
+                if self.hl_excited_triple:
+                    from pyscf.cc import eom_kccsd_rhf
+                    #imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                    #imds = imds.make_t3p2_ip_ea(mykcc)
+                    myeom = eom_kccsd_rhf.EOMEA_Ta(hl_cc)
+                    eea = myeom.eaccsd_star(nroots=self.hl_excited_nroots) 
+                    eev = np.around(eea*nist.HARTREE2EV,3)
+                    ecm = np.around(eea*nist.HARTREE2WAVENUMBER,3)
+                    print(f"Embedded EA-EOM-CCSD(T)(a)* excitation energy:")
+                    print(f"Results in hartree   :{eea}")
+                    print(f"Results in eV        :{eev}")
+                    print(f"Results in wavenumber:{ecm}")
+                    print("".center(80, '*'))
+            if 'ip' in self.hl_excited_type:
+                hl_eom = eom_rccsd.EOMIP(hl_cc)
+                hl_eom.kernel(nroots=self.hl_excited_nroots,eris=eris)
+                eev = np.around(hl_eom.eip*nist.HARTREE2EV,3)
+                ecm = np.around(hl_eom.eip*nist.HARTREE2WAVENUMBER,3)
+                print(f"Embedded EA-EOM-CCSD excitation energy:")
+                print(f"Results in hartree   :{hl_eom.eip}")
+                print(f"Results in eV        :{eev}")
+                print(f"Results in wavenumber:{ecm}")
+                print(f"Roots converged?     :{hl_eom.converged}")
+                print("".center(80, '*'))
+                if self.hl_excited_triple:
+                    from pyscf.pbc.cc import eom_kccsd_rhf
+                    #imds = eom_kccsd_rhf._IMDS(mykcc, eris=eris)
+                    #imds = imds.make_t3p2_ip_ea(mykcc)
+                    myeom = eom_kccsd_rhf.EOMIP_Ta(hl_cc)
+                    eip = myeom.ipccsd_star(nroots=self.hl_excited_nroots) 
+                    eev = np.around(eip*nist.HARTREE2EV,3)
+                    ecm = np.around(eip*nist.HARTREE2WAVENUMBER,3)
+                    print(f"Embedded IP-EOM-CCSD(T)(a)* excitation energy:")
+                    print(f"Results in hartree   :{eip}")
+                    print(f"Results in eV        :{eev}")
+                    print(f"Results in wavenumber:{ecm}")
+                    print("".center(80, '*'))
 
     def __do_mp(self):
         """Perform the requested perturbation calculation"""
