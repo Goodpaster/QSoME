@@ -48,8 +48,11 @@ def main():
 
         subsystems.append(subsys)
 
-    int_med = interaction_mediator.InteractionMediator(subsystems, supersystem_kwargs=in_obj.supersystem_kwargs, filename=in_obj.inp.filename)
-    int_med.do_embedding()
+    int_med = interaction_mediator.InteractionMediator(subsystems, supersystem_kwargs=in_obj.supersystem_kwargs, opt_geom_kwargs=in_obj.opt_geom_kwargs, filename=in_obj.inp.filename)
+    if int_med.opt_geom:
+        int_med.optimize_geom()
+    else:
+        int_med.do_embedding()
     total_energy = int_med.get_emb_energy()
 
     return total_energy

@@ -10,6 +10,7 @@ import h5py
 import numpy as np
 import scipy as sp
 from pyscf import gto, scf, mp, cc, mcscf, mrpt, fci, tools
+from pyscf import hessian
 from pyscf.cc import ccsd_t, uccsd_t
 from pyscf.scf import diis as scf_diis
 from pyscf.lib import diis as lib_diis
@@ -270,6 +271,10 @@ class ClusterEnvSubSystem:
         else:
             self.diis = None
 
+        #Gradient components
+        self.proj_pot_grad = None
+        self.emb_fock_grad = None
+
     def init_env_scf(self, mol=None, env_method=None, verbose=None,
                      damp=None, shift=None, dfit=None):
         """Initializes the environment pyscf scf object.
@@ -361,11 +366,11 @@ class ClusterEnvSubSystem:
             env_method = self.env_method
         if initguess is None:
             if self.env_initguess is None:
-                initguess = 'readchk'
+                initguess = 'chk'
             else:
                 initguess = self.env_initguess
 
-        if initguess == 'readchk':
+        if initguess == 'chk':
             try:
                 is_chkfile = self.read_chkfile()
             except AssertionError:
@@ -397,7 +402,7 @@ class ClusterEnvSubSystem:
             #If readchk not found, update teh initguess method
             self.env_initguess = initguess
 
-        elif initguess in ['atom', '1e', 'minao']:
+        elif initguess in ['atom', '1e', 'minao', 'huckel', 'vsap']:
             dmat = scf_obj.get_init_guess(key=initguess)
         elif initguess == 'submol':
             scf_obj.kernel()
@@ -561,6 +566,12 @@ class ClusterEnvSubSystem:
         if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
+        #print ("SUBSYS E")
+        #print (subsys_e)
+        #print ("EMB E")
+        #print (e_emb)
+        #print ("PROJ E")
+        #print (e_proj)
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None, env_method=None, fock=None, dmat=None,
@@ -593,12 +604,12 @@ class ClusterEnvSubSystem:
         if mol is None:
             mol = self.mol
 
-        self.env_energy = (self.get_env_elec_energy(env_method=env_method,
+        self.env_energy = self.get_env_elec_energy(env_method=env_method,
                                                     fock=fock, dmat=dmat,
                                                     env_hcore=env_hcore,
                                                     proj_pot=proj_pot,
                                                     emb_pot=emb_pot)
-                           + mol.energy_nuc())
+        self.env_energy += mol.energy_nuc()
         return self.env_energy
 
     def save_orbital_file(self, filename=None, scf_obj=None, mo_occ=None,
@@ -1318,6 +1329,169 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         return self.hl_energy
 
+    def calc_den_grad(self):
+        """Calculates the gradient of the electron density wrt nuc position."""
+
+        self.emb_hess = None
+        if self.unrestricted:
+            if self.env_method == 'hf':
+                self.emb_hess = hessian.uhf.Hessian(self.env_scf)
+            else:
+                self.emb_hess = hessian.uks.Hessian(self.env_scf)
+        elif self.mol.spin == 0:
+            if self.env_method == 'hf':
+                self.emb_hess = hessian.rhf.Hessian(self.env_scf)
+            else:
+                self.emb_hess = hessian.rks.Hessian(self.env_scf)
+        else:
+            print ("NO ROHF Den Grad")
+
+        if not (self.unrestricted or self.mol.spin != 0):
+            env_mo_en = self.env_mo_energy[0]
+            env_mo_coeff = self.env_mo_coeff[0]
+            env_mo_occ = self.env_mo_occ[0] * 2.
+        else:
+            env_mo_en = self.env_mo_energy
+            env_mo_coeff = self.env_mo_coeff
+            env_mo_occ = self.env_mo_occ
+
+        #Modify core hamiltonian
+        emb_h1ao = np.zeros_like(self.atom_hcore_grad)
+        self.emb_dm_grad = np.zeros_like(self.atom_hcore_grad)
+        atmlst = range(self.mol.natm)
+        for atm in atmlst:
+            emb_h1ao[atm] += self.atom_hcore_grad[atm] + self.atom_emb_pot_grad[atm] + self.atom_proj_grad[atm]
+
+        #Get gradient of MOs
+        emb_mo1, emb_mo_e1 = self.emb_hess.solve_mo1(env_mo_en, env_mo_coeff, env_mo_occ, emb_h1ao)
+        #Calcualate density grad
+        env_mocc = env_mo_coeff[:,env_mo_occ>0]
+        for atm in atmlst:
+            self.emb_dm_grad[atm] = np.einsum('ypi,qi->ypq', emb_mo1[atm], env_mocc)
+
+        return (self.emb_dm_grad)
+        
+
+
+    def calc_nuc_grad(self):
+        """Calculates the nuclear gradient of the embedded subsystems."""
+
+        #currently for testing, separated out the weighted density matrix. In the final form, the weighted density matrix can use the mo energies and only do it once to get the full subsystem e.
+        
+        #ENV
+        #Isolated subsystem
+        if not (self.unrestricted or self.mol.spin != 0):
+            env_mo_en = self.env_mo_energy[0]
+            env_mo_coeff = self.env_mo_coeff[0]
+            env_mo_occ = self.env_mo_occ[0] * 2.
+        else:
+            env_mo_en = self.env_mo_energy
+            env_mo_coeff = self.env_mo_coeff
+            env_mo_occ = self.env_mo_occ
+
+        env_sub_grad_obj = self.env_scf.nuc_grad_method()
+        env_sub_de = env_sub_grad_obj.grad_elec(mo_energy=env_mo_en, mo_coeff=env_mo_coeff, mo_occ=env_mo_occ)
+        #Embedded potential gradient
+
+        self.atom_emb_pot_grad = np.zeros_like(self.atom_full_hcore_grad)
+        self.atom_proj_grad = np.zeros_like(self.atom_full_hcore_grad)
+        self.atom_hcore_grad = np.zeros_like(self.atom_full_hcore_grad)
+        atmlst = range(self.mol.natm)
+        aoslices = self.mol.aoslice_by_atom()
+        env_dm = self.get_dmat()
+        sub_hcore_deriv = env_sub_grad_obj.hcore_generator(self.mol)
+        num_rank = self.mol.nao_nr()
+        sub_s1_grad = env_sub_grad_obj.get_ovlp(self.mol)
+        env_emb_pot_de = np.zeros_like(env_sub_de)
+        env_proj_de = np.zeros_like(env_sub_de)
+
+        for atm in atmlst:
+            p0, p1 = aoslices[atm,2:]
+            atom_sub_hcore_grad = sub_hcore_deriv(atm)
+            self.atom_hcore_grad[atm] = atom_sub_hcore_grad
+            emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
+            #print ("emb_hcore_grad")
+            env_emb_pot_de[atm] += np.einsum('xij,ij->x', emb_hcore, env_dm)
+            #print (env_emb_pot_de[atm])
+            #print ('emb_vhf_grad')
+            #print (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1]))
+            env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1] * -2.)
+            #self.atom_emb_pot_grad[atm] = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad + (self.atom_emb_vhf_grad[atm] * 2.)
+            #print ("VHF EMB GRAD")
+            #print (self.atom_emb_vhf_grad[atm])
+            #env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_pot_grad[atm], env_dm)
+            env_proj_de[atm] += np.einsum('xij,ij->x', self.atom_proj_grad[atm], env_dm)
+
+
+        #print ("Calculating subsystem electron density gradient")
+        #self.calc_den_grad()
+        ##Test the density gradient.
+        #sub_hcore = self.env_scf.get_hcore()
+        #sub_hcore_grad = []
+        #for atm in atmlst:
+        #    gradh = np.einsum('xij,ij->x', sub_hcore_deriv(atm), env_dm)
+        #    sub_hcore_grad.append(gradh)
+        #    graddmh = np.einsum('xij,ij->x', self.emb_dm_grad[atm], sub_hcore)
+        #    sub_hcore_grad[atm] += graddmh
+
+        #print ("DMAT")
+        #print (np.trace(env_dm))
+        #print ("DMAT DERIV")
+        #print (np.trace(self.emb_dm_grad[0][2]))
+        #print ("HCORE EN")
+        #print (np.einsum('ij,ji->', sub_hcore, env_dm))
+        #print ("Hcore Grad")
+        #print (sub_hcore_grad)
+
+        env_grad = env_sub_de + env_emb_pot_de + env_proj_de
+        print ("ENV GRAD")
+        print (env_grad)
+
+        #HL
+        hf_aliases = ['hf', 'uhf', 'rhf', 'rohf']
+        cc_aliases = ['ccsd', 'ccsd(t)', 'uccsd', 'uccsd(t)']
+        mp_aliases = ['mp2']
+        #Isolated subsystem
+        if self.hl_method in hf_aliases:
+            hl_sub_grad_obj = self.hl_sr_scf.nuc_grad_method()
+            hl_mo_e = self.hl_sr_scf.mo_energy
+            hl_mo_coeff = self.hl_sr_scf.mo_coeff
+            hl_mo_occ = self.hl_sr_scf.mo_occ
+            hl_sub_grad = hl_sub_grad_obj.grad_elec(mo_energy=hl_mo_e, mo_coeff=hl_mo_coeff, mo_occ=hl_mo_occ)
+            hl_rdm1e = hl_sub_grad_obj.make_rdm1e(hl_mo_e, hl_mo_coeff, hl_mo_occ)
+            hl_dm = self.hl_sr_scf.make_rdm1()
+
+        #print (hl_sub_grad)
+        hl_proj_de = np.zeros((len(atmlst),3))
+        hl_emb_pot_de = np.zeros((len(atmlst),3))
+        hl_sub_vhf_grad = hl_sub_grad_obj.get_veff(self.mol, hl_dm)
+        hl_sub_hcore_deriv = hl_sub_grad_obj.hcore_generator(self.mol)
+        for atm in atmlst:
+            p0, p1 = aoslices[atm,2:]
+            hl_proj_de[atm] += np.einsum('xij,ij->x', self.atom_proj_grad[atm], hl_dm)
+            hl_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_pot_grad[atm], hl_dm)
+
+        print ("HL PROJ")
+        print (hl_proj_de)
+        print ("HL EMB POT")
+        print (hl_emb_pot_de)
+        print ("HL_SUB_GRAD")
+        print (hl_sub_grad)
+        print ("HL EMB GRAD")
+        #print (hl_proj_de + hl_emb_pot_de + hl_sub_grad)
+        #print (hl_proj_de + hl_sub_grad)
+        hl_grad = hl_proj_de + hl_emb_pot_de + hl_sub_grad
+        #hl_grad = hl_proj_de + hl_sub_grad
+        #print (hl_proj_de + hl_emb_hcore_de + hl_emb_vhf_de + hl_sub_grad)
+        #hl_grad = hl_proj_de + hl_emb_hcore_de + hl_emb_vhf_de + hl_sub_grad
+
+        if self.hl_method in cc_aliases:
+            pass
+       
+        print ("TOTAL GRAD")
+        print (hl_grad - env_grad)
+        return hl_grad - env_grad
+
     def __get_ext_energy(self):
         """Uses an external method to calculate high level energy.
         """
@@ -1369,7 +1543,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_sr_scf.level_shift = self.hl_shift
         self.hl_sr_scf.damp = self.hl_damp
 
-        self.hl_energy = self.hl_sr_scf.kernel(dm0=dmat)
+        self.hl_energy = self.hl_sr_scf.scf(dm0=dmat)
 
     def __gen_hf_scf(self):
         """Initializes the single reference hartree-fock object.

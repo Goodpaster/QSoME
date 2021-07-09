@@ -15,6 +15,16 @@ from copy import deepcopy as copy
 
 #Custom PYSCF method for the active subsystem.
 
+def get_hcore(mf, emb_pot=None, proj_pot=None, mol=None):
+    if mol is None:
+        mol = mf.mol
+    emb_pot_comb = (emb_pot[0] + emb_pot[1]) / 2.
+    proj_pot_comb = (proj_pot[0] + proj_pot[1]) / 2.
+    h = mol.intor_symmetric('int1e_kin')
+    h+= mol.intor_symmetric('int1e_nuc')
+    h+= emb_pot_comb + proj_pot_comb
+    return h
+
 #RHF Methods
 def rhf_get_fock(mf, emb_pot=None, proj_pot=None, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
              diis_start_cycle=None, level_shift_factor=None, damp_factor=None):

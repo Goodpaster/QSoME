@@ -5,8 +5,7 @@ import scipy
 import numpy as np
 from pyscf import lib, scf
 
-
-DEBUG = True
+DEBUG = False
 
 class EDIIS(scf.diis.EDIIS):
 
@@ -106,26 +105,28 @@ def adiis_minimize(ds, fs, idnewest):
         return (np.einsum('i,i', c, dd_fn) * 2 +
                 np.einsum('i,ij,j', c, df, c))
 
-    #def grad(x):
-    #    x2sum = (x**2).sum()
-    #    c = x**2 / x2sum
-    #    fc = es - 2*np.einsum('i,ik->k', c, df)
-    #    cx = np.diag(x*x2sum) - np.einsum('k,n->kn', x**2, x)
-    #    cx *= 2/x2sum**2
-    #    return np.einsum('k,kn->n', fc, cx)
+    def grad(x):
+        x2sum = (x**2).sum()
+        c = x**2 / x2sum
+        fc = 2*dd_fn
+        fc+= np.einsum('j,kj->k', c, df)
+        fc+= np.einsum('i,ik->k', c, df)
+        cx = np.diag(x*x2sum) - np.einsum('k,n->kn', x**2, x)
+        cx *= 2/x2sum**2
+        return np.einsum('k,kn->n', fc, cx)
 
-    #if DEBUG:
-    #    x0 = np.random.random(nx)
-    #    dfx0 = np.zeros_like(x0)
-    #    for i in range(nx):
-    #        x1 = x0.copy()
-    #        x1[i] += 1e-4
-    #        dfx0[i] = (costf(x1) - costf(x0))*1e4
-    #        print((dfx0 - grad(x0)) / dfx0)
+    if DEBUG:
+        x0 = np.random.random(nx)
+        dfx0 = np.zeros_like(x0)
+        for i in range(nx):
+            x1 = x0.copy()
+            x1[i] += 1e-4
+            dfx0[i] = (costf(x1) - costf(x0))*1e4
+            print((dfx0 - grad(x0)) / dfx0)
 
-    #res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS',
-    #                              jac=grad, tol=1e-9)
-    res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS', tol=1e-9)
+    res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS',
+                                  jac=grad, tol=1e-9)
+    #res = scipy.optimize.minimize(costf, np.ones(nx), method='BFGS', tol=1e-9)
     return res.fun, (res.x**2)/(res.x**2).sum()
 
 class DIIS_CDIIS():
@@ -207,19 +208,44 @@ class EDIIS_DIIS():
         else:
             return ((10 * cdiis_err) * ediis_fock) + ((1 - (10 * cdiis_err)) * cdiis_fock)
 
-class ADIIS_DIIS():
+class ADIIS_CDIIS():
 
-    def __init__(self, env_obj):
-        self.adiis = scf_diis.ADIIS()
-        self.cdiis = scf_diis.DIIS(env_obj)
+    def __init__(self):
+        self.adiis = ADIIS()
+        self.adiis.space = 15
+        self.cdiis_1 = scf.diis.CDIIS()
+        self.cdiis_2 = scf.diis.CDIIS()
+        self.cdiis_1.space = 15
+        self.cdiis_2.space = 15
         self.minimum_err = 2.0
 
-    def update(self, s, d, f, mf, h1e, vhf):
-        cdiis_fock = self.cdiis.update(s,d,f)
-        adiis_fock = self.adiis.update(s,d,f,mf,h1e,vhf)
+    def update(self, s, d, f, elec_e, s2s):
+        d = np.array(d)
+        f = np.array(f)
+        adiis_fock = self.adiis.update(s,d,f,elec_e)
 
-        cdiis_err_vec = scf_diis.get_err_vec(s,d,f)
-        cdiis_err = np.max(np.abs(cdiis_err_vec))
+        fock_1 = np.array([f[0][np.ix_(s2s[0], s2s[0])], f[1][np.ix_(s2s[0], s2s[0])]])
+        dmat_1 = np.array([d[0][np.ix_(s2s[0], s2s[0])], d[1][np.ix_(s2s[0], s2s[0])]])
+        s_1 = s[np.ix_(s2s[0], s2s[0])]
+
+        fock_2 = np.array([f[0][np.ix_(s2s[1], s2s[1])], f[1][np.ix_(s2s[1], s2s[1])]])
+        dmat_2 = np.array([d[0][np.ix_(s2s[1], s2s[1])], d[1][np.ix_(s2s[1], s2s[1])]])
+        s_2 = s[np.ix_(s2s[1], s2s[1])]
+
+        cdiis_fock_1 = self.cdiis_1.update(s_1,dmat_1,fock_1)
+        cdiis_err_vec = scf.diis.get_err_vec(s_1,dmat_1,fock_1)
+        cdiis_err = np.linalg.norm(cdiis_err_vec)
+        cdiis_fock_2 = self.cdiis_2.update(s_2,dmat_2,fock_2)
+        cdiis_err_vec = scf.diis.get_err_vec(s_2,dmat_2,fock_2)
+        cdiis_err += np.linalg.norm(cdiis_err_vec)
+
+        cdiis_fock = np.zeros_like(f)
+        cdiis_fock[0][np.ix_(s2s[0], s2s[0])] += cdiis_fock_1[0]
+        cdiis_fock[1][np.ix_(s2s[0], s2s[0])] += cdiis_fock_1[1]
+        cdiis_fock[0][np.ix_(s2s[1], s2s[1])] += cdiis_fock_2[0]
+        cdiis_fock[1][np.ix_(s2s[1], s2s[1])] += cdiis_fock_2[1]
+
+        print (cdiis_err)
         if cdiis_err < self.minimum_err:
             self.minimum_err = cdiis_err
         pct_change = ((cdiis_err - self.minimum_err) * 100) / (self.minimum_err * 100)
@@ -233,4 +259,40 @@ class ADIIS_DIIS():
         #    return cdiis_fock
         #else:
         #    return adiis_fock
+
+class ADIIS_DIIS():
+
+    def __init__(self):
+        self.adiis = ADIIS()
+        self.adiis.space = 15
+        self.diis = lib.diis.DIIS()
+        self.diis.space = 15
+        self.minimum_err = 2.0
+
+    def update(self, s, d, f, elec_e, s2s):
+        diis_fock = self.diis.update(f)
+        print (elec_e)
+        adiis_fock = self.adiis.update(s,d,f,elec_e)
+
+        if len(self.diis._buffer) > 1:
+            diis_err_vec = self.diis.get_err_vec(self.diis._head-1)
+            diis_err = np.linalg.norm(diis_err_vec)
+            print (diis_err)
+            if diis_err < self.minimum_err:
+                self.minimum_err = diis_err
+            pct_change = ((diis_err - self.minimum_err) * 100) / (self.minimum_err * 100)
+            print(diis_err)
+            print (pct_change)
+            if diis_err > 1.0 or pct_change >= 10:
+                print ('here')
+                return adiis_fock
+            elif diis_err < 1e-3:
+                print ('here2')
+                return diis_fock
+            else:
+                print ('here3')
+                return ((10 * diis_err) * adiis_fock) + ((1 - (10 * diis_err)) * diis_fock)
+        else:
+            return adiis_fock
+
 

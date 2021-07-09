@@ -6,7 +6,7 @@ Daniel S. Graham
 
 import copy
 import numpy as np
-from pyscf import gto
+from pyscf import gto, scf, dft
 
 def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
     """Generate the linking ghost atom between two atoms.
@@ -145,3 +145,73 @@ def concat_mols(mol_list):
     #Remove overlapping ghost atoms.
     final_mol = __remove_overlap_ghost(conc_mol)
     return final_mol
+
+def gen_scf_obj(mol, scf_method, **kwargs):
+    """Generates an scf object setting all relevant parameters for use later in
+    embedding"""
+
+    if 'unrestricted' in kwargs and kwargs.get('unrestricted'):
+        if 'hf' in scf_method:
+            scf_obj = scf.UHF(mol)
+        else:
+            scf_obj = scf.UKS(mol)
+            scf_obj.xc = scf_method
+    elif mol.spin != 0:
+        if 'hf' in scf_method:
+            scf_obj = scf.ROHF(mol)
+        else:
+            scf_obj = scf.ROKS(mol)
+            scf_obj.xc = scf_method
+    else:
+        if 'hf' in scf_method:
+            scf_obj = scf.RHF(mol)
+        else:
+            scf_obj = scf.RKS(mol)
+            scf_obj.xc = scf_method
+
+    if 'diis_num' in kwargs:
+        if kwargs.get('diis_num') == 0:
+            scf_obj.DIIS = None
+        if kwargs.get('diis_num') == 1:
+            scf_obj.DIIS = scf.CDIIS
+        if kwargs.get('diis_num') == 2:
+            scf_obj.DIIS = scf.EDIIS
+        if kwargs.get('diis_num') == 3:
+            scf_obj.DIIS = scf.ADIIS
+
+    if 'grid_level' in kwargs:
+        grids = dft.gen_grid.Grids(mol)
+        grids.level = kwargs.pop('grid_level')
+        grids.build()
+        scf_obj.grids = grids
+
+    if 'dynamic_level_shift' in kwargs and kwargs.get('dynamic_level_shift'):
+        if 'level_shift_factor' in kwargs:
+            lev_shift_factor = kwargs.pop('level_shift_factor')
+            scf.addons.dynamic_level_shift_(scf_obj, lev_shift_factor)
+        else:
+            scf.addons.dynamic_level_shift_(scf_obj)
+
+    if 'newton' in kwargs and kwargs.pop('newton'):
+        scf_obj = scf.newton(scf_obj)
+
+    if 'fast_newton' in kwargs and kwargs.pop('fast_newton'):
+        scf_obj.use_fast_newton = True
+
+    if 'frac_occ' in kwargs and kwargs.get('frac_occ'):
+        scf_obj = scf.addons.frac_occ(mf)
+
+    if 'remove_linear_dep' in kwargs and kwargs.get('remove_linear_dep'):
+        scf_obj = scf_obj.apply(scf.addons.remove_linear_dep)
+
+    if 'density_fitting' in kwargs and kwargs.get('density_fitting'):
+        scf_obj = scf_obj.density_fit()
+
+    if 'excited' in kwargs:
+        pass
+
+    for key in kwargs:
+        setattr(scf_obj, key, kwargs[key])
+
+    return scf_obj
+

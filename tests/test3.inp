@@ -1,0 +1,29 @@
+#Geometries taken from https://pubs.acs.org/doi/suppl/10.1021/ja4102979/suppl_file/ja4102979_si_001.pdf
+subsystem
+Ne          0.0000        0.0000        1.000
+hl_method_num 1
+end
+
+subsystem
+Ne          0.0000        0.0000        0.000
+end
+
+basis
+ default cc-pVDZ
+end
+
+env_method_settings
+ env_method hf
+ embed_settings
+  cycles 50
+  diis 2
+ end
+end
+
+hl_method_settings
+    hl_order 1
+    hl_method rhf
+end
+opt_geom_settings
+ cycles 100
+end
