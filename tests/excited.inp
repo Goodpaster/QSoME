@@ -1,0 +1,36 @@
+#Geometries taken from
+#https://pubs.acs.org/doi/10.1021/acs.jpclett.7b02500 
+subsystem
+H	0.0	0.0	0.0 
+H	0.0	0.0	1.0 
+charge 0
+hl_method_num 1
+end
+
+subsystem
+H	0.0	0.0	2.0 
+H	0.0	0.0	3.0 
+charge 0
+end
+
+basis
+ default cc-pVDZ
+end
+
+env_method_settings
+ env_method hf
+ embed_settings
+  cycles 50
+  diis 5
+ end
+end
+
+hl_method_settings
+    hl_order 1
+    hl_method ccsd
+    excited
+    excited_settings
+      eom_type ee
+      nroots 1
+    end
+end

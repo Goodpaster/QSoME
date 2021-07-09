@@ -843,7 +843,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Unrestricted
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True, ft_cycles=20)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
