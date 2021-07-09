@@ -1049,7 +1049,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         subsys_hl_e = subsys.get_hl_in_env_energy()
         true_scf = scf.UHF(self.os_mol)
         true_e = true_scf.kernel()
-        self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-10)
+        self.assertAlmostEqual(subsys_hl_e, true_e, delta=1e-8)
 
         # Restricted Open shell
         hl_method = 'hf'
@@ -1106,7 +1106,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_cc = cc.CCSD(true_scf)
         true_cc.frozen = 1
         true_cc_e = true_cc.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-7)
 
         # Unrestricted Open shell
         hl_method = 'ccsd'
@@ -1117,7 +1117,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_hf_e = true_scf.kernel()
         true_cc = cc.UCCSD(true_scf)
         true_cc_e = true_cc.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-10)
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e, delta=1e-8)
 
         # Restricted Open shell
         #hl_method = 'ccsd'
@@ -1142,7 +1142,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_cc = cc.CCSD(true_scf)
         true_cc_e = true_cc.kernel()[0]
         true_t_e = ccsd_t.kernel(true_cc, true_cc.ao2mo())
-        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e + true_t_e, delta=1e-10)
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_cc_e + true_t_e, delta=1e-7)
 
         # Open shell
         hl_method = 'ccsd(t)'
@@ -1178,7 +1178,7 @@ class TestHLSubsystemMethods(unittest.TestCase):
         true_hf_e = true_scf.kernel()
         true_mp = mp.UMP2(true_scf)
         true_mp_e = true_mp.kernel()[0]
-        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_mp_e, delta=1e-10)
+        self.assertAlmostEqual(subsys_hl_e, true_hf_e + true_mp_e, delta=1e-8)
 
     def test_casscf_in_env_energy(self):
 

@@ -144,4 +144,5 @@ def concat_mols(mol_list):
     conc_mol.spin = total_spin #check that this works properly.
     #Remove overlapping ghost atoms.
     final_mol = __remove_overlap_ghost(conc_mol)
+    final_mol = conc_mol
     return final_mol

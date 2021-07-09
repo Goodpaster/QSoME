@@ -201,7 +201,8 @@ def add_embed_settings(embed_block):
 
     # Initial guess for the subsystem embedding calculation
     embed_block.add_line_key('initguess', type=(
-        'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup'))
+        'minao', 'atom', '1e', 'readchk', 'supmol', 'submol', 'localsup',
+        'rosupmol'))
     embed_block.add_boolean_key('unrestricted')
 
     # Output subsystem orbitals after F&T cycles
@@ -254,7 +255,7 @@ def add_hl_settings(inp_block):
     """
 
     inp_block.add_line_key('initguess', type=('minao', 'atom', '1e', 'readchk',
-                                              'supmol', 'submol'))
+                                              'supmol', 'submol', 'ft'))
     inp_block.add_line_key('spin', type=int)
     inp_block.add_line_key('conv', type=float)
     inp_block.add_line_key('grad', type=float)

@@ -293,7 +293,8 @@ class MolproExt:
             num_occ = num_closed + cas_space[1]
             if self.cas_avas is None:
                 if self.mol.spin != 0:
-                    method_string = f'{{uhf,maxit=240;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
+                    method_string = f'{{rhf,maxit=240,accu=10;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
+                    method_string += f'{{uhf,maxit=240,accu=10;noenest;wf,{num_elec},1,{np.abs(self.mol.spin)}}}\n'
                 else:
                     method_string = '{hf;noenest;}\n'
             else:
@@ -303,7 +304,9 @@ class MolproExt:
                     method_string = '{rhft;avas;' + ';'.join(self.cas_avas) + '}\n'
             method_string += "put,molden," + os.path.splitext(self.filename.split('/')[-1])[0] + "_hf.molden;   !save orbitals in molden format\n"
             method_string += "{casscf\n"
-            method_string += "maxiter,100\n"
+            #method_string += "{multi,wmk,coupled;\n"
+            method_string += "maxiter,40\n"
+            method_string += "accuracy,step=2e-3\n"
             method_string += "closed," + str(num_closed) + "\n"
             method_string += "occ," + str(num_occ) + "\n"
             method_string += "wf," + str(num_elec) + ",1," + str(np.abs(self.mol.spin)) + "\n"
@@ -318,9 +321,14 @@ class MolproExt:
                     method_string += "rotate," + str(int(int(num_elec/2) + j + 1)+.1) + "," + vir_orbs[j] + ",0;\n"
 
             method_string += "}"
+            cas_orb_file = os.path.splitext(self.filename.split('/')[-1])[0] + "_cas.molden"
+            method_string += "put,molden," + cas_orb_file
 
             if re.match(re.compile('caspt2\[.*\]'), self.method):
-                method_string += "\n{rs2c,maxiti=100;core}"
+                #method_string += "\n{rs2c,shift=0.1;core}"
+                method_string += "\n{rs2c;core}"
+                #method_string += "\n{rs2c;maxit,100,200;core}"
+                #method_string += "\n{rs2c,thrvar=5e-6,thrden=5e-6;maxit,100,200;core}"
 
             if ('nevpt2' in self.method.lower()):
                 method_string += '\nnevpt2'
@@ -337,7 +345,7 @@ class MolproExt:
         #dummy_atoms = dummy_atoms[:-1]
 
         pword = self.pmem / 8.
-        orb_file = os.path.splitext(self.filename.split('/')[-1])[0] + ".molden"
+        orb_file = os.path.splitext(self.filename.split('/')[-1])[0] + "_caspt2.molden"
         inp_str = molpro_template_molden.substitute(MEMORY=str(pword), SYMMETRY="nosym",
                       BASIS=mol_basis, GEOM=mol_geom, DUMMY=dummy_atoms, CHARGE=self.mol.charge,
                       SPIN=self.mol.spin, HMAT=h0_string, METHOD=method_string, FNAME=orb_file) 
@@ -393,11 +401,14 @@ class MolproExt:
         if re.match(re.compile('cas(pt2)?\[.*\].*'), self.method):
             curr_work_dir = os.getcwd()
             hf_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + "_hf.molden" 
-            cas_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + ".molden" 
+            cas_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + "_cas.molden" 
+            caspt_orb_file = curr_work_dir + "/" + os.path.splitext(self.filename)[0].lower() + "_caspt2.molden" 
             copyfile(hf_orb_file, self.work_dir + '/' + 
                      os.path.splitext(self.filename)[0] + '_hf.molden')
             copyfile(cas_orb_file, self.work_dir + '/' + 
                      os.path.splitext(self.filename)[0] + '_cas.molden')
+            copyfile(caspt_orb_file, self.work_dir + '/' + 
+                     os.path.splitext(self.filename)[0] + '_caspt2.molden')
 
         #Open and extract from output.
         outfile = self.work_dir + '/' + self.filename + '_molpro.out'

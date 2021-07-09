@@ -822,8 +822,8 @@ class ClusterEnvSubSystem:
                 self.__do_restricted_diag()
 
             e_sorted = [np.sort(self.env_mo_energy[0]), np.sort(self.env_mo_energy[1])]
-            self.__set_fermi(e_sorted)
             self.__set_occupation()
+            self.__set_fermi()
 
             self.env_dmat[0] = np.dot((self.env_mo_coeff[0] * self.env_mo_occ[0]),
                                       self.env_mo_coeff[0].transpose().conjugate())
@@ -932,7 +932,7 @@ class ClusterEnvSubSystem:
             self.env_dmat = [new_dm/2., new_dm/2.]
         return ddm
 
-    def __set_fermi(self, e_sorted):
+    def __set_fermi(self):
         """Sets the fermi level for the subsystem.
 
         Parameters
@@ -942,16 +942,22 @@ class ClusterEnvSubSystem:
         """
         self.fermi = [0., 0.]
         nocc_orbs = [self.mol.nelec[0], self.mol.nelec[1]]
-        if len(e_sorted[0]) > nocc_orbs[0]:
-            self.fermi[0] = ((e_sorted[0][nocc_orbs[0]]
-                              + e_sorted[0][nocc_orbs[0] -1]) / 2.)
-        else:
-            self.fermi[0] = 0.    #Minimal basis
-        if len(e_sorted[1]) > nocc_orbs[1]:
-            self.fermi[1] = ((e_sorted[1][nocc_orbs[1]]
-                              + e_sorted[1][nocc_orbs[1] -1]) / 2.)
-        else:
-            self.fermi[1] = 0.    #Minimal basis
+        alpha_occ = copy(self.env_mo_occ[0])
+
+        if not np.all(alpha_occ):
+            occ_energy_m = np.ma.masked_where(alpha_occ==0, self.env_mo_energy[0])
+            alpha_homo = np.max(np.ma.compressed(occ_energy_m))
+            unocc_energy_m = np.ma.masked_where(alpha_occ>0, self.env_mo_energy[0])
+            alpha_lumo = np.min(np.ma.compressed(unocc_energy_m))
+            self.fermi[0] = (alpha_homo + alpha_lumo) / 2.
+
+        beta_occ = copy(self.env_mo_occ[1])
+        if not np.all(beta_occ):
+            occ_energy_m = np.ma.masked_where(beta_occ==0, self.env_mo_energy[1])
+            beta_homo = np.max(np.ma.compressed(occ_energy_m))
+            unocc_energy_m = np.ma.masked_where(beta_occ>0, self.env_mo_energy[1])
+            beta_lumo = np.min(np.ma.compressed(unocc_energy_m))
+            self.fermi[1] = (beta_homo + beta_lumo) / 2.
 
     def __set_occupation(self):
         """Sets the orbital occupation numbers.
@@ -1283,6 +1289,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         fci_aliases = ['fci']
         fcidump_aliases = ['fcidump']
         known_methods = hf_aliases + cc_aliases + mp_aliases + fci_aliases + fcidump_aliases
+        self.mol.verbose = 4
 
         if (self.hl_sr_method is None and
                 self.hl_method not in known_methods and
@@ -1378,6 +1385,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         #Use HF for initial guesses
         if self.hl_unrestricted:
             hl_sr_scf = scf.UHF(self.mol)
+            #increase DIIS space
+            hl_sr_scf.DIIS = scf.diis.EDIIS
+            hl_sr_scf.diis_space = 15
             #Update the fock and electronic energies to use custom methods.
             hl_sr_scf.get_fock = lambda *args, **kwargs: (
                 custom_pyscf_methods.uhf_get_fock(hl_sr_scf,
@@ -1455,6 +1465,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_cc = cc.CCSD(self.hl_sr_scf)
 
         hl_cc.frozen = self.cc_froz_core_orbs
+        hl_cc.diis_space = 15
         if self.hl_conv is not None:
             hl_cc.conv_tol = self.hl_conv
         if self.hl_cycles is not None:

@@ -318,7 +318,7 @@ class ClusterSuperSystem:
         self.ft_diis = None
         if ft_diis == 1:
             self.ft_diis = lib.diis.DIIS()
-            self.ft_diis.space = 15
+            self.ft_diis.space = 20
         elif ft_diis == 2:
             self.ft_diis = lib.diis.DIIS()
             self.ft_diis.space = 15
@@ -428,6 +428,7 @@ class ClusterSuperSystem:
         if self.pmem:
             self.mol.max_memory = self.pmem
 
+        self.fs_num_attempt = 0
         if self.fs_unrestricted:
             if fs_method == 'hf':
                 scf_obj = scf.UHF(mol)
@@ -487,6 +488,12 @@ class ClusterSuperSystem:
             fs_scf = fs_scf.density_fit()
             u_scf_obj = u_scf_obj.density_fit()
 
+        if self.fs_diis_num == 2:
+            fs_scf.DIIS = scf.diis.ADIIS
+
+        if self.fs_diis_num == 3:
+            fs_scf.DIIS = scf.diis.EDIIS
+
         self.fs_scf = fs_scf
         self.os_scf = u_scf_obj
         return True
@@ -521,6 +528,9 @@ class ClusterSuperSystem:
         if self.ft_initguess == 'supmol':
             self.get_supersystem_energy(readchk=super_chk)
 
+        elif self.ft_initguess == 'rosupmol':
+            rodmat = self.get_init_ro_supersystem_dmat()
+
         for i, subsystem in enumerate(subsystems):
             sub_dmat = [0., 0.]
             subsystem.fullsys_cs = not (self.fs_unrestricted or self.mol.spin != 0)
@@ -550,6 +560,16 @@ class ClusterSuperSystem:
                 sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
                 sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
                 subsystem.env_dmat = sub_dmat
+            elif sub_guess == 'rosupmol':
+                sub_dmat[0] = rodmat[0][np.ix_(s2s[i], s2s[i])]
+                sub_dmat[1] = rodmat[1][np.ix_(s2s[i], s2s[i])]
+                temp_smat = self.smat
+                temp_sm = temp_smat[np.ix_(s2s[i], s2s[i])]
+                #Normalize for num of electrons in each subsystem.
+                num_e_a = np.trace(np.dot(sub_dmat[0], temp_sm))
+                num_e_b = np.trace(np.dot(sub_dmat[1], temp_sm))
+                sub_dmat[0] *= subsystem.mol.nelec[0]/num_e_a
+                sub_dmat[1] *= subsystem.mol.nelec[1]/num_e_b
             elif sub_guess == 'localsup': # Localize supermolecular density.
                 pass
 
@@ -622,9 +642,29 @@ class ClusterSuperSystem:
                     ft_dmat[0][np.ix_(s2s[i], s2s[i])] += subsystem.env_dmat[0]
                     ft_dmat[1][np.ix_(s2s[i], s2s[i])] += subsystem.env_dmat[1]
                 if self.fs_unrestricted or scf_obj.mol.spin != 0:
-                    scf_obj.scf(dm0=ft_dmat)
+                    if self.fs_num_attempt == 0:
+                        scf_obj.scf(dm0=ft_dmat)
+                        self.fs_num_attempt += 1
+                    elif self.fs_num_attempt == 1:
+                        self.fs_scf = scf.fast_newton(scf_obj)
+                        self.fs_num_attempt += 1
+                    elif self.fs_num_attempt == 2:
+                        self.fs_scf = scf.newton(scf_obj)
+                        self.fs_num_attempt += 1
+                    else:
+                        print ('FS SCF NOT CONVERGED')
                 else:
-                    scf_obj.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
+                    if self.fs_num_attempt == 0:
+                        scf_obj.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
+                        self.fs_num_attempt += 1
+                    elif self.fs_num_attempt == 1:
+                        self.fs_scf = scf.fast_newton(scf_obj)
+                        self.fs_num_attempt += 1
+                    elif self.fs_num_attempt == 2:
+                        self.fs_scf = scf.newton(scf_obj)
+                        self.fs_num_attempt += 1
+                    else:
+                        print ('FS SCF NOT CONVERGED')
             elif readchk:
                 if self.fs_unrestricted or scf_obj.mol.spin != 0:
                     init_guess = scf_obj.make_rdm1(mo_coeff=self.mo_coeff,
@@ -636,8 +676,40 @@ class ClusterSuperSystem:
 
                 scf_obj.scf(dm0=(init_guess))
             else:
-                scf_obj.scf()
+                if self.fs_num_attempt == 0:
+                    scf_obj.scf()
+                    self.fs_num_attempt += 1
+                elif self.fs_num_attempt == 1:
+                    self.fs_scf = scf.fast_newton(scf_obj)
+                    self.fs_num_attempt += 1
+                elif self.fs_num_attempt == 2:
+                    self.fs_scf = scf.newton(scf_obj)
+                    self.fs_num_attempt += 1
+                else:
+                    print ('FS SCF NOT CONVERGED')
+            scf_obj = self.fs_scf
             self.fs_dmat = scf_obj.make_rdm1()
+
+            if self.fs_unrestricted:
+                rho_grid = self.fs_scf.grids
+                alpha_dmat = self.fs_dmat[0]
+                alpha_rho = scf_obj._numint.get_rho(self.mol, alpha_dmat, rho_grid,
+                                                    self.fs_scf.max_memory)
+                #alpha_den = alpha_rho * rho_grid.weights
+                alpha_den = alpha_rho
+                beta_dmat = self.fs_dmat[1]
+                beta_rho = scf_obj._numint.get_rho(self.mol, beta_dmat, rho_grid,
+                                                    self.fs_scf.max_memory)
+
+                #beta_den = beta_rho * rho_grid.weights
+                beta_den = beta_rho
+                spin_diff = np.subtract(alpha_den,beta_den)
+                neg_spin_diff = spin_diff.clip(max=0)
+                spin_contam = np.dot(neg_spin_diff, rho_grid.weights)
+                alpha,beta = self.mol.nelec
+                s = (alpha-beta)/2.
+                ss = s*(s+1) - spin_contam
+                print(f"approx <S^2>:{ss:>67.8f}")
 
             if self.fs_dmat.ndim == 2:
                 t_d = [self.fs_dmat.copy()/2., self.fs_dmat.copy()/2.]
@@ -677,6 +749,31 @@ class ClusterSuperSystem:
             pass
 
         return self.fs_energy
+
+    @time_method("Supersystem RO DMAT generation")
+    def get_init_ro_supersystem_dmat(self):
+        mol = self.mol
+        fs_method = self.fs_method
+        if self.pmem:
+            mol.max_memory = self.pmem
+        if fs_method == 'hf':
+            ro_scf = scf.ROHF(mol)
+            if self.fs_diis_num == 2:
+                ro_scf.DIIS = scf.diis.ADIIS
+            ro_scf.kernel()
+            ro_dmat = ro_scf.make_rdm1()
+        else:
+            ro_scf = scf.ROKS(mol)
+            ro_scf.xc = fs_method
+            grids = dft.gen_grid.Grids(mol)
+            if self.grid_level is not None:
+                grids.level = self.grid_level
+            grids.build()
+            if self.fs_diis_num == 2:
+                ro_scf.DIIS = scf.diis.ADIIS
+            ro_scf.kernel()
+            ro_dmat = ro_scf.make_rdm1() 
+        return ro_dmat
 
     def save_fs_density_file(self, filename=None, density=None):
         """Save the electron density of the full system KS-DFT
@@ -837,6 +934,27 @@ class ClusterSuperSystem:
                        np.einsum('ij,ji', self.proj_pot[i][1], sub.env_dmat[1]))
         self.env_in_env_energy += proj_e
         print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
+        #Approx spin from this paper: https://aip-scitation-org.ezp3.lib.umn.edu/doi/10.1063/1.468585
+        if self.fs_unrestricted:
+            rho_grid = self.fs_scf.grids
+            alpha_dmat = dm_env[0]
+            alpha_rho = self.fs_scf._numint.get_rho(self.mol, alpha_dmat, rho_grid,
+                                                self.fs_scf.max_memory)
+            #alpha_den = alpha_rho * rho_grid.weights
+            alpha_den = alpha_rho
+            beta_dmat = dm_env[1]
+            beta_rho = self.fs_scf._numint.get_rho(self.mol, beta_dmat, rho_grid,
+                                                self.fs_scf.max_memory)
+
+            #beta_den = beta_rho * rho_grid.weights
+            beta_den = beta_rho
+            spin_diff = np.subtract(alpha_den,beta_den)
+            neg_spin_diff = spin_diff.clip(max=0)
+            spin_contam = np.dot(neg_spin_diff, rho_grid.weights)
+            alpha,beta = self.mol.nelec
+            s = (alpha-beta)/2.
+            ss = s*(s+1) - spin_contam
+            print(f"approx <S^2>:{ss:>67.8f}")
         print("".center(80, '*'))
         return self.env_in_env_energy
 
@@ -1229,7 +1347,8 @@ class ClusterSuperSystem:
                 ddm = sub.relax_sub_dmat(damp_param=self.ft_damp)
                 proj_e = sub.get_env_proj_e() #When DIIS acceleration, this is not actually true because it is bound up in the acceleration.
                 # print output to console.
-                print(f"iter:{ft_iter:>3d}:{i:<2d}              |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
+                #print(f"iter:{ft_iter:>3d}:{i:<2d}  |ddm|:{ddm:12.6e}  |Tr[DP]|:{proj_e:12.6e}  |Fermi|:[{sub.fermi[0]},{sub.fermi[1]}]")
+                print(f"iter:{ft_iter:>3d}:{i:<2d}               |ddm|:{ddm:12.6e}               |Tr[DP]|:{proj_e:12.6e}")
                 ft_err += ddm
                 self.ft_fermi[i] = sub.fermi
 

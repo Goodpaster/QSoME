@@ -21,14 +21,18 @@ charge +1
 end
 
 basis
- default cc-pVDZ
+ default sto-3g
 end
 
 env_method_settings
  env_method m06
+ #unrestricted
+ #grid 4
  embed_settings
-  cycles 50
-  diis 5
+  #unrestricted
+  cycles 20
+  diis 2
+  huzfermi
  end
 end
 
