@@ -162,6 +162,8 @@ class ClusterSuperSystem:
         self.fock_subcycles = update_fock
         self.proj_subcycles = update_proj
         self.init_guess = init_guess
+        if self.fs_scf_obj.init_guess == 'submol':
+            self.init_guess = 'submol'
         self.unrestricted = unrestricted
         self.proj_oper = proj_oper
         self.excited_relax = excited_relax
@@ -355,11 +357,11 @@ class ClusterSuperSystem:
                 u_scf_obj.xc = self.env_method
 
         env_in_env_scf = scf_obj
-        scf_obj.grids = copy.copy(self.fs_scf_obj.grids)
-        u_scf_obj.grids = copy.copy(self.fs_scf_obj.grids)
         if 'hf' not in self.env_method:
             scf_obj.small_rho_cutoff = self.fs_scf_obj.small_rho_cutoff
             u_scf_obj.small_rho_cutoff = self.fs_scf_obj.small_rho_cutoff
+            scf_obj.grids = copy.copy(self.fs_scf_obj.grids)
+            u_scf_obj.grids = copy.copy(self.fs_scf_obj.grids)
 
         self.env_in_env_scf = scf_obj
         self.os_env_in_env_scf = u_scf_obj
@@ -400,9 +402,9 @@ class ClusterSuperSystem:
             fs_unrestricted = (hasattr(fs_scf, 'unrestricted') and fs_scf.unrestricted)
             subsystem.fullsys_cs = not (fs_unrestricted or self.mol.spin != 0)
             # Ensure same gridpoints and rho_cutoff for all systems
-            subsystem.env_scf.grids = fs_scf.grids
             if not 'hf' in subsystem.env_method:
                 subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
+                subsystem.env_scf.grids = fs_scf.grids
 
             sub_guess = subsystem.env_initguess
             if sub_guess is None:
@@ -494,7 +496,7 @@ class ClusterSuperSystem:
                     subsystem = self.subsystems[i]
                     ft_dmat[0][np.ix_(s2s[i], s2s[i])] += subsystem.env_dmat[0]
                     ft_dmat[1][np.ix_(s2s[i], s2s[i])] += subsystem.env_dmat[1]
-                if self.fs_unrestricted or scf_obj.mol.spin != 0:
+                if (hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted) or scf_obj.mol.spin !=0:
                     if hasattr(scf_obj, 'use_fast_newton') and scf_obj.use_fast_newton:
                         scf_obj.fast_newton(dm0=ft_dmat)
                     else:
@@ -505,7 +507,7 @@ class ClusterSuperSystem:
                     else:
                         scf_obj.scf(dm0=(ft_dmat[0] + ft_dmat[1]))
             elif readchk:
-                if self.fs_unrestricted or scf_obj.mol.spin != 0:
+                if (hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted) or scf_obj.mol.spin !=0:
                     init_guess = scf_obj.make_rdm1(mo_coeff=self.mo_coeff,
                                                    mo_occ=self.mo_occ)
                 else:

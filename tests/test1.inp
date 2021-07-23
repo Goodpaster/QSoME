@@ -14,7 +14,8 @@ basis
 end
 
 env_method_settings
- env_method b3lyp
+ env_method hf
+ init_guess submol
  embed_settings
   max_cycle 50
   diis_num 2

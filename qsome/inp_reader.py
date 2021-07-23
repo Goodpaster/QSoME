@@ -340,10 +340,8 @@ def add_excited_settings(inp_block):
         The input block to add excited state setting options.
     """
 
-    inp_block.add_line_key('nroots', type=int)
     inp_block.add_line_key('conv_tol', type=float)
     inp_block.add_line_key('nroots', type=int, default=3)
-    inp_block.add_line_key('conv', type=float)
     inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('eom_type', type=str)
     # koopmans excitation or not for EOM-CC, default False
