@@ -136,7 +136,7 @@ def concat_mols(mol_list):
         if i == 0:
             mol2 = gto.mole.copy(mol1)
         else:
-            new_mol = gto.mole.conc_mol(mol1, mol2)
+            new_mol = gto.mole.conc_mol(mol2, mol1)
             new_mol.build()
             mol2 = new_mol
 
@@ -214,4 +214,39 @@ def gen_scf_obj(mol, scf_method, **kwargs):
         setattr(scf_obj, key, kwargs[key])
 
     return scf_obj
+
+def get_nuc(mol):
+    '''Part of the nuclear gradients of core Hamiltonian'''
+    if mol._pseudo:
+        NotImplementedError('Nuclear gradients for GTH PP')
+    else:
+        h = mol.intor('int1e_ipnuc', comp=3)
+    if mol.has_ecp():
+        h += mol.intor('ECPscalar_ipnuc', comp=3)
+    return -h
+
+
+def nuc_grad_generator(mf, mol=None):
+    if mol is None: mol = mf.mol
+    with_x2c = getattr(mf.base, 'with_x2c', None)
+    if with_x2c:
+        nuc_deriv = with_x2c.hcore_deriv_generator(deriv=1)
+    else:
+        with_ecp = mol.has_ecp()
+        if with_ecp:
+            ecp_atoms = set(mol._ecpbas[:,gto.ATOM_OF])
+        else:
+            ecp_atoms = ()
+        aoslices = mol.aoslice_by_atom()
+        h1 = get_nuc(mol)
+        def nuc_deriv(atm_id):
+            shl0, shl1, p0, p1 = aoslices[atm_id]
+            with mol.with_rinv_at_nucleus(atm_id):
+                vrinv = mol.intor('int1e_iprinv', comp=3) # <\nabla|1/r|>
+                vrinv *= -mol.atom_charge(atm_id)
+                if with_ecp and atm_id in ecp_atoms:
+                    vrinv += mol.intor('ECPscalar_iprinv', comp=3)
+            vrinv[:,p0:p1] += h1[:,p0:p1]
+            return vrinv + vrinv.transpose(0,2,1)
+    return nuc_deriv
 
