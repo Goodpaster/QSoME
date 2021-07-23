@@ -1,12 +1,11 @@
 #Geometries taken from https://pubs.acs.org/doi/suppl/10.1021/ja4102979/suppl_file/ja4102979_si_001.pdf
 subsystem
-O 0. 0. 0.000
+H 0. 0. 1.000
 hl_method_num 1
 end
 
 subsystem
-H  0. -0.757 0.587
-H  0.  0.757 0.587
+H  0.0 0.0 0.0
 end
 
 basis
@@ -17,6 +16,7 @@ env_method_settings
  env_method hf
  max_cycle 100
  embed_settings
+  init_guess minao
   max_cycle 200
   diis_num 2
  end

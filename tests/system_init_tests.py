@@ -575,6 +575,7 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
+    @unittest.skip
     def test_excited_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -598,7 +599,10 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao',
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao',
                 fs_excited=True, fs_excited_dict={'nroots':4}, ft_excited_relax=True, ft_excited_dict={'nroots':2})
 
         self.assertTrue(supersystem.fs_excited)

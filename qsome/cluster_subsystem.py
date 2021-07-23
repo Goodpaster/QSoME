@@ -567,10 +567,10 @@ class ClusterEnvSubSystem:
         if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
-        #print ("SUBSYS E")
-        #print (subsys_e)
-        #print ("EMB E")
-        #print (e_emb)
+        print ("SUBSYS E")
+        print (subsys_e)
+        print ("EMB E")
+        print (e_emb)
         #print ("PROJ E")
         #print (e_proj)
         return subsys_e + e_emb + e_proj
@@ -600,11 +600,12 @@ class ClusterEnvSubSystem:
             if self.emb_fock[0] is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
-                emb_pot = [self.emb_fock[0] - fock[0],
-                           self.emb_fock[1] - fock[1]]
+                emb_pot = [self.emb_fock[0] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat()),
+                           self.emb_fock[1] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat())] #TEMP
         if mol is None:
             mol = self.mol
 
+        
         self.env_energy = self.get_env_elec_energy(env_method=env_method,
                                                     fock=fock, dmat=dmat,
                                                     env_hcore=env_hcore,
@@ -901,18 +902,26 @@ class ClusterEnvSubSystem:
             fock = self.emb_fock
             if fock[0] is None:
                 fock = self.subsys_fock
-            emb_proj_fock = fock[0] + self.proj_pot[0]
-            emb_proj_fock += fock[1] + self.proj_pot[1]
+
+            #Changed for fmo gradients.
+            emb_proj_fock = fock[0] + self.proj_pot[0] + self.env_scf.get_veff(dm=self.get_dmat())
+            emb_proj_fock += fock[1] + self.proj_pot[1] + self.env_scf.get_veff(dm=self.get_dmat())
             emb_proj_fock = emb_proj_fock / 2.
-            if self.diis:
-                if self.diis_num == 1:
-                    emb_proj_fock = self.diis.update(emb_proj_fock)
-                if self.diis_num == 2:
-                    dmat = self.get_dmat()
-                    ovlp = self.env_scf.get_ovlp()
-                    emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
+
+            #if self.diis: #TEMP
+            #    if self.diis_num == 1:
+            #        emb_proj_fock = self.diis.update(emb_proj_fock)
+            #    if self.diis_num == 2:
+            #        dmat = self.get_dmat()
+            #        ovlp = self.env_scf.get_ovlp()
+            #        emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
         else:
             emb_proj_fock = (self.emb_proj_fock[0] + self.emb_proj_fock[1]) / 2.
+
+        #TEMP
+        self.update_subsys_fock()
+        emb_proj_fock = (self.subsys_fock[0] + self.subsys_fock[1]) /2. + self.emb_proj_fock[0] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat())
+
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]
@@ -1404,6 +1413,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         env_sub_grad_obj = self.env_scf.nuc_grad_method()
         env_sub_de = env_sub_grad_obj.grad_elec(mo_energy=env_mo_en, mo_coeff=env_mo_coeff, mo_occ=env_mo_occ)
+        print ('env_sub_de')
+        print (env_sub_de)
         #Embedded potential gradient
 
         self.atom_emb_pot_grad = np.zeros_like(self.atom_full_hcore_grad)
@@ -1421,19 +1432,24 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         for atm in atmlst:
             p0, p1 = aoslices[atm,2:]
             atom_sub_hcore_grad = sub_hcore_deriv(atm)
-            self.atom_hcore_grad[atm] = atom_sub_hcore_grad
             emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
+            self.atom_hcore_grad[atm] = atom_sub_hcore_grad
+
+            #emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
             #print ("emb_hcore_grad")
             env_emb_pot_de[atm] += np.einsum('xij,ij->x', emb_hcore, env_dm)
-            #print (env_emb_pot_de[atm])
+            env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
+            #Need to do nuclear-electron attraction I think.
+
+            print (env_emb_pot_de[atm])
             #print ('emb_vhf_grad')
             #print (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1]))
-            env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1] * -2.)
+            #env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1] * -2.)
             #self.atom_emb_pot_grad[atm] = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad + (self.atom_emb_vhf_grad[atm] * 2.)
             #print ("VHF EMB GRAD")
             #print (self.atom_emb_vhf_grad[atm])
             #env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_pot_grad[atm], env_dm)
-            env_proj_de[atm] += np.einsum('xij,ij->x', self.atom_proj_grad[atm], env_dm)
+            #env_proj_de[atm] += np.einsum('xij,ij->x', self.atom_proj_grad[atm], env_dm)
 
 
         #print ("Calculating subsystem electron density gradient")

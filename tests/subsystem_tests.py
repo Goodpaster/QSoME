@@ -830,7 +830,7 @@ class TestEnvSubsystemMethods(unittest.TestCase):
         self.assertTrue(np.array_equal(subsys.env_mo_occ, sub_env_mo_occ))
         self.assertTrue(np.array_equal(subsys.env_mo_energy, sub_env_mo_energy))
 
-        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, filename=t_file.name, initguess='readchk')
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method, filename=t_file.name, initguess='chk')
         subsys2.chkfile_index = '0'
         subsys2.init_density()
         self.assertTrue(np.array_equal(subsys.env_mo_coeff, subsys2.env_mo_coeff))
