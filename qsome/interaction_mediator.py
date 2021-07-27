@@ -67,7 +67,6 @@ def gen_supersystems(sup_kwargs, subsystems, filename, scrdir):
             sub_sup_kwargs = [x for x in sup_kwargs if x['env_order'] == (curr_order + 1)]
             assert len(match_sup_kwargs) < 2, 'Ambigious supersystem settings'
             curr_sup_kwargs = match_sup_kwargs[0]
-            curr_sup_kwargs.pop('fs_method', None)
         higher_order_subs = [x for x in sorted_subs if x.env_order > curr_order]
         sub_list = []
         while len(sorted_subs) > 0 and sorted_subs[0].env_order == curr_order:
@@ -81,15 +80,39 @@ def gen_supersystems(sup_kwargs, subsystems, filename, scrdir):
                 combined_subs = combine_subsystems(higher_order_subs, curr_method)
 
             sub_list.append(combined_subs)
-        curr_sup_kwargs['env_order'] = curr_order
-        curr_sup_kwargs['filename'] = filename
-        curr_sup_kwargs['scr_dir'] = scrdir
-        supersystem = cluster_supersystem.ClusterSuperSystem(sub_list,
-                                                             curr_method,
-                                                             **curr_sup_kwargs)
+        mol_list = [x.mol for x in sub_list]
+        full_mol = helpers.concat_mols(mol_list)
+        fs_env_settings = curr_sup_kwargs.pop('fs_env_settings', None)
+        if fs_env_settings:
+            env_method = fs_env_settings.pop('env_method', None)
+            if not env_method:
+                env_method = sub_list[0].env_method
+            fs_scf_obj = helpers.gen_scf_obj(full_mol, env_method, **fs_env_settings)
+        else:
+            env_method = sub_list[0].env_method
+            fs_scf_obj = helpers.gen_scf_obj(full_mol, env_method)
+        embed_dict = curr_sup_kwargs.get('embed_settings', None)
+        if embed_dict:
+            embed_dict['filename'] = filename
+            supersystem = cluster_supersystem.ClusterSuperSystem(sub_list,
+                                                                 env_method,
+                                                                 fs_scf_obj,
+                                                                 env_order=curr_order,
+                                                                 **embed_dict)
+        else:
+            supersystem = cluster_supersystem.ClusterSuperSystem(sub_list,
+                                                                 env_method,
+                                                                 fs_scf_obj,
+                                                                 env_order=curr_order,
+                                                                 filename=filename)
         supersystems.append(supersystem)
 
     return supersystems
+
+def gen_fs_scf_obj(**kwargs):
+    """Generate the canonical full system scf object"""
+    return fs_scf_obj
+
 
 class InteractionMediator:
     """
@@ -136,17 +159,20 @@ class InteractionMediator:
         Array of supersystem objects which are combinations of subsystems
     """
 
-    def __init__(self, subsystems, supersystem_kwargs=None, filename=None,
-                 nproc=None, pmem=None, scrdir=None):
+    def __init__(self, subsystems, supersystem_kwargs=None, opt_geom_kwargs=None,
+                 filename=None, nproc=None, pmem=None, scrdir=None):
 
         self.subsystems = subsystems
         self.nproc = nproc
         self.pmem = pmem
+        self.filename = filename
+        self.scrdir = scrdir
         self.supersystems = gen_supersystems(supersystem_kwargs,
                                              subsystems, filename,
                                              scrdir)
         self.set_chkfile_index()
         self.init_density()
+        self.set_opt_geom_settings(opt_geom_kwargs)
 
     def set_chkfile_index(self, index=0):
         """Sets the index for each supersystem in the checkpoint file.
@@ -168,6 +194,16 @@ class InteractionMediator:
 
         for sup in self.supersystems:
             sup.init_density()
+
+    def set_opt_geom_settings(self, opt_geom_dict):
+        """Generates the settings for optimizing the geometry of the molecule"""
+        if opt_geom_dict:
+            self.opt_geom = True
+            self.opt_geom_cycles = opt_geom_dict.get('cycles')
+            self.opt_geom_conv = opt_geom_dict.get('conv')
+        else:
+            self.opt_geom = False
+
 
     def do_embedding(self):
         """Perform the embedding calculation for the full system.
@@ -223,3 +259,19 @@ class InteractionMediator:
         print(f"Total Embedding Energy:     {energy_tot}")
         print("".center(80, '*'))
         return energy_tot
+
+    def optimize_geom(self):
+        #1. Get emb energy
+        self.do_embedding()
+        self.get_emb_energy()
+        #2. Get gradients
+        self.get_nuc_grad()
+        #3. Use gradients to update nuclear positions
+        #4. Iterate convergence.
+
+    def get_nuc_grad(self):
+        nuc_grad = self.supersystems[0].get_emb_nuc_grad()
+
+    def update_geom(self):
+        #Step 1. 
+        pass

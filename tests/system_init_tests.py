@@ -9,7 +9,7 @@ import re
 
 from copy import copy
 
-from qsome import cluster_subsystem, cluster_supersystem, interaction_mediator
+from qsome import cluster_subsystem, cluster_supersystem, interaction_mediator, helpers
 from pyscf import gto, lib, scf, dft
 
 import numpy as np
@@ -255,31 +255,20 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
-        self.assertEqual(supersystem.fs_method, 'm06')
-        self.assertEqual(supersystem.proj_oper, 'huz')
-        self.assertEqual(supersystem.ft_cycles, 100)
-        self.assertEqual(supersystem.ft_conv, 1e-8)
-        self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_damp, 0)
-        self.assertEqual(supersystem.ft_initguess, 'minao')
-        self.assertEqual(supersystem.ft_updatefock, 0)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
 
-        self.assertEqual(supersystem.fs_cycles, None)
-        self.assertEqual(supersystem.fs_conv, None)
-        self.assertEqual(supersystem.fs_grad, None)
-        self.assertEqual(supersystem.fs_damp, 0)
-        self.assertEqual(supersystem.fs_shift, 0)
-        self.assertEqual(supersystem.fs_smearsigma, 0)
-        self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, None)
-        self.assertEqual(supersystem.rho_cutoff, None)
-        self.assertEqual(supersystem.fs_verbose, None)
-        #self.assertEqual(supersystem.analysis, False)
-        #self.assertEqual(supersystem.debug, False)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao')
+        self.assertEqual(supersystem.env_method, 'm06')
+        self.assertEqual(supersystem.proj_oper, 'huz')
+        self.assertEqual(supersystem.max_cycle, 200)
+        self.assertEqual(supersystem.conv_tol, 1e-9)
+        self.assertEqual(supersystem.damp, 0)
+        self.assertEqual(supersystem.init_guess, 'minao')
+        self.assertEqual(supersystem.fock_subcycles, 1)
 
         #Check SCF object
-        scf_obj = supersystem.fs_scf
+        scf_obj = supersystem.fs_scf_obj
         comp_scf_obj = dft.RKS(gto.mole.conc_mol(mol, mol2))
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
         print (comp_scf_obj.mol._basis)
@@ -310,11 +299,14 @@ class TestSuperSystem(unittest.TestCase):
 
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True, chkfile_index=0)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06', unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao', unrestricted=True, chkfile_index=0)
 
         #Check SCF object
-        scf_obj = supersystem.fs_scf
+        scf_obj = supersystem.fs_scf_obj
         comp_scf_obj = dft.UKS(gto.mole.conc_mol(mol, mol2))
+        comp_scf_obj.unrestricted = True
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
         self.assertEqual(scf_obj.xc, 'm06')
 
@@ -342,10 +334,12 @@ class TestSuperSystem(unittest.TestCase):
 
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao')
 
         #Check SCF object
-        scf_obj = supersystem.fs_scf
+        scf_obj = supersystem.fs_scf_obj
         comp_scf_obj = dft.ROKS(gto.mole.conc_mol(mol, mol2))
         self.assertEqual(type(scf_obj), type(comp_scf_obj))
         self.assertEqual(scf_obj.xc, 'm06')
@@ -373,13 +367,16 @@ class TestSuperSystem(unittest.TestCase):
 
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_density_fitting=True)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06', density_fitting=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao')
 
         #Check SCF object
-        scf_obj = supersystem.fs_scf
+        scf_obj = supersystem.fs_scf_obj
         from pyscf.df.df_jk import _DFHF
         self.assertTrue(isinstance(scf_obj, _DFHF))
         self.assertEqual(scf_obj.xc, 'm06')
+        self.assertEqual(scf_obj.density_fitting, True)
 
     def test_custom_supersystem(self):
         t_file = tempfile.NamedTemporaryFile()
@@ -402,51 +399,53 @@ class TestSuperSystem(unittest.TestCase):
         O 1.0 0.0 0.0
         O 3.0 0.0 0.0'''
         mol2.basis = 'aug-cc-pVDZ'
+        mol2.verbose = 1
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, filename=t_file.name)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2],
-                          'b3lyp', ft_proj_oper='huzfermi', ft_cycles=2, 
-                          ft_conv=1e-1, ft_grad=1e-4, ft_diis=3, 
-                          ft_initguess='1e', ft_updatefock=1, ft_setfermi=-0.1,
-                          ft_damp=0.5, fs_cycles=3, fs_conv=2, fs_grad=4, 
-                          fs_damp=1, fs_shift=2.1, fs_smearsigma=0.1, 
-                          fs_initguess='atom', fs_grid_level=2, fs_rhocutoff=1e-2,
-                          fs_verbose=1, fs_save_orbs=True, fs_save_density=True, 
-                          compare_density=True, ft_save_density=True, 
-                          ft_save_orbs=True, filename=t_file.name)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'b3lyp', max_cycle=3, conv_tol=2,
+                                         damp=1, level_shift_factor=2.1,
+                                         init_guess='atom', grid_level=2, 
+                                         small_rho_cutoff=1e-2, save_orbs=True,
+                                         save_density=True,
+                                         stability_analysis='internal')
 
-        self.assertEqual(supersystem.fs_method, 'b3lyp')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2],
+                          'b3lyp', fs_scf_obj, proj_oper='huzfermi', max_cycle=2, 
+                          conv_tol=1e-1, diis_num=3, init_guess='1e', 
+                          fock_subcycles=1, set_fermi=-0.1, damp=0.5, 
+                          compare_density=True, save_density=True,
+                          save_orbs=True, filename=t_file.name)
+
+        self.assertEqual(supersystem.env_method, 'b3lyp')
         self.assertEqual(supersystem.proj_oper, 'huzfermi')
         self.assertEqual(supersystem.filename, t_file.name)
-        self.assertEqual(supersystem.ft_cycles, 2)
-        self.assertEqual(supersystem.ft_conv, 1e-1)
-        self.assertEqual(supersystem.ft_grad, 1e-4)
-        self.assertEqual(supersystem.ft_damp, 0.5)
-        self.assertIsInstance(supersystem.ft_diis, lib.diis.DIIS)
-        self.assertEqual(supersystem.ft_setfermi, -0.1)
-        self.assertEqual(supersystem.ft_initguess, '1e')
-        self.assertEqual(supersystem.ft_updatefock, 1)
-
-        self.assertEqual(supersystem.fs_cycles, 3)
-        self.assertEqual(supersystem.fs_conv, 2)
-        self.assertEqual(supersystem.fs_grad, 4)
-        self.assertEqual(supersystem.fs_damp, 1)
-        self.assertEqual(supersystem.fs_shift, 2.1)
-        self.assertEqual(supersystem.fs_smearsigma, 0.1)
-        self.assertEqual(supersystem.fs_initguess, 'atom')
-        self.assertEqual(supersystem.grid_level, 2)
-        self.assertEqual(supersystem.rho_cutoff, 1e-2)
-        self.assertEqual(supersystem.fs_verbose, 1)
-        #self.assertEqual(supersystem.analysis, True)
-        #self.assertEqual(supersystem.debug, True)
+        self.assertEqual(supersystem.max_cycle, 2)
+        self.assertEqual(supersystem.conv_tol, 1e-1)
+        self.assertEqual(supersystem.damp, 0.5)
+        self.assertIsInstance(supersystem.emb_diis, lib.diis.DIIS)
+        self.assertIsInstance(supersystem.emb_diis_2, lib.diis.DIIS)
+        self.assertEqual(supersystem.set_fermi, -0.1)
+        self.assertEqual(supersystem.init_guess, '1e')
+        self.assertEqual(supersystem.fock_subcycles, 1)
         self.assertEqual(supersystem.compare_density, True)
-        self.assertEqual(supersystem.fs_save_orbs, True)
-        self.assertEqual(supersystem.fs_save_density, True)
-        self.assertEqual(supersystem.ft_save_orbs, True)
-        self.assertEqual(supersystem.ft_save_density, True)
+        self.assertEqual(supersystem.save_orbs, True)
+        self.assertEqual(supersystem.save_density, True)
 
+        fs_scf_obj = supersystem.fs_scf_obj
+        self.assertEqual(fs_scf_obj.max_cycle, 3)
+        self.assertEqual(fs_scf_obj.conv_tol, 2)
+        self.assertEqual(fs_scf_obj.damp, 1)
+        self.assertEqual(fs_scf_obj.level_shift_factor, 2.1)
+        self.assertEqual(fs_scf_obj.init_guess, 'atom')
+        self.assertEqual(fs_scf_obj.grids.level, 2)
+        self.assertEqual(fs_scf_obj.small_rho_cutoff, 1e-2)
+        self.assertEqual(fs_scf_obj.verbose, 1)
+        self.assertEqual(fs_scf_obj.stability_analysis, 'internal')
+        self.assertEqual(fs_scf_obj.save_orbs, True)
+        self.assertEqual(fs_scf_obj.save_density, True)
 
     def test_partialghost_supersystem(self):
         mol = gto.Mole()
@@ -472,28 +471,15 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
-        self.assertEqual(supersystem.fs_method, 'b3lyp')
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'b3lyp')
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', fs_scf_obj, init_guess='minao')
+        self.assertEqual(supersystem.env_method, 'b3lyp')
         self.assertEqual(supersystem.proj_oper, 'huz')
-        self.assertEqual(supersystem.ft_cycles, 100)
-        self.assertEqual(supersystem.ft_conv, 1e-8)
-        self.assertEqual(supersystem.ft_grad, None)
-        self.assertEqual(supersystem.ft_initguess, 'minao')
-        self.assertEqual(supersystem.ft_updatefock, 0)
+        self.assertEqual(supersystem.init_guess, 'minao')
 
-        self.assertEqual(supersystem.fs_cycles, None)
-        self.assertEqual(supersystem.fs_conv, None)
-        self.assertEqual(supersystem.fs_grad, None)
-        self.assertEqual(supersystem.fs_damp, 0)
-        self.assertEqual(supersystem.fs_shift, 0)
-        self.assertEqual(supersystem.fs_smearsigma, 0)
-        self.assertEqual(supersystem.fs_initguess, None)
-        self.assertEqual(supersystem.grid_level, None)
-        self.assertEqual(supersystem.rho_cutoff, None)
-        self.assertEqual(supersystem.fs_verbose, None)
-        #self.assertEqual(supersystem.analysis, False)
-        #self.assertEqual(supersystem.debug, False)
-
+    @unittest.skip
     def test_totalghost_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -540,6 +526,7 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
+    @unittest.skip
     def test_ovlpghost_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -588,6 +575,7 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
+    @unittest.skip
     def test_excited_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3
@@ -611,7 +599,10 @@ class TestSuperSystem(unittest.TestCase):
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao',
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao',
                 fs_excited=True, fs_excited_dict={'nroots':4}, ft_excited_relax=True, ft_excited_dict={'nroots':2})
 
         self.assertTrue(supersystem.fs_excited)
@@ -680,29 +671,30 @@ class TestInteractionMediator(unittest.TestCase):
         mediator = interaction_mediator.InteractionMediator(subsystems)
         self.assertEqual(len(mediator.supersystems), 1)
 
-        supersystem_1 = cluster_supersystem.ClusterSuperSystem(subsystems, 'm06') 
+        mol12 = helpers.concat_mols([self.sub2.mol, self.sub3.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
+        supersystem_1 = cluster_supersystem.ClusterSuperSystem(subsystems, 'm06', fs_scf_obj) 
         for i in range(len(mediator.supersystems)):
             test = mediator.supersystems[i]
-            self.assertEqual(test.fs_method, supersystem_1.fs_method)
+            self.assertEqual(test.env_method, supersystem_1.env_method)
             self.assertEqual(test.proj_oper, supersystem_1.proj_oper)
-            self.assertEqual(test.ft_cycles, supersystem_1.ft_cycles)
-            self.assertEqual(test.ft_conv, supersystem_1.ft_conv)
-            self.assertEqual(test.ft_grad, supersystem_1.ft_grad)
-            self.assertEqual(test.ft_damp, supersystem_1.ft_damp)
-            self.assertEqual(test.ft_initguess, supersystem_1.ft_initguess)
-            self.assertEqual(test.ft_updatefock, supersystem_1.ft_updatefock)
+            self.assertEqual(test.max_cycle, supersystem_1.max_cycle)
+            self.assertEqual(test.conv_tol, supersystem_1.conv_tol)
+            self.assertEqual(test.damp, supersystem_1.damp)
+            self.assertEqual(test.init_guess, supersystem_1.init_guess)
+            self.assertEqual(test.fock_subcycles, supersystem_1.fock_subcycles)
 
-            self.assertEqual(test.fs_cycles, supersystem_1.fs_cycles)
-            self.assertEqual(test.fs_conv, supersystem_1.fs_conv)
-            self.assertEqual(test.fs_grad, supersystem_1.fs_grad)
-            self.assertEqual(test.fs_damp, supersystem_1.fs_damp)
-            self.assertEqual(test.fs_shift, supersystem_1.fs_shift)
-            self.assertEqual(test.fs_smearsigma, supersystem_1.fs_smearsigma)
-            self.assertEqual(test.fs_initguess, supersystem_1.fs_initguess)
-            self.assertEqual(test.grid_level, supersystem_1.grid_level)
-            self.assertEqual(test.rho_cutoff, supersystem_1.rho_cutoff)
-            self.assertEqual(test.fs_verbose, supersystem_1.fs_verbose)
+            test_fs_scf = test.fs_scf_obj
+            sup_fs_scf = supersystem_1.fs_scf_obj
+            self.assertEqual(test_fs_scf.max_cycle, sup_fs_scf.max_cycle)
+            self.assertEqual(test_fs_scf.conv_tol, sup_fs_scf.conv_tol)
+            self.assertEqual(test_fs_scf.damp, sup_fs_scf.damp)
+            self.assertEqual(test_fs_scf.level_shift_factor, sup_fs_scf.level_shift_factor)
+            self.assertEqual(test_fs_scf.init_guess, sup_fs_scf.init_guess)
+            self.assertEqual(test_fs_scf.grids.level, sup_fs_scf.grids.level)
+            self.assertEqual(test_fs_scf.small_rho_cutoff, sup_fs_scf.small_rho_cutoff)
 
+    @unittest.skip
     def test_three_system_interaction_mediator(self):
         subsystems = [self.sub1, self.sub2, self.sub3]
         mediator = interaction_mediator.InteractionMediator(subsystems)

@@ -54,36 +54,32 @@ env_settings_filename = 'env_settings.inp'
 env_settings_str_replace = """
 env_method_settings
  env_method lda
- smearsigma 0.1
- initguess submol
- conv 1e-6
- grad 1e-8
- cycles 100
+ init_guess submol
+ conv_tol 1e-6
+ max_cycle 100
  damp 0.2
- shift 1.4
- diis 1
- grid 4
- rhocutoff 1e-1
- verbose 3
+ level_shift_factor 1.4
+ dynamic_level_shift
+ diis_num 1
+ grid_level 4
+ small_rho_cutoff 1e-1
  unrestricted
  density_fitting
- compare_density
  save_orbs
  save_density
  save_spin_density
  embed_settings
-  cycles 12
+  max_cycle 12
   subcycles 2
-  basis_tau 0.2
-  conv 1e-4
-  grad 1e-2
+  conv_tol 1e-4
   damp 0.5
-  diis 3
-  setfermi 0.35
-  updatefock 3
-  updateproj 2
-  initguess readchk
+  diis_num 3
+  set_fermi 0.35
+  update_fock 3
+  update_proj 2
+  init_guess chk
   save_orbs
+  compare_density
   save_density
   save_spin_density
   huzfermi
@@ -99,13 +95,12 @@ hl_settings_str_replace = """
 hl_method_settings
  hl_order 1
  hl_method caspt2[10,10]
- initguess submol
+ init_guess submol
  spin 4
- conv 1e-12
- grad 1e-14
- cycles 100
+ conv_tol 1e-12
+ max_cycle 100
  damp 10.
- shift 12.1
+ level_shift_factor 12.1
  compress_approx
  unrestricted
  density_fitting
@@ -115,7 +110,7 @@ hl_method_settings
  use_ext openmolcas
  cas_settings
   loc_orbs
-  cas_initguess rhf
+  cas_init_guess rhf
   active_orbs 3,4,5,6,7
   avas 1d
  end
@@ -131,13 +126,12 @@ subsys_env_set_filename = 'subsys_env_set.inp'
 subsys_env_set_str_replace = """
 env_method_settings
  smearsigma 0.2
- initguess readchk
- conv 1e-20
+ init_guess chk
+ conv_tol 1e-20
  damp 12.2
- shift 2.3
+ level_shift_factor 2.3
  subcycles 10
- setfermi 1.112
- diis 6
+ diis_num 6
  unrestricted
  density_fitting
  freeze 
@@ -159,13 +153,12 @@ end""")
 subsys_hl_set_filename = 'subsys_hl_set.inp'
 subsys_hl_set_str_replace = """
 hl_method_settings
- initguess minao
+ init_guess minao
  spin 4
- conv 1e-3
- grad 1e1
- cycles 4
+ conv_tol 1e-3
+ max_cycle 4
  damp 0.001
- shift 0.002
+ level_shift_factor 0.002
  use_ext molpro
  unrestricted
  compress_approx
@@ -174,7 +167,7 @@ hl_method_settings
  save_density
  save_spin_density
  cas_settings
-  cas_initguess ci
+  cas_init_guess ci
   active_orbs 5,6,7,8,9
   avas 3d
  end
@@ -342,8 +335,6 @@ end
 
 env_method_settings
  env_method pbe
- spin 2
- charge -2
 end
 
 hl_method_settings
@@ -367,20 +358,19 @@ end
 env_method_num 3
 hl_method_num 1
 hl_method_settings
- initguess atom
+ init_guess atom
  spin 2
- conv 1e-3
- grad 1e-2
- cycles 100
+ conv_tol 1e-3
+ max_cycle 100
  damp .8
- shift 2.
+ level_shift_factor 2.
  use_ext openmolcas
  unrestricted
  compress_approx
  density_fitting
  cas_settings
   loc_orbs
-  cas_initguess rhf
+  cas_init_guess rhf
   active_orbs 1,2,3
   avas 1d
  end
@@ -412,13 +402,12 @@ end
 env_method_num 2
 env_method_settings
  smearsigma 0.1
- initguess atom
- conv 1e-3
+ init_guess atom
+ conv_tol 1e-3
  damp 0.5
- shift 1.
+ level_shift_factor 1.
  subcycles 10
- setfermi 1.2
- diis 1
+ diis_num 1
  density_fitting
  freeze
  save_orbs
@@ -450,36 +439,32 @@ end
 env_method_settings
  env_order 1
  env_method lda
- smearsigma 0.1
- initguess supmol
- conv 1e-1
- grad 1e4
- cycles 1
+ init_guess supmol
+ conv_tol 1e-1
+ max_cycle 1
  damp 0.0001
- shift 20.0
- diis 4
- grid 7
- rhocutoff 1.
- verbose 10
+ level_shift_factor 20.0
+ diis_num 4
+ grid_level 7
+ small_rho_cutoff 1.
  unrestricted
  density_fitting
- compare_density
  save_orbs
  save_density
  save_spin_density
  embed_settings
-  cycles 100
+  max_cycle 100
   subcycles 2
-  conv 1e-4
-  grad 1e4
+  conv_tol 1e-4
   damp 0.1
-  diis 1
-  setfermi 3.
-  updatefock 1
-  initguess submol
+  diis_num 1
+  set_fermi 3.
+  update_fock 1
+  init_guess submol
   unrestricted
   save_orbs
   save_density
+  compare_density
   mu 1e-5
  end
 end
@@ -497,16 +482,15 @@ end
 hl_method_settings
  hl_order 1
  hl_method cas[2,2]
- initguess minao
+ init_guess minao
  spin 3
- conv 1.
- grad 1.
- cycles 3
+ conv_tol 1.
+ max_cycle 3
  damp 0.5
- shift 3.
+ level_shift_factor 3.
  use_ext bagel
  cas_settings
-  cas_initguess ci
+  cas_init_guess ci
  end
 end
 
@@ -525,43 +509,8 @@ end
 
 ppmem 2500
 nproc 3
+verbose 10
 scrdir /path/to/scratch/dir
-"""
-
-ghostlink_filename = "ghostlink_tests.inp"
-ghostlink_str = """
-subsystem
-He    0.0000    0.0000    0.0000
-He    1.0000    0.0000    0.0000
-hl_method_num 1
-addlinkbasis
-end
-
-subsystem
-C    2.0000    0.0000    0.0000
-end
-
-subsystem
-C    2.0000    2.0000    0.0000
-addlinkbasis
-end
-
-subsystem
-C    2.0000    2.0000    2.0000
-end
-
-env_method_settings
- env_method pbe
-end
-
-hl_method_settings
- hl_order 1
- hl_method rhf
-end
-
-basis
- default 3-21g
-end
 """
 
 excited_filename = "excited.inp"
@@ -587,13 +536,13 @@ env_method_settings
  env_method pbe
  excited
  excited_settings
-  conv 1e-9
+  conv_tol 1e-9
   nroots 4
  end
  embed_settings
   excited_relax
   excited_settings
-   conv 1e-9
+   conv_tol 1e-9
    nroots 4
   end
  end
@@ -614,6 +563,8 @@ end
 """
 
 temp_inp_dir = "/temp_input/"
+
+
 class TestGenerateInputReaderObject(unittest.TestCase):
 
     def setUp(self):
@@ -640,11 +591,6 @@ class TestGenerateInputReaderObject(unittest.TestCase):
     def test_assert_bad_format(self):
         with self.assertRaises(ir_helpers.ReaderError):
             inp_reader.read_input(self.bad_file_format_path)
-
-    def test_namespace_params(self):
-        test_obj = inp_reader.read_input(self.def_filename_path)
-        print (test_obj)
-        self.assertTrue(False)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -685,17 +631,18 @@ class TestKwargCreation(unittest.TestCase):
             f.write(excited_str)
 
 
-
     def test_default_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
         correct_env_kwargs = {'env_order': 1, 
-                              'env_method': 'pbe', 
-                              'filename': path + def_filename}
+                              'env_method': 'pbe'}
         correct_hl_kwargs = {'hl_order': 1, 'hl_method': 'rhf'}
         correct_supersystem_kwargs = {'env_order': 1,
-                                      'fs_method': 'pbe',
-                                      'filename': path + def_filename}
+                                      'env_method': 'pbe',
+                                      'fs_env_settings': {
+                                          'env_method': 'pbe'
+                                          }
+                                      }
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
@@ -712,40 +659,41 @@ class TestKwargCreation(unittest.TestCase):
     def test_environ_settings(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + env_settings_filename)
-        correct_supersystem_kwargs = {'env_order': 1,
-                                      'fs_method': 'lda',
-                                      'fs_smearsigma': 0.1,
-                                      'fs_initguess': 'submol',
-                                      'fs_conv': 1e-6,
-                                      'fs_grad': 1e-8,
-                                      'fs_cycles': 100,
-                                      'fs_damp': 0.2,
-                                      'fs_shift': 1.4,
-                                      'fs_diis': 1,
-                                      'fs_grid_level': 4,
-                                      'fs_rhocutoff': 1e-1,
-                                      'fs_verbose': 3,
-                                      'fs_unrestricted': True,
-                                      'fs_density_fitting': True,
-                                      'compare_density': True,
-                                      'fs_save_orbs': True,
-                                      'fs_save_density': True,
-                                      'fs_save_spin_density': True,
-                                      'ft_cycles': 12,
-                                      'ft_subcycles': 2,
-                                      'ft_basis_tau': 0.2,
-                                      'ft_conv': 1e-4,
-                                      'ft_grad': 1e-2,
-                                      'ft_damp': 0.5,
-                                      'ft_diis': 3,
-                                      'ft_setfermi': 0.35,
-                                      'ft_updatefock': 3,
-                                      'ft_initguess': 'readchk',
-                                      'ft_save_orbs': True,
-                                      'ft_save_density': True,
-                                      'ft_save_spin_density': True,
-                                      'ft_proj_oper': 'huzfermi',
-                                      'filename': path + env_settings_filename}
+        fs_dict = {'env_method': 'lda',
+                   'init_guess': 'submol',
+                   'conv_tol': 1e-6,
+                   'max_cycle': 100,
+                   'damp': 0.2,
+                   'level_shift_factor': 1.4,
+                   'diis_num': 1,
+                   'grid_level': 4,
+                   'small_rho_cutoff': 1e-1,
+                   'unrestricted': True,
+                   'dynamic_level_shift': True,
+                   'density_fitting': True,
+                   'save_orbs': True,
+                   'save_density': True,
+                   'save_spin_density': True,
+                }
+        ft_dict = {'max_cycle': 12,
+                   'subcycles': 2,
+                   'conv_tol': 1e-4,
+                   'compare_density': True,
+                   'damp': 0.5,
+                   'diis_num': 3,
+                   'set_fermi': 0.35,
+                   'update_fock': 3,
+                   'update_proj': 2,
+                   'init_guess': 'chk',
+                   'save_orbs': True,
+                   'save_density': True,
+                   'save_spin_density': True,
+                   'proj_oper': 'huzfermi',
+                }
+        correct_supersystem_kwargs = {'env_order': 1, 
+                                      'env_method': 'lda'}
+        correct_supersystem_kwargs['fs_env_settings'] = fs_dict
+        correct_supersystem_kwargs['embed_settings'] = ft_dict
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
         for n in in_obj.supersystem_kwargs:
             self.assertDictEqual(n, correct_supersystem_kwargs)
@@ -755,21 +703,20 @@ class TestKwargCreation(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + hl_settings_filename)
         correct_hl_kwargs = {'hl_order': 1,
                              'hl_method': 'caspt2[10,10]',
-                             'hl_initguess': 'submol',
-                             'hl_conv': 1e-12,
-                             'hl_spin': 4,
-                             'hl_grad': 1e-14,
-                             'hl_cycles': 100,
-                             'hl_damp': 10.,
-                             'hl_shift': 12.1,
-                             'hl_ext': 'openmolcas',
-                             'hl_unrestricted': True,
-                             'hl_compress_approx': True,
-                             'hl_density_fitting': True,
-                             'hl_save_orbs': True,
-                             'hl_save_density': True,
-                             'hl_save_spin_density': True,
-                             'hl_dict': {'loc_orbs': True, 'cas_initguess': 'rhf', 'active_orbs': [3,4,5,6,7], 'avas': ['1d']}
+                             'init_guess': 'submol',
+                             'conv_tol': 1e-12,
+                             'spin': 4,
+                             'max_cycle': 100,
+                             'damp': 10.,
+                             'level_shift_factor': 12.1,
+                             'use_ext': 'openmolcas',
+                             'unrestricted': True,
+                             'compress_approx': True,
+                             'density_fitting': True,
+                             'save_orbs': True,
+                             'save_density': True,
+                             'save_spin_density': True,
+                             'hl_dict': {'loc_orbs': True, 'cas_init_guess': 'rhf', 'active_orbs': [3,4,5,6,7], 'avas': ['1d']}
                              }
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         for i in range(len(in_obj.hl_subsystem_kwargs)):
@@ -784,21 +731,20 @@ class TestKwargCreation(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + subsys_env_set_filename)
         correct_env_kwargs_1 = {'env_order': 1,
                                 'env_method': 'lda',
-                                'env_smearsigma': 0.2,
-                                'initguess': 'readchk',
-                                'conv': 1e-20,
+                                'smearsigma': 0.2,
+                                'init_guess': 'chk',
+                                'conv_tol': 1e-20,
                                 'damp': 12.2,
-                                'shift': 2.3,
+                                'level_shift_factor': 2.3,
                                 'subcycles': 10,
-                                'setfermi': 1.112,
-                                'diis': 6,
+                                'diis_num': 6,
                                 'unrestricted': True,
                                 'density_fitting': True,
                                 'freeze': True,
                                 'save_orbs':True,
                                 'save_density':True,
                                 'save_spin_density':True,
-                                'filename': path + subsys_env_set_filename}
+                                }
         self.assertDictEqual(in_obj.env_subsystem_kwargs[1], correct_env_kwargs_1)
 
     def test_subsys_hl_settings(self):
@@ -806,21 +752,20 @@ class TestKwargCreation(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + subsys_hl_set_filename)
         correct_hl_kwargs_1 = {'hl_order': 1,
                                'hl_method': 'caspt2[10,10]',
-                               'hl_initguess': 'minao',
-                               'hl_spin': 4,
-                               'hl_conv': 1e-3,
-                               'hl_grad': 1e1,
-                               'hl_cycles': 4,
-                               'hl_damp': 0.001,
-                               'hl_shift': 0.002,
-                               'hl_ext': 'molpro',
-                               'hl_unrestricted': True,
-                               'hl_compress_approx': True,
-                               'hl_density_fitting': True,
-                               'hl_save_orbs': True,
-                               'hl_save_density': True,
-                               'hl_save_spin_density': True,
-                               'hl_dict': {'cas_initguess': 'ci', 'active_orbs': [5,6,7,8,9], 'avas': ['3d']}
+                               'init_guess': 'minao',
+                               'spin': 4,
+                               'conv_tol': 1e-3,
+                               'max_cycle': 4,
+                               'damp': 0.001,
+                               'level_shift_factor': 0.002,
+                               'use_ext': 'molpro',
+                               'unrestricted': True,
+                               'compress_approx': True,
+                               'density_fitting': True,
+                               'save_orbs': True,
+                               'save_density': True,
+                               'save_spin_density': True,
+                               'hl_dict': {'cas_init_guess': 'ci', 'active_orbs': [5,6,7,8,9], 'avas': ['3d']}
                                }
         self.assertDictEqual(in_obj.hl_subsystem_kwargs[0], correct_hl_kwargs_1)
 
@@ -828,11 +773,13 @@ class TestKwargCreation(unittest.TestCase):
         path = os.getcwd() + temp_inp_dir 
         in_obj = inp_reader.InpReader(path + multi_env_filename)
         correct_env_kwargs_1 = {'env_order': 1,
-                                'fs_method': 'pbe', 
-                                'filename': path + multi_env_filename}
+                                'env_method': 'pbe', 
+                                'fs_env_settings': {'env_method':'pbe'}
+                                }
         correct_env_kwargs_2 = {'env_order': 2,
-                                'fs_method': 'lda', 
-                                'filename': path + multi_env_filename}
+                                'env_method': 'lda', 
+                                'fs_env_settings': {'env_method':'lda'}
+                                }
 
         self.assertDictEqual(in_obj.supersystem_kwargs[0], correct_env_kwargs_1)
         self.assertDictEqual(in_obj.supersystem_kwargs[1], correct_env_kwargs_2)
@@ -846,118 +793,98 @@ class TestKwargCreation(unittest.TestCase):
         in_obj = inp_reader.InpReader(path + explicit_filename)
         correct_env_kwargs_1 = {'env_order': 3,
                                 'env_method': 'pbe', 
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                }
         correct_env_kwargs_2 = {'env_order': 3,
                                 'env_method': 'pbe', 
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                }
         correct_env_kwargs_3 = {'env_order': 2,
                                 'env_method': 'pbe',
-                                'env_smearsigma': 0.1,
-                                'initguess': 'atom',
-                                'conv': 1e-3,
+                                'smearsigma': 0.1,
+                                'init_guess': 'atom',
+                                'conv_tol': 1e-3,
                                 'damp': 0.5,
-                                'shift': 1.,
+                                'level_shift_factor': 1.,
                                 'subcycles': 10,
-                                'setfermi': 1.2,
-                                'diis': 1,
+                                'diis_num': 1,
                                 'density_fitting': True,
                                 'freeze': True,
                                 'save_orbs': True,
                                 'save_density': True,
                                 'save_spin_density': True,
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                }
         correct_env_kwargs_4 = {'env_order': 3,
                                 'env_method': 'pbe', 
                                 'unrestricted': True,
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                }
         correct_env_kwargs_5 = {'env_order': 1,
                                 'env_method': 'lda', 
                                 'subcycles': 2,
-                                'unrestricted': True,
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                'unrestricted': True
+                                }
         env_list = [correct_env_kwargs_1, correct_env_kwargs_2, correct_env_kwargs_3, correct_env_kwargs_4, correct_env_kwargs_5]
         correct_hl_kwargs_1 = {'hl_order': 1,
                                'hl_method': 'cas[2,2]',
-                               'hl_initguess': 'atom',
-                               'hl_spin': 2,
-                               'hl_conv': 1e-3,
-                               'hl_grad': 1e-2,
-                               'hl_cycles': 100,
-                               'hl_damp': 0.8,
-                               'hl_shift': 2.,
-                               'hl_ext': 'openmolcas',
-                               'hl_unrestricted': True,
-                               'hl_compress_approx': True,
-                               'hl_density_fitting': True,
-                               'hl_dict': {'loc_orbs': True, 'cas_initguess': 'rhf', 'active_orbs': [1,2,3], 'avas':['1d']}
+                               'init_guess': 'atom',
+                               'spin': 2,
+                               'conv_tol': 1e-3,
+                               'max_cycle': 100,
+                               'damp': 0.8,
+                               'level_shift_factor': 2.,
+                               'use_ext': 'openmolcas',
+                               'unrestricted': True,
+                               'compress_approx': True,
+                               'density_fitting': True,
+                               'hl_dict': {'loc_orbs': True, 'cas_init_guess': 'rhf', 'active_orbs': [1,2,3], 'avas':['1d']}
                                }
         correct_hl_kwargs_2 = {'hl_order': 2,
                                'hl_method': 'rhf',
-                               'hl_save_spin_density': True}
+                               'save_spin_density': True}
         hl_list = [correct_hl_kwargs_1, correct_hl_kwargs_2, None, None, None]
         correct_sup_kwargs_1 = {'env_order': 1,
-                                'fs_method': 'lda',
-                                'fs_smearsigma': 0.1,
-                                'fs_initguess': 'supmol',
-                                'fs_conv': 1e-1,
-                                'fs_grad': 1e4,
-                                'fs_cycles': 1,
-                                'fs_damp': 0.0001,
-                                'fs_shift': 20.0,
-                                'fs_diis': 4,
-                                'fs_grid_level': 7,
-                                'fs_rhocutoff': 1.,
-                                'fs_verbose': 10,
-                                'fs_unrestricted': True,
-                                'fs_density_fitting': True,
-                                'compare_density': True,
-                                'fs_save_orbs': True,
-                                'fs_save_density': True,
-                                'fs_save_spin_density': True,
-                                'ft_cycles': 100,
-                                'ft_subcycles': 2,
-                                'ft_conv': 1e-4,
-                                'ft_grad': 1e4,
-                                'ft_damp': 0.1,
-                                'ft_diis': 1,
-                                'ft_setfermi': 3.,
-                                'ft_updatefock': 1,
-                                'ft_initguess': 'submol',
-                                'ft_unrestricted': True,
-                                'ft_save_orbs': True,
-                                'ft_save_density': True,
-                                'ft_proj_oper': 1e-5,
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                'env_method': 'lda',
+                                'fs_env_settings': {
+                                    'env_method': 'lda',
+                                    'init_guess': 'supmol',
+                                    'conv_tol': 1e-1,
+                                    'max_cycle': 1,
+                                    'damp': 0.0001,
+                                    'level_shift_factor': 20.0,
+                                    'diis_num': 4,
+                                    'grid_level': 7,
+                                    'small_rho_cutoff': 1.,
+                                    'unrestricted': True,
+                                    'density_fitting': True,
+                                    'save_orbs': True,
+                                    'save_density': True,
+                                    'save_spin_density': True},
+                                'embed_settings': {
+                                    'compare_density': True,
+                                    'max_cycle': 100,
+                                    'subcycles': 2,
+                                    'conv_tol': 1e-4,
+                                    'damp': 0.1,
+                                    'diis_num': 1,
+                                    'set_fermi': 3.,
+                                    'update_fock': 1,
+                                    'init_guess': 'submol',
+                                    'unrestricted': True,
+                                    'save_orbs': True,
+                                    'save_density': True,
+                                    'proj_oper': 1e-5,
+                                    },
+                                }
         correct_sup_kwargs_2 = {'env_order': 2,
-                                'fs_method': 'pbe',
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                'env_method': 'pbe',
+                                'fs_env_settings': {
+                                    'env_method': 'pbe',
+                                    }
+                                }
         correct_sup_kwargs_3 = {'env_order': 3,
-                                'fs_method': 'pbe',
-                                'filename': path + explicit_filename, 
-                                'ppmem': 2500, 
-                                'nproc': 3, 
-                                'scrdir': '/path/to/scratch/dir'}
+                                'env_method': 'pbe',
+                                'fs_env_settings': {
+                                    'env_method': 'pbe'
+                                    }
+                                }
         sup_list = [correct_sup_kwargs_1, correct_sup_kwargs_2, correct_sup_kwargs_3]
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 5)
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 5)
@@ -980,19 +907,16 @@ class TestKwargCreation(unittest.TestCase):
         path = os.getcwd() + temp_inp_dir
         in_obj = inp_reader.InpReader(path + excited_filename)
         correct_env_kwargs = {'env_order': 1, 
-                              'env_method': 'pbe',
-                              'filename': path + excited_filename}
+                              'env_method': 'pbe'}
         correct_hl_kwargs = {'hl_order': 1,
                              'hl_method': 'ccsd',
-                             'hl_excited': True,
-                             'excited_dict': {'nroots': 4}}
+                             'excited': True,
+                             'hl_excited_dict': {'nroots': 4}}
         correct_supersystem_kwargs = {'env_order': 1,
-                                      'fs_method': 'pbe',
-                                      'fs_excited_dict': {'conv': 1e-9, 'nroots': 4},
-                                      'fs_excited': True,
-                                      'ft_excited_dict': {'conv': 1e-9, 'nroots': 4},
-                                      'ft_excited_relax': True,
-                                      'filename': path + excited_filename}
+                                      'env_method': 'pbe',
+                                      'excited_settings': {'conv_tol': 1e-9, 'nroots': 4},
+                                      'embed_settings': {'excited_settings': {'conv_tol': 1e-9, 'nroots': 4}, 'excited_relax': True, 'mu':1000000.0},
+                                      'fs_env_settings': {'env_method': 'pbe', 'excited': True}}
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
@@ -1004,6 +928,8 @@ class TestKwargCreation(unittest.TestCase):
             else:
                 self.assertIsNone(n)
         for n in in_obj.supersystem_kwargs:
+            print (n)
+            print (correct_supersystem_kwargs)
             self.assertDictEqual(n, correct_supersystem_kwargs)
          
     def tearDown(self):
@@ -1023,6 +949,7 @@ class TestMolCreation(unittest.TestCase):
         with open(path+def_filename, "w") as f:
             f.write(default_str)
 
+ 
         with open(path+specify_basis_filename, "w") as f:
             f.write(specify_basis_str)
 
@@ -1035,8 +962,6 @@ class TestMolCreation(unittest.TestCase):
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
 
-        with open(path+ghostlink_filename, "w") as f:
-            f.write(ghostlink_str)
 
     def test_default(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -1251,52 +1176,6 @@ class TestMolCreation(unittest.TestCase):
             for k in test._ecp.keys():
                 self.assertListEqual(test._ecp[k], corr._ecp[k]) 
 
-    def test_ghostlink(self):
-        path = os.getcwd() + temp_inp_dir
-        in_obj = inp_reader.InpReader(path + ghostlink_filename)
-
-        correct_mol1 = gto.M()
-        correct_mol1.atom = '''
-            He    0.0000    0.0000    0.0000
-            He    1.0000    0.0000    0.0000
-            GHOST-H 1.0000  0.0000    0.0000
-            GHOST-H 1.5000  0.0000    0.0000'''
-        correct_mol1.basis = '3-21g'
-        correct_mol1.build()
-
-        correct_mol2 = gto.M()
-        correct_mol2.atom = '''
-            C    2.0000    0.0000    0.0000'''
-        correct_mol2.basis = '3-21g'
-        correct_mol2.build()
-
-        correct_mol3 = gto.M()
-        correct_mol3.atom = '''
-            C    2.0000    2.0000    0.0000
-            GHOST-H 2.0000 1.0000    0.0000
-            GHOST-H 2.0000 2.0000    1.0000'''
-        correct_mol3.basis = '3-21g'
-        correct_mol3.build()
-
-        correct_mol4 = gto.M()
-        correct_mol4.atom = '''
-            C    2.0000    2.0000    2.0000'''
-        correct_mol4.basis = '3-21g'
-        correct_mol4.build()
-
-        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
-        self.assertEqual(len(in_obj.subsys_mols), 4)
-        for i in range(len(in_obj.subsys_mols)):
-            test = in_obj.subsys_mols[i]
-            corr = corr_mol_list[i]
-            self.assertEqual(len(test._atom), len(corr._atom))
-            for i,atom in enumerate(test._atom):
-                self.assertEqual(test._atom[i][0], corr._atom[i][0])
-                self.assertAlmostEqual(test._atom[i][1][0], corr._atom[i][1][0])
-                self.assertAlmostEqual(test._atom[i][1][1], corr._atom[i][1][1])
-                self.assertAlmostEqual(test._atom[i][1][2], corr._atom[i][1][2])
-                self.assertListEqual(test._basis[atom[0]], corr._basis[atom[0]])
-        
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):

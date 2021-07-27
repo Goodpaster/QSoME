@@ -11,6 +11,7 @@ import tempfile
 from qsome.cluster_subsystem import ClusterEnvSubSystem, ClusterHLSubSystem
 from qsome.cluster_supersystem import ClusterSuperSystem
 from qsome.interaction_mediator import InteractionMediator
+from qsome import helpers
 from pyscf import gto
 
 import numpy as np
@@ -91,7 +92,9 @@ class TestSetup(unittest.TestCase):
         sup1_alt_sub_mol.basis = {'O-0': '6-31g', 'H-0': '6-31g', 'O-1': 'cc-pVDZ', 'H-1': 'cc-pVDZ', 'O-2': '3-21g', 'H-2': '3-21g'}
         sup1_alt_sub_mol.build()
         sup1_alt_sub = ClusterEnvSubSystem(sup1_alt_sub_mol, 'pbe', env_order=2)
-        supersystem_1 = ClusterSuperSystem([sub1, sub2, sup1_alt_sub], 'lda')
+        mol123 = helpers.concat_mols([sub1.mol, sub2.mol, sup1_alt_sub.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'lda')
+        supersystem_1 = ClusterSuperSystem([sub1, sub2, sup1_alt_sub], 'lda', fs_scf_obj)
         supersystem_1.init_density()
 
         sup2_alt_sub_mol = gto.Mole()
@@ -107,9 +110,13 @@ class TestSetup(unittest.TestCase):
         sup2_alt_sub_mol.build()
 
         sup2_alt_sub = ClusterEnvSubSystem(sup2_alt_sub_mol, 'm06', env_order=3)
-        supersystem_2 = ClusterSuperSystem([sub3, sup2_alt_sub], 'pbe', env_order=2)
+        mol123 = helpers.concat_mols([sub3.mol, sup2_alt_sub.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'pbe')
+        supersystem_2 = ClusterSuperSystem([sub3, sup2_alt_sub], 'pbe', fs_scf_obj, env_order=2)
         supersystem_2.init_density()
-        supersystem_3 = ClusterSuperSystem([sub4, sub5], 'm06', env_order=3)
+        mol123 = helpers.concat_mols([sub4.mol, sub5.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'm06')
+        supersystem_3 = ClusterSuperSystem([sub4, sub5], 'm06', fs_scf_obj, env_order=3)
         supersystem_3.init_density()
         supersystem_list = [supersystem_1, supersystem_2, supersystem_3]
         mediator = InteractionMediator(subsystems)
@@ -117,7 +124,7 @@ class TestSetup(unittest.TestCase):
         self.assertEqual(len(mediator.supersystems), 3)
         for i in range(len(mediator.supersystems)):
             test = mediator.supersystems[i]
-            self.assertEqual(test.fs_method, supersystem_list[i].fs_method)
+            self.assertEqual(test.env_method, supersystem_list[i].env_method)
 
     #@unittest.skip
     def test_explicit_subsystems(self):
@@ -189,7 +196,9 @@ class TestSetup(unittest.TestCase):
         sup1_alt_sub_mol.basis = {'O-0': '6-31g', 'H-0': '6-31g', 'O-1': 'aug-cc-pVTZ', 'H-1': 'aug-cc-pVTZ', 'O-2': '3-21g', 'H-2': '3-21g'}
         sup1_alt_sub_mol.build()
         sup1_alt_sub = ClusterEnvSubSystem(sup1_alt_sub_mol, 'pbe', env_order=2)
-        supersystem_1 = ClusterSuperSystem([sub1, sub2, sup1_alt_sub], 'lda', fs_conv=1e-9) 
+        mol123 = helpers.concat_mols([sub1.mol, sub2.mol, sup1_alt_sub.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'lda', conv_tol=1e-9)
+        supersystem_1 = ClusterSuperSystem([sub1, sub2, sup1_alt_sub], 'lda', fs_scf_obj) 
 
         sup2_alt_sub_mol = gto.Mole()
         sup2_alt_sub_mol.verbose = 3
@@ -204,23 +213,27 @@ class TestSetup(unittest.TestCase):
 
         sup2_alt_sub_mol.build()
         sup2_alt_sub = ClusterEnvSubSystem(sup2_alt_sub_mol, 'm06', env_order=3)
-        supersystem_2 = ClusterSuperSystem([sub3, sup2_alt_sub], 'pbe', env_order=2, fs_unrestricted=True)
-        supersystem_3 = ClusterSuperSystem([sub4, sub5], 'm06', env_order=3, fs_cycles=10)
+        mol123 = helpers.concat_mols([sub3.mol, sup2_alt_sub.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'pbe', unrestricted=True)
+        supersystem_2 = ClusterSuperSystem([sub3, sup2_alt_sub], 'pbe', fs_scf_obj, env_order=2, unrestricted=True)
+        mol123 = helpers.concat_mols([sub4.mol, sub5.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol123, 'm06', max_cycle=10)
+        supersystem_3 = ClusterSuperSystem([sub4, sub5], 'm06', fs_scf_obj, env_order=3)
         supersystem_list = [supersystem_1, supersystem_2, supersystem_3]
 
 
-        supersystem_dicts = [{'fs_conv': 1e-9, 'env_order': 1}, {'fs_unrestricted': True, 'env_order': 2}, {'fs_cycles': 10, 'env_order': 3}]
+        supersystem_dicts = [{'env_order': 1, 'fs_env_settings':{'conv_tol': 1e-9, 'env_method':'lda'}}, {'env_order': 2, 'fs_env_settings':{'unrestricted':True, 'env_method':'pbe'}}, {'env_order': 3, 'fs_env_settings': {'env_method':'m06', 'max_cycle':10}}]
         mediator = InteractionMediator(subsystems, supersystem_dicts)
         #Ensure the densities are the same and the methods are correct should be enough.
         self.assertEqual(len(mediator.supersystems), 3)
         for i in range(len(mediator.supersystems)):
             test = mediator.supersystems[i]
-            self.assertEqual(test.fs_method, supersystem_list[i].fs_method)
-            self.assertEqual(test.fs_conv, supersystem_list[i].fs_conv)
-            self.assertEqual(test.fs_unrestricted, supersystem_list[i].fs_unrestricted)
-            self.assertEqual(test.fs_cycles, supersystem_list[i].fs_cycles)
+            self.assertEqual(test.env_method, supersystem_list[i].env_method)
+            self.assertEqual(test.fs_scf_obj.conv_tol, supersystem_list[i].fs_scf_obj.conv_tol)
+            if hasattr(test.fs_scf_obj, 'unrestricted'):
+                self.assertEqual(test.fs_scf_obj.unrestricted, supersystem_list[i].fs_scf_obj.unrestricted)
+            self.assertEqual(test.fs_scf_obj.max_cycle, supersystem_list[i].fs_scf_obj.max_cycle)
 
-        self.assertTrue(mediator.supersystems[0].subsystems[-1].unrestricted)
 
     @unittest.skip
     def test_read_chkfile(self):
@@ -262,7 +275,9 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf')
         sub2 = ClusterEnvSubSystem(self.mol2, 'lda')
         subsystems = [sub1, sub2]
-        supersystem = ClusterSuperSystem(subsystems, 'lda')
+        mol12 = helpers.concat_mols([sub1.mol, sub2.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'lda')
+        supersystem = ClusterSuperSystem(subsystems, 'lda', fs_scf_obj)
         supersystem.init_density()
         sup_e = supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -279,7 +294,7 @@ class TestFreezeAndThaw(unittest.TestCase):
         sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf')
         sub2 = ClusterEnvSubSystem(self.mol2, 'lda')
         subsystems = [sub1, sub2]
-        sup_kwargs = [{'env_order': 1, 'fs_save_density':True}]
+        sup_kwargs = [{'env_order': 1, 'env_method': 'lda', 'fs_env_settings':{'save_density':True}}]
         mediator = InteractionMediator(subsystems, sup_kwargs, filename=t_file.name)
         mediator.do_embedding()
         mediator.get_emb_energy()
@@ -291,10 +306,10 @@ class TestFreezeAndThaw(unittest.TestCase):
     #@unittest.skip
     def test_sub_save_density(self):
         t_file = tempfile.NamedTemporaryFile()
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', save_density=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol', save_density=True)
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', save_density=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol', save_density=True)
         subsystems = [sub1, sub2]
-        sup_kwargs = [{'env_order': 1, 'ft_save_density':True}]
+        sup_kwargs = [{'env_order': 1, 'env_method': 'lda', 'embed_settings': {'save_density':True}}]
         mediator = InteractionMediator(subsystems, sup_kwargs, filename=t_file.name)
         mediator.do_embedding()
         #Assert that the density file exists.
@@ -302,10 +317,10 @@ class TestFreezeAndThaw(unittest.TestCase):
     #@unittest.skip
     def test_fs_save_orbitals(self):
         t_file = tempfile.NamedTemporaryFile()
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', save_orbs=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol', save_orbs=True)
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', save_orbs=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol', save_orbs=True)
         subsystems = [sub1, sub2]
-        sup_kwargs = [{'env_order': 1, 'fs_save_orbs':True}]
+        sup_kwargs = [{'env_order': 1, 'env_method': 'lda', 'fs_env_settings': {'save_orbs':True}}]
         mediator = InteractionMediator(subsystems, sup_kwargs, filename=t_file.name)
         mediator.do_embedding()
         for sup in mediator.supersystems:
@@ -322,7 +337,9 @@ class TestFreezeAndThaw(unittest.TestCase):
         mediator = InteractionMediator(subsystems, filename=t_file.name)
         mediator.do_embedding()
 
-        mediator2 = InteractionMediator(subsystems2, filename=t_file.name)
+        emb_dict = {'init_guess': 'chk'}
+        sup_kwargs_test = [{'env_order':1, 'embed_settings': emb_dict}]
+        mediator2 = InteractionMediator(subsystems2, supersystem_kwargs=sup_kwargs_test, filename=t_file.name)
         for i in range(len(mediator.supersystems)):
             test = mediator.supersystems[i]
             test2 = mediator2.supersystems[i]
@@ -364,7 +381,9 @@ class TestEmbeddingEnergies(unittest.TestCase):
         sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf')
         sub2 = ClusterEnvSubSystem(self.mol2, 'lda')
         subsystems = [sub1, sub2]
-        supersystem = ClusterSuperSystem(subsystems, 'lda')
+        mol12 = helpers.concat_mols([sub1.mol, sub2.mol])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'lda')
+        supersystem = ClusterSuperSystem(subsystems, 'lda', fs_scf_obj)
         supersystem.init_density()
         sup_e = supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -381,8 +400,8 @@ class TestEmbeddingEnergies(unittest.TestCase):
 
     @unittest.skip
     def test_save_density(self):
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', hl_save_density=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol')
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', hl_save_density=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol')
         subsystems = [sub1, sub2]
         t_file = tempfile.NamedTemporaryFile()
         mediator = InteractionMediator(subsystems, filename=t_file.name)
@@ -391,8 +410,8 @@ class TestEmbeddingEnergies(unittest.TestCase):
 
     @unittest.skip
     def test_save_orbitals(self):
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', hl_save_orbs=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol')
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', hl_save_orbs=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol')
         subsystems = [sub1, sub2]
         t_file = tempfile.NamedTemporaryFile()
         mediator = InteractionMediator(subsystems, filename=t_file.name)

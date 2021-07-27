@@ -1,15 +1,11 @@
 #Geometries taken from https://pubs.acs.org/doi/suppl/10.1021/ja4102979/suppl_file/ja4102979_si_001.pdf
 subsystem
-O          0.0000        0.0000        0.6565
-charge -2
+H 0. 0. 1.000
 hl_method_num 1
 end
 
 subsystem
-C          0.0000        0.0000       -0.5266
-H          0.0000       -0.9326       -1.1133
-H          0.0000        0.9326       -1.1133
-charge +2
+H  0.0 0.0 0.0
 end
 
 basis
@@ -17,10 +13,11 @@ basis
 end
 
 env_method_settings
- env_method b3lyp
- dynamic_level_shift
+ env_method hf
+ max_cycle 100
  embed_settings
-  max_cycle 50
+  init_guess minao
+  max_cycle 200
   diis_num 2
  end
 end
@@ -30,4 +27,7 @@ hl_method_settings
     hl_method rhf
 end
 
-verbose 5
+opt_geom_settings
+    max_cycle 100
+end
+

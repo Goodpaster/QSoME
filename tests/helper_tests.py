@@ -152,5 +152,17 @@ class TestConcatMols(unittest.TestCase):
     def test_explicit_ecp(self):
         pass
 
+    def test_gen_scf_obj(self):
+        corr_mol345 = gto.M()
+        corr_mol345.atom = """
+        O-0   -1.16   0.0   0.0
+        C-1   0.0   0.0   0.0
+        O-2   1.16   0.0   0.0
+        """
+        corr_mol345.basis = {'O-0': 'sto-3g', 'C-1': '6-311g', 'O-2': 'sto-3g'}
+        corr_mol345.build()
+
+        test_scf = helpers.gen_scf_obj(corr_mol345, 'lda', stability_analysis='internal')
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,17 +1,3 @@
-#A module to test the methods of the supersystem aside from the F&t Method.
-
-#get_supersystem_energy
-#get_emb_subsys_elec_energy
-#correct_env_energy
-#get_hl_energy
-#correct_hl_energy
-#env_in_env_energy
-#update_fock
-#update_proj_pot
-#read_chkfile
-#save_chkfile
-#freeze_and_thaw
-
 # A module to tests the methods of the SuperSystem
 
 import unittest
@@ -21,7 +7,7 @@ import re
 
 from copy import copy
 
-from qsome import cluster_subsystem, cluster_supersystem
+from qsome import cluster_subsystem, cluster_supersystem, helpers
 from pyscf import gto, lib, scf, dft
 
 import numpy as np
@@ -143,7 +129,6 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol8.build()
         self.cs_mol13 = mol8
 
-    @unittest.skip
     def test_init_densities(self):
 
         env_method = 'lda'
@@ -151,11 +136,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Closed Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, env_method, hl_method)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, env_method)
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=2)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj)
         supersystem.init_density()
 
-        scf_obj = supersystem.fs_scf
+        scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=2)
         scf_obj.kernel()
         init_dmat = scf_obj.make_rdm1()
         self.assertTrue(np.allclose(init_dmat, supersystem.fs_dmat[0] + supersystem.fs_dmat[1]))
@@ -165,57 +153,52 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, env_method, hl_method, unrestricted=True)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, env_method, unrestricted=True)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_unrestricted=True)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True, max_cycle=2)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, unrestricted=True)
         supersystem.init_density()
 
-        scf_obj = supersystem.fs_scf
+        scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True, max_cycle=2)
         scf_obj.kernel()
         init_dmat = scf_obj.make_rdm1()
         self.assertTrue(np.allclose(init_dmat, supersystem.fs_dmat))
        
-        #Test this method.
-        #true_emb_in_emb = [None, None]
-        #true_emb_in_emb[0] = sp.linalg.block_diag(subsys.get_dmat()[0], subsys2.get_dmat()[0])
-        #true_emb_in_emb[1] = sp.linalg.block_diag(subsys.get_dmat()[1], subsys2.get_dmat()[1])
-        #self.assertTrue(np.array_equal(true_emb_in_emb, supersystem.get_emb_dmat()))
-
         #Restricted Open Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, env_method, hl_method)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, env_method)
 
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method)
+        mol12 = helpers.concat_mols([self.os_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=2)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj)
         supersystem.init_density()
 
-        scf_obj = supersystem.fs_scf
+        scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=2)
         scf_obj.kernel()
         init_dmat = scf_obj.make_rdm1()
         self.assertTrue(np.allclose(init_dmat, supersystem.fs_dmat))
         
-        #Test this method.
-        #true_emb_in_emb = [None, None]
-        #true_emb_in_emb[0] = sp.linalg.block_diag(subsys.get_dmat()[0], subsys2.get_dmat()[0])
-        #true_emb_in_emb[1] = sp.linalg.block_diag(subsys.get_dmat()[1], subsys2.get_dmat()[1])
-        #self.assertTrue(np.array_equal(true_emb_in_emb, supersystem.get_emb_dmat()))
-
-    @unittest.skip
-    def test_get_emb_ext_pot(self):
-        pass
-
-    @unittest.skip
     def test_get_supersystem_energy(self):
 
         #Closed Shell
         hl_method = 'ccsd'
+        env_method = 'b3lyp'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=3)
+        fs_scf_obj.verbose = 4
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
         supsystem_e = supersystem.get_supersystem_energy()
 
         test_scf = dft.RKS(supersystem.mol.copy())
-        test_scf.xc = 'b3lyp'
-        test_e = test_scf.kernel()
+        test_scf.xc = env_method
+        test_scf.verbose = 4
+        test_scf.max_cycle=3
+        test_e = test_scf.kernel(init_guess='minao')
         test_dmat = test_scf.make_rdm1()
         self.assertAlmostEqual(test_e, supsystem_e)
         self.assertTrue(np.allclose(test_dmat, (supersystem.fs_dmat[0] + supersystem.fs_dmat[1])))
@@ -224,12 +207,17 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, hl_unrestricted=True, unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', fs_unrestricted=True)
+
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, env_method, unrestricted=True, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', unrestricted=True)
         supersystem.init_density()
         supsystem_e = supersystem.get_supersystem_energy()
 
         test_scf = dft.UKS(supersystem.mol.copy())
-        test_scf.xc = 'b3lyp'
+        test_scf.xc = env_method
+        test_scf.max_cycle=3
         test_e = test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
         self.assertAlmostEqual(test_e, supsystem_e)
@@ -240,12 +228,17 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, env_method, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
         supsystem_e = supersystem.get_supersystem_energy()
 
         test_scf = dft.ROKS(supersystem.mol.copy())
-        test_scf.xc = 'b3lyp'
+        test_scf.xc = env_method
+        test_scf.max_cycle=3
         test_e = test_scf.kernel()
         test_dmat = test_scf.make_rdm1()
         self.assertAlmostEqual(test_e, supsystem_e)
@@ -258,12 +251,16 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         t_file = tempfile.NamedTemporaryFile()
         hl_method = 'ccsd'
+        env_method = 'b3lyp'
 
         #Closed Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=3)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.save_fs_density_file()
@@ -284,7 +281,12 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+
+
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.save_fs_density_file()
@@ -316,7 +318,12 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+
+
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, env_method, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.save_fs_density_file()
@@ -350,12 +357,17 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         t_file = tempfile.NamedTemporaryFile()
         hl_method = 'ccsd'
+        env_method = 'b3lyp'
 
         #Unrestricted
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.save_fs_spin_density_file()
@@ -376,7 +388,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, env_method, max_cycle=3)
+
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.save_fs_spin_density_file()
@@ -398,12 +413,15 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         from pyscf.tools import molden
         t_file = tempfile.NamedTemporaryFile()
         hl_method = 'ccsd'
+        env_method = 'b3lyp'
 
         #Closed Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, max_cycle=3)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         sup_mo_coeff = supersystem.fs_scf.mo_coeff
@@ -427,7 +445,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True, max_cycle=3)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         sup_mo_coeff = supersystem.fs_scf.mo_coeff
@@ -460,7 +480,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, env_method, max_cycle=3)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         sup_mo_coeff = supersystem.fs_scf.mo_coeff
@@ -477,7 +499,6 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
             true_den_data = fin.read()
         self.assertEqual(test_den_data, true_den_data)
 
-    @unittest.skip
     def test_get_emb_subsys_elec_energy(self):
 
         # Closed Shell
@@ -485,7 +506,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, ft_initguess='minao')
+
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
         supersystem.update_fock()
 
@@ -506,7 +530,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_1_emb = mf_init_veff[np.ix_(s2s[0], s2s[0])]
         mf_1 = dft.RKS(self.cs_mol1)
         mf_1.xc = self.env_method
-        mf_1.grids = supersystem.fs_scf.grids
+        mf_1.grids = supersystem.fs_scf_obj.grids
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = veff_1_emb - veff_1
@@ -517,7 +541,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_2_emb = mf_init_veff[np.ix_(s2s[1], s2s[1])]
         mf_2 = dft.RKS(self.cs_mol2)
         mf_2.xc = self.env_method
-        mf_2.grids = supersystem.fs_scf.grids
+        mf_2.grids = supersystem.fs_scf_obj.grids
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = veff_2_emb - veff_2
@@ -533,7 +557,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, unrestricted=True, hl_unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, ft_initguess='minao')
+
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
 
         supsystem_e = supersystem.get_supersystem_energy()
@@ -556,7 +583,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_1_emb = [mf_init_veff[0][np.ix_(s2s[0], s2s[0])], mf_init_veff[0][np.ix_(s2s[0], s2s[0])]]
         mf_1 = dft.UKS(self.os_mol1)
         mf_1.xc = self.env_method
-        mf_1.grids = supersystem.fs_scf.grids
+        mf_1.grids = supersystem.fs_scf_obj.grids
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = [veff_1_emb[0] - veff_1[0], veff_1_emb[1] - veff_1[1]]
@@ -567,7 +594,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_2_emb = [mf_init_veff[1][np.ix_(s2s[1], s2s[1])], mf_init_veff[1][np.ix_(s2s[1], s2s[1])]]
         mf_2 = dft.UKS(self.os_mol2)
         mf_2.xc = self.env_method
-        mf_2.grids = supersystem.fs_scf.grids
+        mf_2.grids = supersystem.fs_scf_obj.grids
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = [veff_2_emb[0] - veff_2[0], veff_2_emb[1] - veff_2[1]]
@@ -584,7 +611,10 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, ft_initguess='minao')
+
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
 
         supsystem_e = supersystem.get_supersystem_energy()
@@ -607,7 +637,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_1_emb = [mf_init_veff[0][np.ix_(s2s[0], s2s[0])], mf_init_veff[1][np.ix_(s2s[0], s2s[0])]]
         mf_1 = dft.ROKS(self.os_mol1)
         mf_1.xc = self.env_method
-        mf_1.grids = supersystem.fs_scf.grids
+        mf_1.grids = supersystem.fs_scf_obj.grids
         hcore_1_emb = hcore_1_emb - mf_1.get_hcore()
         veff_1 = mf_1.get_veff(dm=dm_1)
         veff_1_emb = [veff_1_emb[0] - veff_1[0], veff_1_emb[1] - veff_1[1]]
@@ -618,7 +648,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         veff_2_emb = [mf_init_veff[0][np.ix_(s2s[1], s2s[1])], mf_init_veff[1][np.ix_(s2s[1], s2s[1])]]
         mf_2 = dft.ROKS(self.cs_mol3)
         mf_2.xc = self.env_method
-        mf_2.grids = supersystem.fs_scf.grids
+        mf_2.grids = supersystem.fs_scf_obj.grids
         hcore_2_emb = hcore_2_emb - mf_2.get_hcore()
         veff_2 = mf_2.get_veff(dm=dm_2)
         veff_2_emb = [veff_2_emb[0] - veff_2[0], veff_2_emb[1] - veff_2[1]]
@@ -631,34 +661,23 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertAlmostEqual(test_sub1_e, sub1_e, delta=1e-8)
         self.assertAlmostEqual(test_sub2_e, sub2_e, delta=1e-8)
 
-
-    #@unittest.skip
-    def test_get_hl_energy(self):
-        pass
-    #@unittest.skip
-    def test_get_env_energy(self):
-        pass
-
-    #@unittest.skip
+    @unittest.skip
     def test_get_env_in_env_energy(self):
         pass
 
-    #@unittest.skip
-    def test_update_ro_fock(self):
-        pass
-
-    @unittest.skip
     def test_update_fock(self):
 
         # Closed Shell
         hl_method = 'ccsd'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
 
         mf = scf.RKS(supersystem.mol)
-        mf.xc = 'b3lyp'
+        mf.xc = self.env_method
         grids = dft.gen_grid.Grids(supersystem.mol)
         grids.build()
         mf.grids = grids
@@ -681,12 +700,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, unrestricted=True)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao', fs_unrestricted=True)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', unrestricted=True)
         supersystem.init_density()
         supersystem.update_fock()
 
         mf = dft.UKS(supersystem.mol.copy())
-        mf.xc = 'm06'
+        mf.xc = self.env_method
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
@@ -714,12 +735,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
         supersystem.update_fock()
 
         mf = dft.ROKS(supersystem.mol.copy())
-        mf.xc = 'm06'
+        mf.xc = self.env_method
         mf_t_dmat = mf.get_init_guess(key='minao')
         mf_init_dmat = np.zeros_like(mf_t_dmat)
 
@@ -742,13 +765,6 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         self.assertTrue(np.allclose(test_fock2[0], supersystem.subsystems[1].emb_fock[0]))
         self.assertTrue(np.allclose(test_fock2[1], supersystem.subsystems[1].emb_fock[1]))
 
-    @unittest.skip
-    def test_update_proj_pot(self):
-        #Only test I can think of is to just recreate the 
-        #projection potential and check they are still equal.
-        pass
-
-    @unittest.skip
     def test_save_read_chkfile(self):
         t_file = tempfile.NamedTemporaryFile()
         hl_method = 'ccsd'
@@ -756,12 +772,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Closed Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method, filename=t_file.name)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         old_dmat = supersystem.fs_dmat
         old_sub1_dmat = supersystem.subsystems[0].get_dmat()
         old_sub2_dmat = supersystem.subsystems[1].get_dmat()
-        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], 'b3lyp', ft_initguess='readchk', filename=t_file.name)
+        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], self.env_method, fs_scf_obj, init_guess='chk', filename=t_file.name)
 
         supersystem2.init_density()
         new_dmat = supersystem2.fs_dmat
@@ -774,12 +792,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Unrestricted
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         old_dmat = supersystem.fs_dmat
         old_sub1_dmat = supersystem.subsystems[0].get_dmat()
         old_sub2_dmat = supersystem.subsystems[1].get_dmat()
-        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], 'b3lyp', ft_initguess='readchk', filename=t_file.name, fs_unrestricted=True)
+        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], self.env_method, fs_scf_obj, init_guess='chk', filename=t_file.name, unrestricted=True)
 
         supersystem2.init_density()
         new_dmat = supersystem2.fs_dmat
@@ -793,12 +813,14 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
 
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         old_dmat = supersystem.fs_dmat
         old_sub1_dmat = supersystem.subsystems[0].get_dmat()
         old_sub2_dmat = supersystem.subsystems[1].get_dmat()
-        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], 'b3lyp', ft_initguess='readchk', filename=t_file.name)
+        supersystem2 = cluster_supersystem.ClusterSuperSystem([copy(subsys), copy(subsys2)], self.env_method, fs_scf_obj, init_guess='chk', filename=t_file.name)
 
         supersystem2.init_density()
         new_dmat = supersystem2.fs_dmat
@@ -817,7 +839,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Closed Shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol1, self.env_method, hl_method, filename=t_file.name)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol2, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol12 = helpers.concat_mols([self.cs_mol1, self.cs_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -843,7 +867,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Unrestricted
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True, ft_cycles=20)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -878,7 +904,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Restricted open shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -919,7 +947,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Unrestricted
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name, unrestricted=True)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.os_mol2, self.env_method, filename=t_file.name, unrestricted=True)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name, fs_unrestricted=True)
+        mol12 = helpers.concat_mols([self.os_mol1, self.os_mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, self.env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name, unrestricted=True)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -944,7 +974,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #Restricted open shell
         subsys = cluster_subsystem.ClusterHLSubSystem(self.os_mol1, self.env_method, hl_method, filename=t_file.name)
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol3, self.env_method, filename=t_file.name)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao', filename=t_file.name)
+        mol13 = helpers.concat_mols([self.os_mol1, self.cs_mol3])
+        fs_scf_obj = helpers.gen_scf_obj(mol13, self.env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], self.env_method, fs_scf_obj, init_guess='minao', filename=t_file.name)
         supersystem.init_density()
         supersystem.get_supersystem_energy()
         supersystem.freeze_and_thaw()
@@ -966,7 +998,7 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
 
         self.assertEqual(test_den_data[99:], true_den_data[99:])
 
-    #@unittest.skip
+    @unittest.skip
     def test_freeze_and_thaw(self):
 
         #Restricted closed shell
@@ -1007,7 +1039,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'pbe'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'pbe', ft_cycles=25)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, max_cycle=25, diis_num=1)
         supersystem.init_density()
         supersystem.freeze_and_thaw()
         supersystem.get_env_in_env_energy()
@@ -1046,7 +1080,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='minao')
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], env_method, fs_scf_obj, init_guess='minao')
         supersystem.init_density()
         supersystem.freeze_and_thaw()
 
@@ -1097,7 +1133,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='supmol')
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='supmol')
         supersystem.init_density()
 
         initial_projector_energy = 0.0
@@ -1135,32 +1173,32 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #active_method = 'ccsd'
         #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, hl_unrestricted=True)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #ghost:C     1.3026    9.2236   -0.0001     
-        #ghost:F     2.3785   10.1081    0.0001
-        #ghost:H     1.3873    8.5867   -0.8899    
-        #ghost:H     1.3873    8.5862    0.8894 
-        #C     -0.0002    9.9997    0.0001
-        #H     -0.8544    9.3128   -0.0001 
-        #H     -0.0683   10.6366    0.8880 
-        #H     -0.0683   10.6370   -0.8875 
-        #'''
-        #mol2.basis = 'cc-pVDZ'
-        #mol2.spin = -1
-        #mol2.build()
-        #env_method = 'hf'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'hf', fs_unrestricted=True)
-        #supersystem.init_density()
-        #supersystem.freeze_and_thaw()
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        ghost:C     1.3026    9.2236   -0.0001     
+        ghost:F     2.3785   10.1081    0.0001
+        ghost:H     1.3873    8.5867   -0.8899    
+        ghost:H     1.3873    8.5862    0.8894 
+        C     -0.0002    9.9997    0.0001
+        H     -0.8544    9.3128   -0.0001 
+        H     -0.0683   10.6366    0.8880 
+        H     -0.0683   10.6370   -0.8875 
+        '''
+        mol2.basis = 'cc-pVDZ'
+        mol2.spin = -1
+        mol2.build()
+        env_method = 'hf'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'hf', fs_scf_obj, unrestricted=True, diis_num=1, max_cycle=100)
+        supersystem.init_density()
+        supersystem.freeze_and_thaw()
 
-        #projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
-        #projector_energy += np.trace(np.dot(subsys.get_dmat()[1], supersystem.proj_pot[0][1]))
-        #projector_energy += np.trace(np.dot(subsys2.get_dmat()[0], supersystem.proj_pot[1][0]))
-        #projector_energy += np.trace(np.dot(subsys2.get_dmat()[1], supersystem.proj_pot[1][1]))
-        #self.assertAlmostEqual(0.0, projector_energy, delta=1e-15)
+        projector_energy = subsys.get_env_proj_e()
+        projector_energy += subsys2.get_env_proj_e()
+        self.assertAlmostEqual(0.0, projector_energy, delta=1e-12)
 
         #test_dmat = supersystem.get_emb_dmat()
         #true_dmat = supersystem.fs_scf.make_rdm1()
@@ -1182,20 +1220,22 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #active_method = 'ccsd'
         #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, hl_unrestricted=True)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #O 0. 100.0 0.0
-        #O 1.13 100.0 0.0
-        #'''
-        #mol2.basis = '3-21g'
-        #mol2.spin = 2
-        #mol2.build()
-        #env_method = 'm06'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='supmol', fs_cycles=1000, fs_unrestricted=True, ft_cycles=1000)
-        #supersystem.init_density()
-        #supersystem.freeze_and_thaw()
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        O 0. 100.0 0.0
+        O 1.13 100.0 0.0
+        '''
+        mol2.basis = '3-21g'
+        mol2.spin = 2
+        mol2.build()
+        env_method = 'm06'
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True)
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='supmol')
+        supersystem.init_density()
+        supersystem.freeze_and_thaw()
 
         #projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
         #projector_energy += np.trace(np.dot(subsys.get_dmat()[1], supersystem.proj_pot[0][1]))
@@ -1238,18 +1278,20 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #active_method = 'ccsd'
         #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, hl_unrestricted=True)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #H 1.595 0.0 0.0
-        #'''
-        #mol2.basis = 'cc-pVDZ'
-        #mol2.spin = -1
-        #mol2.build()
-        #env_method = 'm06'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_initguess='supmol')
-        #supersystem.init_density()
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+        H 1.595 0.0 0.0
+        '''
+        mol2.basis = 'cc-pVDZ'
+        mol2.spin = -1
+        mol2.build()
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, unrestricted=True, init_guess='supmol')
+        supersystem.init_density()
 
         #initial_projector_energy = 0.0
         #initial_projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
@@ -1290,63 +1332,65 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #active_method = 'ccsd'
         #subsys = cluster_subsystem.ClusterHLSubSystem(mol, env_method, active_method, unrestricted=True, hl_unrestricted=True)
 
-        #mol2 = gto.Mole()
-        #mol2.verbose = 3
-        #mol2.atom = '''
-        #    C                 -2.95182400   -0.40708300    0.00000200
-        #    H                 -2.94830500   -1.05409800   -0.87975500
-        #    H                 -2.94830300   -1.05410200    0.87975600
-        #    H                 -3.88904200    0.14923700    0.00000400
-        #    ghost.C                  0.74345800    0.66525400    0.00000100
-        #    ghost.H                  0.75917800    1.30099000   -0.88423600
-        #    ghost.H                  0.75918100    1.30098600    0.88424000
-        #    ghost.C                 -0.44163200   -0.26055200    0.00000000
-        #    ghost.H                 -0.39317700   -0.91474400   -0.87593000
-        #    ghost.H                 -0.39317500   -0.91474700    0.87592800
-        #    ghost.C                 -1.74853900    0.51173600    0.00000300
-        #    ghost.H                 -1.78059900    1.17041100    0.87438300
-        #    ghost.H                 -1.78060000    1.17041500   -0.87437400'''
-        #mol2.basis = 'cc-pVDZ'
-        #mol2.charge = 1
-        #mol2.build()
-        #env_method = 'm06'
-        #subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
-        #supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_unrestricted=True)
-        #supersystem.init_density()
-        #supersystem.freeze_and_thaw()
+        mol2 = gto.Mole()
+        mol2.verbose = 3
+        mol2.atom = '''
+            C                 -2.95182400   -0.40708300    0.00000200
+            H                 -2.94830500   -1.05409800   -0.87975500
+            H                 -2.94830300   -1.05410200    0.87975600
+            H                 -3.88904200    0.14923700    0.00000400
+            ghost.C                  0.74345800    0.66525400    0.00000100
+            ghost.H                  0.75917800    1.30099000   -0.88423600
+            ghost.H                  0.75918100    1.30098600    0.88424000
+            ghost.C                 -0.44163200   -0.26055200    0.00000000
+            ghost.H                 -0.39317700   -0.91474400   -0.87593000
+            ghost.H                 -0.39317500   -0.91474700    0.87592800
+            ghost.C                 -1.74853900    0.51173600    0.00000300
+            ghost.H                 -1.78059900    1.17041100    0.87438300
+            ghost.H                 -1.78060000    1.17041500   -0.87437400'''
+        mol2.basis = 'cc-pVDZ'
+        mol2.charge = 1
+        mol2.build()
+        env_method = 'm06'
+        subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method, unrestricted=True)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method, unrestricted=True)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, diis_num=1, unrestricted=True)
+        supersystem.init_density()
+        supersystem.freeze_and_thaw()
 
-        #projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
-        #projector_energy += np.trace(np.dot(subsys.get_dmat()[1], supersystem.proj_pot[0][1]))
-        #projector_energy += np.trace(np.dot(subsys2.get_dmat()[0], supersystem.proj_pot[1][0]))
-        #projector_energy += np.trace(np.dot(subsys2.get_dmat()[1], supersystem.proj_pot[1][1]))
+        projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
+        projector_energy += np.trace(np.dot(subsys.get_dmat()[1], supersystem.proj_pot[0][1]))
+        projector_energy += np.trace(np.dot(subsys2.get_dmat()[0], supersystem.proj_pot[1][0]))
+        projector_energy += np.trace(np.dot(subsys2.get_dmat()[1], supersystem.proj_pot[1][1]))
         #self.assertAlmostEqual(0.0, projector_energy, delta=1e-15)
 
-        #mol3 = gto.Mole()
-        #mol3.atom ='''
-        #    C                  0.74345800    0.66525400    0.00000100
-        #    H                  0.75917800    1.30099000   -0.88423600
-        #    H                  0.75918100    1.30098600    0.88424000
-        #    C                 -0.44163200   -0.26055200    0.00000000
-        #    H                 -0.39317700   -0.91474400   -0.87593000
-        #    H                 -0.39317500   -0.91474700    0.87592800
-        #    C                 -1.74853900    0.51173600    0.00000300
-        #    H                 -1.78059900    1.17041100    0.87438300
-        #    H                 -1.78060000    1.17041500   -0.87437400
-        #    C                 -2.95182400   -0.40708300    0.00000200
-        #    H                 -2.94830500   -1.05409800   -0.87975500
-        #    H                 -2.94830300   -1.05410200    0.87975600
-        #    H                 -3.88904200    0.14923700    0.00000400
-        #'''
-        #mol3.basis = 'cc-pVDZ'
-        #mol3.spin = 1
-        #mol3.build()
-        #mf = dft.UKS(mol3)
-        #mf.xc = 'm06'
-        #grids = supersystem.fs_scf.grids
-        #mf.grids = grids
-        #mf.kernel()
-        #test_e = mf.energy_tot()
-        #sup_e = supersystem.get_env_in_env_energy()
+        mol3 = gto.Mole()
+        mol3.atom ='''
+            C                  0.74345800    0.66525400    0.00000100
+            H                  0.75917800    1.30099000   -0.88423600
+            H                  0.75918100    1.30098600    0.88424000
+            C                 -0.44163200   -0.26055200    0.00000000
+            H                 -0.39317700   -0.91474400   -0.87593000
+            H                 -0.39317500   -0.91474700    0.87592800
+            C                 -1.74853900    0.51173600    0.00000300
+            H                 -1.78059900    1.17041100    0.87438300
+            H                 -1.78060000    1.17041500   -0.87437400
+            C                 -2.95182400   -0.40708300    0.00000200
+            H                 -2.94830500   -1.05409800   -0.87975500
+            H                 -2.94830300   -1.05410200    0.87975600
+            H                 -3.88904200    0.14923700    0.00000400
+        '''
+        mol3.basis = 'cc-pVDZ'
+        mol3.spin = 1
+        mol3.build()
+        mf = dft.UKS(mol3)
+        mf.xc = 'm06'
+        grids = supersystem.fs_scf.grids
+        mf.grids = grids
+        mf.kernel()
+        test_e = mf.energy_tot()
+        sup_e = supersystem.get_env_in_env_energy()
         #self.assertAlmostEqual(test_e, sup_e, delta=1e-10)
 
         # Restricted Open Shell
@@ -1391,15 +1435,15 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', ft_cycles=200, ft_damp=0.6)
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, env_method)
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, max_cycle=200, diis_num=1, damp=0.4)
         supersystem.init_density()
         supersystem.freeze_and_thaw()
 
-        projector_energy = np.trace(np.dot(subsys.get_dmat()[0], supersystem.proj_pot[0][0]))
-        projector_energy += np.trace(np.dot(subsys.get_dmat()[1], supersystem.proj_pot[0][1]))
-        projector_energy += np.trace(np.dot(subsys2.env_dmat[0], supersystem.proj_pot[1][0]))
-        projector_energy += np.trace(np.dot(subsys2.env_dmat[1], supersystem.proj_pot[1][1]))
-        self.assertAlmostEqual(0.0, projector_energy, delta=1e-10)
+        projector_energy = subsys.get_env_proj_e()
+        projector_energy += subsys2.get_env_proj_e()
+        self.assertAlmostEqual(0.0, projector_energy, delta=1e-15)
 
         mol3 = gto.Mole()
         mol3.atom ='''
@@ -1767,14 +1811,6 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         #self.assertAlmostEqual(test_grad.grad(), supsystem_grad.grad())
 
     @unittest.skip
-    def test_correct_env_energy(self):
-        pass
-
-    @unittest.skip
-    def test_correct_hl_energy(self):
-        pass
-
-    @unittest.skip
     def test_update_proj_pot(self):
         """This test is crude, but the only other way to do it would 
             be to actually calculate the projection operator."""
@@ -1802,7 +1838,9 @@ class TestClusterSuperSystemMethods(unittest.TestCase):
         mol2.build()
         env_method = 'm06'
         subsys2 = cluster_subsystem.ClusterEnvSubSystem(mol2, env_method)
-        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'b3lyp', ft_initguess='minao')
+        mol12 = helpers.concat_mols([mol, mol2])
+        fs_scf_obj = helpers.gen_scf_obj(mol12, 'm06')
+        supersystem = cluster_supersystem.ClusterSuperSystem([subsys, subsys2], 'm06', fs_scf_obj, init_guess='minao')
         supersystem.init_density()
 
         # Calculate the huzinaga projector potential.

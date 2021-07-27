@@ -6,7 +6,7 @@ Daniel S. Graham
 
 import copy
 import numpy as np
-from pyscf import gto
+from pyscf import gto, scf, dft
 
 def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
     """Generate the linking ghost atom between two atoms.
@@ -136,7 +136,7 @@ def concat_mols(mol_list):
         if i == 0:
             mol2 = gto.mole.copy(mol1)
         else:
-            new_mol = gto.mole.conc_mol(mol1, mol2)
+            new_mol = gto.mole.conc_mol(mol2, mol1)
             new_mol.build()
             mol2 = new_mol
 
@@ -146,3 +146,108 @@ def concat_mols(mol_list):
     final_mol = __remove_overlap_ghost(conc_mol)
     final_mol = conc_mol
     return final_mol
+
+def gen_scf_obj(mol, scf_method, **kwargs):
+    """Generates an scf object setting all relevant parameters for use later in
+    embedding"""
+
+    if 'unrestricted' in kwargs and kwargs.get('unrestricted'):
+        if 'hf' in scf_method:
+            scf_obj = scf.UHF(mol)
+        else:
+            scf_obj = scf.UKS(mol)
+            scf_obj.xc = scf_method
+    elif mol.spin != 0:
+        if 'hf' in scf_method:
+            scf_obj = scf.ROHF(mol)
+        else:
+            scf_obj = scf.ROKS(mol)
+            scf_obj.xc = scf_method
+    else:
+        if 'hf' in scf_method:
+            scf_obj = scf.RHF(mol)
+        else:
+            scf_obj = scf.RKS(mol)
+            scf_obj.xc = scf_method
+
+    if 'diis_num' in kwargs:
+        if kwargs.get('diis_num') == 0:
+            scf_obj.DIIS = None
+        if kwargs.get('diis_num') == 1:
+            scf_obj.DIIS = scf.CDIIS
+        if kwargs.get('diis_num') == 2:
+            scf_obj.DIIS = scf.EDIIS
+        if kwargs.get('diis_num') == 3:
+            scf_obj.DIIS = scf.ADIIS
+
+    if 'grid_level' in kwargs:
+        grids = dft.gen_grid.Grids(mol)
+        grids.level = kwargs.pop('grid_level')
+        grids.build()
+        scf_obj.grids = grids
+
+    if 'dynamic_level_shift' in kwargs and kwargs.get('dynamic_level_shift'):
+        if 'level_shift_factor' in kwargs:
+            lev_shift_factor = kwargs.pop('level_shift_factor')
+            scf.addons.dynamic_level_shift_(scf_obj, lev_shift_factor)
+        else:
+            scf.addons.dynamic_level_shift_(scf_obj)
+
+    if 'newton' in kwargs and kwargs.pop('newton'):
+        scf_obj = scf.newton(scf_obj)
+
+    if 'fast_newton' in kwargs and kwargs.pop('fast_newton'):
+        scf_obj.use_fast_newton = True
+
+    if 'frac_occ' in kwargs and kwargs.get('frac_occ'):
+        scf_obj = scf.addons.frac_occ(mf)
+
+    if 'remove_linear_dep' in kwargs and kwargs.get('remove_linear_dep'):
+        scf_obj = scf_obj.apply(scf.addons.remove_linear_dep)
+
+    if 'density_fitting' in kwargs and kwargs.get('density_fitting'):
+        scf_obj = scf_obj.density_fit()
+
+    if 'excited' in kwargs:
+        pass
+
+    for key in kwargs:
+        setattr(scf_obj, key, kwargs[key])
+
+    return scf_obj
+
+def get_nuc(mol):
+    '''Part of the nuclear gradients of core Hamiltonian'''
+    if mol._pseudo:
+        NotImplementedError('Nuclear gradients for GTH PP')
+    else:
+        h = mol.intor('int1e_ipnuc', comp=3)
+    if mol.has_ecp():
+        h += mol.intor('ECPscalar_ipnuc', comp=3)
+    return -h
+
+
+def nuc_grad_generator(mf, mol=None):
+    if mol is None: mol = mf.mol
+    with_x2c = getattr(mf.base, 'with_x2c', None)
+    if with_x2c:
+        nuc_deriv = with_x2c.hcore_deriv_generator(deriv=1)
+    else:
+        with_ecp = mol.has_ecp()
+        if with_ecp:
+            ecp_atoms = set(mol._ecpbas[:,gto.ATOM_OF])
+        else:
+            ecp_atoms = ()
+        aoslices = mol.aoslice_by_atom()
+        h1 = get_nuc(mol)
+        def nuc_deriv(atm_id):
+            shl0, shl1, p0, p1 = aoslices[atm_id]
+            with mol.with_rinv_at_nucleus(atm_id):
+                vrinv = mol.intor('int1e_iprinv', comp=3) # <\nabla|1/r|>
+                vrinv *= -mol.atom_charge(atm_id)
+                if with_ecp and atm_id in ecp_atoms:
+                    vrinv += mol.intor('ECPscalar_iprinv', comp=3)
+            vrinv[:,p0:p1] += h1[:,p0:p1]
+            return vrinv + vrinv.transpose(0,2,1)
+    return nuc_deriv
+
