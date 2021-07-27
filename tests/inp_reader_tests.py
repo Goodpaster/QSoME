@@ -54,7 +54,6 @@ env_settings_filename = 'env_settings.inp'
 env_settings_str_replace = """
 env_method_settings
  env_method lda
- smearsigma 0.1
  init_guess submol
  conv_tol 1e-6
  max_cycle 100
@@ -72,7 +71,6 @@ env_method_settings
  embed_settings
   max_cycle 12
   subcycles 2
-  basis_tau 0.2
   conv_tol 1e-4
   damp 0.5
   diis_num 3
@@ -337,8 +335,6 @@ end
 
 env_method_settings
  env_method pbe
- spin 2
- charge -2
 end
 
 hl_method_settings
@@ -443,7 +439,6 @@ end
 env_method_settings
  env_order 1
  env_method lda
- smearsigma 0.1
  init_guess supmol
  conv_tol 1e-1
  max_cycle 1
@@ -518,42 +513,6 @@ verbose 10
 scrdir /path/to/scratch/dir
 """
 
-ghostlink_filename = "ghostlink_tests.inp"
-ghostlink_str = """
-subsystem
-He    0.0000    0.0000    0.0000
-He    1.0000    0.0000    0.0000
-hl_method_num 1
-addlinkbasis
-end
-
-subsystem
-C    2.0000    0.0000    0.0000
-end
-
-subsystem
-C    2.0000    2.0000    0.0000
-addlinkbasis
-end
-
-subsystem
-C    2.0000    2.0000    2.0000
-end
-
-env_method_settings
- env_method pbe
-end
-
-hl_method_settings
- hl_order 1
- hl_method rhf
-end
-
-basis
- default 3-21g
-end
-"""
-
 excited_filename = "excited.inp"
 excited_str = """
 subsystem
@@ -577,13 +536,13 @@ env_method_settings
  env_method pbe
  excited
  excited_settings
-  conv 1e-9
+  conv_tol 1e-9
   nroots 4
  end
  embed_settings
   excited_relax
   excited_settings
-   conv 1e-9
+   conv_tol 1e-9
    nroots 4
   end
  end
@@ -604,6 +563,8 @@ end
 """
 
 temp_inp_dir = "/temp_input/"
+
+
 class TestGenerateInputReaderObject(unittest.TestCase):
 
     def setUp(self):
@@ -630,10 +591,6 @@ class TestGenerateInputReaderObject(unittest.TestCase):
     def test_assert_bad_format(self):
         with self.assertRaises(ir_helpers.ReaderError):
             inp_reader.read_input(self.bad_file_format_path)
-
-    #def test_namespace_params(self):
-        #test_obj = inp_reader.read_input(self.def_filename_path)
-        #self.assertTrue(False)
 
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
@@ -674,7 +631,6 @@ class TestKwargCreation(unittest.TestCase):
             f.write(excited_str)
 
 
-
     def test_default_inp(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + def_filename)
@@ -704,7 +660,6 @@ class TestKwargCreation(unittest.TestCase):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
         in_obj = inp_reader.InpReader(path + env_settings_filename)
         fs_dict = {'env_method': 'lda',
-                   'smearsigma': 0.1,
                    'init_guess': 'submol',
                    'conv_tol': 1e-6,
                    'max_cycle': 100,
@@ -722,7 +677,6 @@ class TestKwargCreation(unittest.TestCase):
                 }
         ft_dict = {'max_cycle': 12,
                    'subcycles': 2,
-                   'basis_tau': 0.2,
                    'conv_tol': 1e-4,
                    'compare_density': True,
                    'damp': 0.5,
@@ -890,7 +844,6 @@ class TestKwargCreation(unittest.TestCase):
                                 'env_method': 'lda',
                                 'fs_env_settings': {
                                     'env_method': 'lda',
-                                    'smearsigma': 0.1,
                                     'init_guess': 'supmol',
                                     'conv_tol': 1e-1,
                                     'max_cycle': 1,
@@ -954,19 +907,16 @@ class TestKwargCreation(unittest.TestCase):
         path = os.getcwd() + temp_inp_dir
         in_obj = inp_reader.InpReader(path + excited_filename)
         correct_env_kwargs = {'env_order': 1, 
-                              'env_method': 'pbe',
-                              'filename': path + excited_filename}
+                              'env_method': 'pbe'}
         correct_hl_kwargs = {'hl_order': 1,
                              'hl_method': 'ccsd',
-                             'hl_excited': True,
-                             'excited_dict': {'nroots': 4}}
+                             'excited': True,
+                             'hl_excited_dict': {'nroots': 4}}
         correct_supersystem_kwargs = {'env_order': 1,
-                                      'fs_method': 'pbe',
-                                      'fs_excited_dict': {'conv': 1e-9, 'nroots': 4},
-                                      'fs_excited': True,
-                                      'ft_excited_dict': {'conv': 1e-9, 'nroots': 4},
-                                      'ft_excited_relax': True,
-                                      'filename': path + excited_filename}
+                                      'env_method': 'pbe',
+                                      'excited_settings': {'conv_tol': 1e-9, 'nroots': 4},
+                                      'embed_settings': {'excited_settings': {'conv_tol': 1e-9, 'nroots': 4}, 'excited_relax': True, 'mu':1000000.0},
+                                      'fs_env_settings': {'env_method': 'pbe', 'excited': True}}
         self.assertEqual(len(in_obj.env_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.hl_subsystem_kwargs), 4)
         self.assertEqual(len(in_obj.supersystem_kwargs), 1)
@@ -978,6 +928,8 @@ class TestKwargCreation(unittest.TestCase):
             else:
                 self.assertIsNone(n)
         for n in in_obj.supersystem_kwargs:
+            print (n)
+            print (correct_supersystem_kwargs)
             self.assertDictEqual(n, correct_supersystem_kwargs)
          
     def tearDown(self):
@@ -997,6 +949,7 @@ class TestMolCreation(unittest.TestCase):
         with open(path+def_filename, "w") as f:
             f.write(default_str)
 
+ 
         with open(path+specify_basis_filename, "w") as f:
             f.write(specify_basis_str)
 
@@ -1009,8 +962,6 @@ class TestMolCreation(unittest.TestCase):
         with open(path+explicit_filename, "w") as f:
             f.write(explicit_str)
 
-        with open(path+ghostlink_filename, "w") as f:
-            f.write(ghostlink_str)
 
     def test_default(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way
@@ -1225,52 +1176,6 @@ class TestMolCreation(unittest.TestCase):
             for k in test._ecp.keys():
                 self.assertListEqual(test._ecp[k], corr._ecp[k]) 
 
-    def test_ghostlink(self):
-        path = os.getcwd() + temp_inp_dir
-        in_obj = inp_reader.InpReader(path + ghostlink_filename)
-
-        correct_mol1 = gto.M()
-        correct_mol1.atom = '''
-            He    0.0000    0.0000    0.0000
-            He    1.0000    0.0000    0.0000
-            GHOST-H 1.0000  0.0000    0.0000
-            GHOST-H 1.5000  0.0000    0.0000'''
-        correct_mol1.basis = '3-21g'
-        correct_mol1.build()
-
-        correct_mol2 = gto.M()
-        correct_mol2.atom = '''
-            C    2.0000    0.0000    0.0000'''
-        correct_mol2.basis = '3-21g'
-        correct_mol2.build()
-
-        correct_mol3 = gto.M()
-        correct_mol3.atom = '''
-            C    2.0000    2.0000    0.0000
-            GHOST-H 2.0000 1.0000    0.0000
-            GHOST-H 2.0000 2.0000    1.0000'''
-        correct_mol3.basis = '3-21g'
-        correct_mol3.build()
-
-        correct_mol4 = gto.M()
-        correct_mol4.atom = '''
-            C    2.0000    2.0000    2.0000'''
-        correct_mol4.basis = '3-21g'
-        correct_mol4.build()
-
-        corr_mol_list = [correct_mol1, correct_mol2, correct_mol3, correct_mol4]
-        self.assertEqual(len(in_obj.subsys_mols), 4)
-        for i in range(len(in_obj.subsys_mols)):
-            test = in_obj.subsys_mols[i]
-            corr = corr_mol_list[i]
-            self.assertEqual(len(test._atom), len(corr._atom))
-            for i,atom in enumerate(test._atom):
-                self.assertEqual(test._atom[i][0], corr._atom[i][0])
-                self.assertAlmostEqual(test._atom[i][1][0], corr._atom[i][1][0])
-                self.assertAlmostEqual(test._atom[i][1][1], corr._atom[i][1][1])
-                self.assertAlmostEqual(test._atom[i][1][2], corr._atom[i][1][2])
-                self.assertListEqual(test._basis[atom[0]], corr._basis[atom[0]])
-        
     def tearDown(self):
         path = os.getcwd() + temp_inp_dir   #Maybe a better way.
         if os.path.isdir(path):

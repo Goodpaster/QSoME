@@ -31,9 +31,7 @@ class ClusterEnvSubSystem:
         Defines the method to use for environment calculations.
     env_order : int
         An ordering scheme to keep track of subsystems in the big picture.
-    env_smearsigma : float
-        The sigma smear value for density smearing.
-    env_initguess : str
+    env_init_guess : str
         The initial guess for the density matrix.
     env_damp : float
         The damping parameter for F&T calculations.
@@ -41,11 +39,11 @@ class ClusterEnvSubSystem:
         Orbital shifting parameter.
     env_subcycles : int
         Number of scf subcycles for freeze and thaw cycles.
-    env_diis_num : int
+    diis_num : int
         A number indicating what kind of DIIS will be used for fock acceleration.
     unrestricted : bool
         Whether the subsystem is unrestricted.
-    density_fitting : book
+    density_fitting : bool
         Whether to use density fitting.
     freeze : bool
         Whether to relax the density matrix
@@ -55,8 +53,6 @@ class ClusterEnvSubSystem:
         Whether to save the env density
     save_spin_density : bool
         Whether to save the spin density.
-    verbose : int
-        The level of verbosity for the calculation
     filename : str
         A path to the input file.
     chkfile_index : str
@@ -77,6 +73,8 @@ class ClusterEnvSubSystem:
         A numpy array of electron density matrix, compatible with pyscf.
     emb_fock : array
         An array of alpha and beta embedded fock matrices.
+    emb_proj_fock : array
+        An array of alpha and beta embedded and projected fock matrices.
     subsys_fock : array
         An array of alpha and beta subsystem fock matrices.
     emb_pot : array
@@ -143,11 +141,11 @@ class ClusterEnvSubSystem:
     """
 
 
-    def __init__(self, mol, env_method, env_order=1, env_smearsigma=0.,
-                 initguess=None, damp=0., shift=0., subcycles=1, diis=0,
-                 unrestricted=False, density_fitting=False, freeze=False,
-                 save_orbs=False, save_density=False, save_spin_density=False,
-                 verbose=3, filename=None, nproc=None, pmem=None, scrdir=None):
+    def __init__(self, mol, env_method, env_order=1, init_guess=None, damp=0.,
+                 shift=0., subcycles=1, diis_num=0, unrestricted=False,
+                 density_fitting=False, freeze=False, save_orbs=False, 
+                 save_density=False, save_spin_density=False, filename=None,
+                 nproc=None, pmem=None, scrdir=None):
         """
         Parameters
         ----------
@@ -158,9 +156,7 @@ class ClusterEnvSubSystem:
         env_order : int, optional
             ID for the subsystem in the full system.
             (default is 1)
-        env_smearsigma : float, optional
-            Sigma value for fermi smearing, (default is 0.)
-        initguess : str, optional
+        init_guess : str, optional
             Which method to use for the initial density guess.
             (default is None)
         damp : float, optional
@@ -170,7 +166,7 @@ class ClusterEnvSubSystem:
             How much to level shift orbitals. (default is 0.)
         subcycles : int, optional
             Number of diagonalization cycles. (default is 1)
-        diis : int, optional
+        diis_num : int, optional
             Specifies DIIS method to use. (default is 0)
         unrestricted : bool, optional
             Whether the subsystem is unrestricted.
@@ -190,8 +186,6 @@ class ClusterEnvSubSystem:
         save_spin_density: bool, optional
             Whether to save the spin density to a file.
             (default is False)
-        verbose : int, optional
-            Specifies level of verbose output. (default is 3)
         filename : str, optional
             The path to the input file being read. (default is None)
         nproc : int, optional
@@ -206,13 +200,12 @@ class ClusterEnvSubSystem:
         self.env_method = env_method
         self.env_order = env_order
 
-        self.env_smearsigma = env_smearsigma
-        self.env_initguess = initguess
+        self.env_init_guess = init_guess
         self.env_damp = damp
         self.env_shift = shift
 
         self.env_subcycles = subcycles
-        self.diis_num = diis
+        self.diis_num = diis_num
 
         self.unrestricted = unrestricted
         self.density_fitting = density_fitting
@@ -221,7 +214,6 @@ class ClusterEnvSubSystem:
         self.save_density = save_density
         self.save_spin_density = save_spin_density
 
-        self.verbose = verbose
         self.filename = filename
         self.chkfile_index = None
         self.nproc = nproc
@@ -232,8 +224,7 @@ class ClusterEnvSubSystem:
             self.pmem = 2000
         self.scr_dir = scrdir
         if scrdir is None:
-        #    self.scr_dir = os.getenv('TMPDIR')
-            self.scr_dir = '/scratch.global/graha682'
+            self.scr_dir = os.getenv('TMPDIR')
 
         self.fermi = [0., 0.]
         self.env_scf = self.init_env_scf()
@@ -255,29 +246,24 @@ class ClusterEnvSubSystem:
         self.env_mo_energy = self.env_mo_occ.copy()
         self.env_energy = 0.0
 
-        self.diis_num = diis
-        if diis == 1:
+        if self.diis_num == 1:
             #Use subtractive diis. Most simple
             self.diis = lib_diis.DIIS()
-        elif diis == 2:
+        elif self.diis_num == 2:
             self.diis = scf_diis.CDIIS()
-        elif diis == 3:
+        elif self.diis_num == 3:
             self.diis = scf_diis.EDIIS()
-        elif diis == 4:
+        elif self.diis_num == 4:
             self.diis = scf.diis.ADIIS()
-        elif diis == 5:
+        elif self.diis_num == 5:
             self.diis = custom_diis.EDIIS_DIIS(self.env_scf)
-        elif diis == 6:
+        elif self.diis_num == 6:
             self.diis = custom_diis.ADIIS_DIIS(self.env_scf)
         else:
             self.diis = None
 
-        #Gradient components
-        self.proj_pot_grad = None
-        self.emb_fock_grad = None
-
-    def init_env_scf(self, mol=None, env_method=None, verbose=None,
-                     damp=None, shift=None, dfit=None):
+    def init_env_scf(self, mol=None, env_method=None, damp=None, shift=None, 
+                     dfit=None):
         """Initializes the environment pyscf scf object.
 
         Parameters
@@ -288,8 +274,6 @@ class ClusterEnvSubSystem:
             Subsystem method for calculation (default is None).
         rho_cutoff : float, optional
             DFT rho cutoff parameter (default is None).
-        verbose : int, optional
-            Verbosity parameter (default is None).
         damp : float, optional
             Damping parameter (default is None).
         shift : float, optional
@@ -300,8 +284,6 @@ class ClusterEnvSubSystem:
             mol = self.mol
         if env_method is None:
             env_method = self.env_method
-        if verbose is None:
-            verbose = self.verbose
         if damp is None:
             damp = self.env_damp
         if shift is None:
@@ -333,7 +315,6 @@ class ClusterEnvSubSystem:
                 scf_obj.xc = env_method
 
         env_scf = scf_obj
-        env_scf.verbose = verbose
         env_scf.damp = damp
         env_scf.level_shift = shift
         if dfit:
@@ -341,7 +322,7 @@ class ClusterEnvSubSystem:
         return env_scf
 
     def init_density(self, in_dmat=None, scf_obj=None, env_method=None,
-                     initguess=None):
+                     init_guess=None):
         """Initializes the subsystem density..
 
         Parameters
@@ -352,11 +333,10 @@ class ClusterEnvSubSystem:
             Subsystem SCF object (default is None).
         env_method : str, optional
             Subsystem energy method (default is None).
-        initguess : str, optional
+        init_guess : str, optional
             Subsystem density guess method (default is None).
         """
         if in_dmat is not None:
-            #Here convert the density matrix into the correct form for the subsystem.
             in_dmat = np.array(in_dmat)
             self.env_dmat = in_dmat
             return True
@@ -365,13 +345,13 @@ class ClusterEnvSubSystem:
             scf_obj = self.env_scf
         if env_method is None:
             env_method = self.env_method
-        if initguess is None:
-            if self.env_initguess is None:
-                initguess = 'chk'
+        if init_guess is None:
+            if self.env_init_guess is None:
+                init_guess = 'chk'
             else:
-                initguess = self.env_initguess
+                init_guess = self.env_init_guess
 
-        if initguess == 'chk':
+        if init_guess == 'chk':
             try:
                 is_chkfile = self.read_chkfile()
             except AssertionError:
@@ -391,21 +371,21 @@ class ClusterEnvSubSystem:
                                              np.zeros_like(self.env_hcore)]
                         self.env_mo_occ = [np.zeros_like(self.env_hcore[0]),
                                            np.zeros_like(self.env_hcore[0])]
-                        initguess = 'supmol'
+                        init_guess = 'supmol'
                         dmat = scf_obj.get_init_guess()
                 else:
-                    initguess = 'supmol'
+                    init_guess = 'supmol'
                     dmat = scf_obj.get_init_guess()
             else:
-                initguess = 'supmol'
+                init_guess = 'supmol'
                 dmat = scf_obj.get_init_guess()
 
-            #If readchk not found, update teh initguess method
-            self.env_initguess = initguess
+            #If readchk not found, update the init_guess method
+            self.env_init_guess = init_guess
 
-        elif initguess in ['atom', '1e', 'minao', 'huckel', 'vsap']:
-            dmat = scf_obj.get_init_guess(key=initguess)
-        elif initguess == 'submol':
+        elif init_guess in ['atom', '1e', 'minao', 'huckel', 'vsap']:
+            dmat = scf_obj.get_init_guess(key=init_guess)
+        elif init_guess == 'submol':
             scf_obj.kernel()
             dmat = scf_obj.make_rdm1()
         else:
@@ -567,12 +547,6 @@ class ClusterEnvSubSystem:
         if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
-        print ("SUBSYS E")
-        print (subsys_e)
-        print ("EMB E")
-        print (e_emb)
-        #print ("PROJ E")
-        #print (e_proj)
         return subsys_e + e_emb + e_proj
 
     def get_env_energy(self, mol=None, env_method=None, fock=None, dmat=None,
@@ -600,8 +574,8 @@ class ClusterEnvSubSystem:
             if self.emb_fock[0] is None:
                 emb_pot = [np.zeros_like(dmat[0]), np.zeros_like(dmat[1])]
             else:
-                emb_pot = [self.emb_fock[0] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat()),
-                           self.emb_fock[1] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat())] #TEMP
+                emb_pot = [self.emb_fock[0] - fock[0],
+                           self.emb_fock[1] - fock[1]]
         if mol is None:
             mol = self.mol
 
@@ -903,32 +877,31 @@ class ClusterEnvSubSystem:
             if fock[0] is None:
                 fock = self.subsys_fock
 
-            #Changed for fmo gradients.
-            emb_proj_fock = fock[0] + self.proj_pot[0] + self.env_scf.get_veff(dm=self.get_dmat())
-            emb_proj_fock += fock[1] + self.proj_pot[1] + self.env_scf.get_veff(dm=self.get_dmat())
-            emb_proj_fock = emb_proj_fock / 2.
+            emb_proj_fock = fock[0] + self.proj_pot[0]
+            emb_proj_fock += fock[1] + self.proj_pot[1]
+            emb_proj_fock /= 2.
 
-            #if self.diis: #TEMP
-            #    if self.diis_num == 1:
-            #        emb_proj_fock = self.diis.update(emb_proj_fock)
-            #    if self.diis_num == 2:
-            #        dmat = self.get_dmat()
-            #        ovlp = self.env_scf.get_ovlp()
-            #        emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
+            if self.diis:
+                if self.diis_num == 1:
+                    emb_proj_fock = self.diis.update(emb_proj_fock)
+                if self.diis_num == 2:
+                    dmat = self.get_dmat()
+                    ovlp = self.env_scf.get_ovlp()
+                    emb_proj_fock = self.diis.update(ovlp, dmat, emb_proj_fock)
         else:
             emb_proj_fock = (self.emb_proj_fock[0] + self.emb_proj_fock[1]) / 2.
-
-        #TEMP
-        self.update_subsys_fock()
-        emb_proj_fock = (self.subsys_fock[0] + self.subsys_fock[1]) /2. + self.emb_proj_fock[0] - self.env_scf.get_hcore() - self.env_scf.get_j(mol=self.mol, dm=self.get_dmat())
 
         energy, coeff = self.env_scf.eig(emb_proj_fock, self.env_scf.get_ovlp())
         self.env_mo_energy = [energy, energy]
         self.env_mo_coeff = [coeff, coeff]
 
-    def relax_sub_dmat(self, damp_param=0):
+    def relax_sub_dmat(self, damp_param=None):
         """Relaxes the given subsystem density using the updated fock.
         """
+
+        if damp_param is None:
+            damp_param = self.env_damp
+
         sub_old_dm = self.get_dmat().copy()
         self.diagonalize()
 
@@ -980,37 +953,37 @@ class ClusterEnvSubSystem:
         #Smear sigma may not be right for single elctron
         self.env_mo_occ = [np.zeros_like(self.env_mo_energy[0]),
                            np.zeros_like(self.env_mo_energy[1])]
-        if self.env_smearsigma > 0.:
-            self.env_mo_occ[0] = ((self.env_mo_energy[0]
-                                   - self.fermi[0]) / self.env_smearsigma)
-            occ_orb = np.where(self.env_mo_occ[0] < 1000)
-            vir_orb = np.where(self.env_mo_occ[0] >= 1000)
-            self.env_mo_occ[0][occ_orb] = 1. / (np.exp(self.env_mo_occ[0][occ_orb]) + 1.)
-            self.env_mo_occ[0][vir_orb] = 0.
+                           
+        #if self.env_smearsigma > 0.:
+        #    self.env_mo_occ[0] = ((self.env_mo_energy[0]
+        #                           - self.fermi[0]) / self.env_smearsigma)
+        #    occ_orb = np.where(self.env_mo_occ[0] < 1000)
+        #    vir_orb = np.where(self.env_mo_occ[0] >= 1000)
+        #    self.env_mo_occ[0][occ_orb] = 1. / (np.exp(self.env_mo_occ[0][occ_orb]) + 1.)
+        #    self.env_mo_occ[0][vir_orb] = 0.
 
-            self.env_mo_occ[1] = (self.env_mo_energy[1] - self.fermi[1]) / self.env_smearsigma
-            occ_orb = np.where(self.env_mo_occ[1] < 1000)
-            vir_orb = np.where(self.env_mo_occ[1] >= 1000)
-            self.env_mo_occ[1][occ_orb] = 1. / (np.exp(self.env_mo_occ[1][occ_orb]) + 1.)
-            self.env_mo_occ[1][vir_orb] = 0.
+        #    self.env_mo_occ[1] = (self.env_mo_energy[1] - self.fermi[1]) / self.env_smearsigma
+        #    occ_orb = np.where(self.env_mo_occ[1] < 1000)
+        #    vir_orb = np.where(self.env_mo_occ[1] >= 1000)
+        #    self.env_mo_occ[1][occ_orb] = 1. / (np.exp(self.env_mo_occ[1][occ_orb]) + 1.)
+        #    self.env_mo_occ[1][vir_orb] = 0.
 
+        if self.unrestricted:
+            mo_energy = self.env_mo_energy
+            mo_coeff = self.env_mo_coeff
+            self.env_mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
+        elif self.mol.spin != 0:
+            mo_energy = self.env_mo_energy[0]
+            mo_coeff = self.env_mo_coeff[0]
+            mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
+            alpha_occ = (mo_occ > 0.).astype(int)
+            beta_occ = (mo_occ > 1.).astype(int)
+            self.env_mo_occ = [alpha_occ, beta_occ]
         else:
-            if self.unrestricted:
-                mo_energy = self.env_mo_energy
-                mo_coeff = self.env_mo_coeff
-                self.env_mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
-            elif self.mol.spin != 0:
-                mo_energy = self.env_mo_energy[0]
-                mo_coeff = self.env_mo_coeff[0]
-                mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
-                alpha_occ = (mo_occ > 0.).astype(int)
-                beta_occ = (mo_occ > 1.).astype(int)
-                self.env_mo_occ = [alpha_occ, beta_occ]
-            else:
-                mo_energy = self.env_mo_energy[0]
-                mo_coeff = self.env_mo_coeff[0]
-                mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
-                self.env_mo_occ = [mo_occ/2., mo_occ/2.]
+            mo_energy = self.env_mo_energy[0]
+            mo_coeff = self.env_mo_coeff[0]
+            mo_occ = self.env_scf.get_occ(mo_energy, mo_coeff)
+            self.env_mo_occ = [mo_occ/2., mo_occ/2.]
 
 class ClusterHLSubSystem(ClusterEnvSubSystem):
     """
@@ -1020,7 +993,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
     ----------
     hl_method : str
         Which method to use for high level calculation.
-    hl_initguess : str
+    hl_init_guess : str
         Specifies initial dmat guess for hl method.
     hl_sr_method : str
         Specifies which single reference method to use for high level
@@ -1106,7 +1079,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         Saves the high level orbitals to a file.
     """
 
-    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_initguess=None,
+    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_init_guess=None,
                  hl_sr_method=None, hl_excited=None, hl_spin=None, hl_conv=None, hl_grad=None,
                  hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
@@ -1125,7 +1098,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hl_order : int, optional
             Specifies the subsystem within the context of the full system.
             (default is 1)
-        hl_initguess : str, optional
+        hl_init_guess : str, optional
             Specifies initial dmat guess for hl method.
             (default is None)
         hl_sr_method : str, optional
@@ -1181,7 +1154,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         super().__init__(mol, env_method, **kwargs)
 
         self.hl_method = hl_method
-        self.hl_initguess = hl_initguess
+        self.hl_init_guess = hl_init_guess
         self.hl_sr_method = hl_sr_method
         self.hl_excited = hl_excited
         if hl_spin:
@@ -1226,11 +1199,11 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         if 'cc' in self.hl_method:
             self.cc_loc_orbs = hl_dict.get("loc_orbs")
-            self.cc_initguess = hl_dict.get("cc_initguess")
+            self.cc_init_guess = hl_dict.get("cc_init_guess")
             self.cc_froz_core_orbs = hl_dict.get("froz_core_orbs")
         if 'cas' in self.hl_method:
             self.cas_loc_orbs = hl_dict.get("loc_orbs")
-            self.cas_init_guess = hl_dict.get("cas_initguess")
+            self.cas_init_guess = hl_dict.get("cas_init_guess")
             self.cas_active_orbs = hl_dict.get("active_orbs")
             self.cas_avas = hl_dict.get("avas")
         if 'dmrg' in self.hl_method:
@@ -1438,7 +1411,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             #emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
             #print ("emb_hcore_grad")
             env_emb_pot_de[atm] += np.einsum('xij,ij->x', emb_hcore, env_dm)
-            env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
+            #env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
             #Need to do nuclear-electron attraction I think.
 
             print (env_emb_pot_de[atm])
@@ -1556,10 +1529,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         else:
             self.__gen_dft_scf()
 
-        if self.hl_initguess == 'ft':
+        if self.hl_init_guess == 'ft':
             dmat = self.get_dmat()
-        elif self.hl_initguess is not None:
-            dmat = self.hl_sr_scf.get_init_guess(key=self.hl_initguess)
+        elif self.hl_init_guess is not None:
+            dmat = self.hl_sr_scf.get_init_guess(key=self.hl_init_guess)
         else:
             dmat = self.hl_sr_scf.get_init_guess()
 

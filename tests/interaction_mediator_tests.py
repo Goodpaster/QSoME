@@ -306,8 +306,8 @@ class TestFreezeAndThaw(unittest.TestCase):
     #@unittest.skip
     def test_sub_save_density(self):
         t_file = tempfile.NamedTemporaryFile()
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', save_density=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol', save_density=True)
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', save_density=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol', save_density=True)
         subsystems = [sub1, sub2]
         sup_kwargs = [{'env_order': 1, 'env_method': 'lda', 'embed_settings': {'save_density':True}}]
         mediator = InteractionMediator(subsystems, sup_kwargs, filename=t_file.name)
@@ -317,8 +317,8 @@ class TestFreezeAndThaw(unittest.TestCase):
     #@unittest.skip
     def test_fs_save_orbitals(self):
         t_file = tempfile.NamedTemporaryFile()
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', save_orbs=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol', save_orbs=True)
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', save_orbs=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol', save_orbs=True)
         subsystems = [sub1, sub2]
         sup_kwargs = [{'env_order': 1, 'env_method': 'lda', 'fs_env_settings': {'save_orbs':True}}]
         mediator = InteractionMediator(subsystems, sup_kwargs, filename=t_file.name)
@@ -400,8 +400,8 @@ class TestEmbeddingEnergies(unittest.TestCase):
 
     @unittest.skip
     def test_save_density(self):
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', hl_save_density=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol')
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', hl_save_density=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol')
         subsystems = [sub1, sub2]
         t_file = tempfile.NamedTemporaryFile()
         mediator = InteractionMediator(subsystems, filename=t_file.name)
@@ -410,8 +410,8 @@ class TestEmbeddingEnergies(unittest.TestCase):
 
     @unittest.skip
     def test_save_orbitals(self):
-        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', initguess='supmol', hl_save_orbs=True)
-        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', initguess='supmol')
+        sub1 = ClusterHLSubSystem(self.mol1, 'lda', 'rhf', init_guess='supmol', hl_save_orbs=True)
+        sub2 = ClusterEnvSubSystem(self.mol2, 'lda', init_guess='supmol')
         subsystems = [sub1, sub2]
         t_file = tempfile.NamedTemporaryFile()
         mediator = InteractionMediator(subsystems, filename=t_file.name)

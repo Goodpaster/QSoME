@@ -47,7 +47,7 @@ class ClusterSuperSystem:
         Whether to write cube file of subsystem densities.
     ft_setfermi : float
         For huzfermi operator. The fermi level for the projector.
-    ft_initguess : str
+    ft_init_guess : str
         Iniital density guess for freeze and thaw cycles.
     ft_updatefock : int
         How often to update the full system fock matrix during F&T cycles.
@@ -65,7 +65,7 @@ class ClusterSuperSystem:
         Level shift parameter for supersystem pyscf.
     smearsigma : float
         Electron smearing sigma value for supersystem pyscf.
-    initguess : str
+    init_guess : str
         Initial density guess for supersystem calculation.
     grid_level : int
         Grid size for pyscf Grids object.
@@ -165,6 +165,8 @@ class ClusterSuperSystem:
         if self.fs_scf_obj.init_guess == 'submol':
             self.init_guess = 'submol'
         self.unrestricted = unrestricted
+        if hasattr(fs_scf_obj, 'unrestricted'):
+            self.unrestricted = fs_scf_obj.unrestricted
         self.proj_oper = proj_oper
         self.excited_relax = excited_relax
         self.filename = filename
@@ -409,15 +411,15 @@ class ClusterSuperSystem:
                 subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
                 subsystem.env_scf.grids = fs_scf.grids
 
-            sub_guess = subsystem.env_initguess
+            sub_guess = subsystem.env_init_guess
             if sub_guess is None:
                 sub_guess = self.init_guess
             if sub_guess is None:
                 sub_guess = 'chk'
             subsystem.filename = self.filename
-            subsystem.init_density(initguess=sub_guess)
+            subsystem.init_density(init_guess=sub_guess)
             if sub_guess != 'supmol':
-                sub_guess = subsystem.env_initguess
+                sub_guess = subsystem.env_init_guess
             if sub_guess == 'supmol':
                 self.get_supersystem_energy(readchk=super_chk)
                 sub_dmat[0] = self.fs_dmat[0][np.ix_(s2s[i], s2s[i])]
@@ -589,34 +591,34 @@ class ClusterSuperSystem:
         self.fs_nuc_grad_obj = self.fs_scf.nuc_grad_method()
         self.fs_nuc_grad = self.fs_nuc_grad_obj.kernel()
 
-        true_coulomb = self.fs_nuc_grad_obj.get_jk()[0]
+        #true_coulomb = self.fs_nuc_grad_obj.get_jk()[0]
 
-        grad_2e_int = self.mol.intor('int2e_ip1')
-        grad_2e_int2 = self.mol.intor('int2e_ip2')
-        fs_dmat = self.fs_dmat[0] + self.fs_dmat[1]
-        test_coulomb = np.einsum('xijkl,lk->xij', grad_2e_int, fs_dmat) * -1
-        test_coulomb_2 = np.einsum('xijkl,lk->xij', grad_2e_int2, fs_dmat) * -1
-        test_coulomb_2[0] = test_coulomb_2[0].transpose()
-        test_coulomb_2[1] = test_coulomb_2[1].transpose()
-        test_coulomb_2[2] = test_coulomb_2[2].transpose()
+        #grad_2e_int = self.mol.intor('int2e_ip1')
+        #grad_2e_int2 = self.mol.intor('int2e_ip2')
+        #fs_dmat = self.fs_dmat[0] + self.fs_dmat[1]
+        #test_coulomb = np.einsum('xijkl,lk->xij', grad_2e_int, fs_dmat) * -1
+        #test_coulomb_2 = np.einsum('xijkl,lk->xij', grad_2e_int2, fs_dmat) * -1
+        #test_coulomb_2[0] = test_coulomb_2[0].transpose()
+        #test_coulomb_2[1] = test_coulomb_2[1].transpose()
+        #test_coulomb_2[2] = test_coulomb_2[2].transpose()
 
-        aoslices = self.mol.aoslice_by_atom()
-        p0,p1 = aoslices [0,2:]
-        x_grad = np.einsum('xij,ij->x', test_coulomb[:,p0:p1], fs_dmat[p0:p1])
-        x_grad_2 = np.einsum('xij,ij->x', test_coulomb_2[:,p0:p1], fs_dmat.transpose()[p0:p1])
-        print (x_grad)
-        print (x_grad_2)
+        #aoslices = self.mol.aoslice_by_atom()
+        #p0,p1 = aoslices [0,2:]
+        #x_grad = np.einsum('xij,ij->x', test_coulomb[:,p0:p1], fs_dmat[p0:p1])
+        #x_grad_2 = np.einsum('xij,ij->x', test_coulomb_2[:,p0:p1], fs_dmat.transpose()[p0:p1])
+        #print (x_grad)
+        #print (x_grad_2)
 
 
-        bas_start, bas_end, ao_start, ao_end = self.mol.aoslice_by_atom()[0]
-        eri1 = self.mol.intor('int2e_ip1_sph', shls_slice=(bas_start, bas_end,
-                                              0, self.mol.nbas,
-                                              0, self.mol.nbas,
-                                              0, self.mol.nbas))
+        #bas_start, bas_end, ao_start, ao_end = self.mol.aoslice_by_atom()[0]
+        #eri1 = self.mol.intor('int2e_ip1_sph', shls_slice=(bas_start, bas_end,
+        #                                      0, self.mol.nbas,
+        #                                      0, self.mol.nbas,
+        #                                      0, self.mol.nbas))
 
-        print (true_coulomb.shape)
-        #https://github.com/pyscf/pyscf/blob/master/examples/gto/20-ao_integrals.py
-        print (eri1.shape)
+        #print (true_coulomb.shape)
+        ##https://github.com/pyscf/pyscf/blob/master/examples/gto/20-ao_integrals.py
+        #print (eri1.shape)
 
 
 
@@ -916,7 +918,6 @@ class ClusterSuperSystem:
         # Optimize: Rather than recalc. the full V, only calc. the V for changed densities.
         # get 2e matrix
 
-        diis = False #TEMP
         num_rank = self.mol.nao_nr()
         dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
         sub_unrestricted = False
@@ -937,8 +938,7 @@ class ClusterSuperSystem:
         else:
             dmat = dmat[0] + dmat[1]
             self.emb_vhf = self.env_in_env_scf.get_veff(self.mol, dmat)
-            #temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
-            temp_fock = self.hcore + self.env_in_env_scf.get_j(mol=self.mol, dm=dmat) #TEMP
+            temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             self.fock = [temp_fock, temp_fock]
 
         if self.emb_diis and diis:
@@ -1328,19 +1328,30 @@ class ClusterSuperSystem:
 
         #Get each subsystem gradient derivative.
         num_rank = self.mol.nao_nr()
-        emb_dm_env = [np.zeros((num_rank, num_rank)),
-                      np.zeros((num_rank, num_rank))]
 
-        for i, sub in enumerate(self.subsystems[1:], 1):
-            emb_dm_env[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[0]
-            emb_dm_env[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[1]
-        if not (self.unrestricted or self.mol.spin != 0):
-            emb_dm_env = emb_dm_env[0] + emb_dm_env[1]
+        dm_env = self.get_emb_dmat()
+        sub_dmat = np.zeros_like(dm_env)
+        sub = self.subsystems[0]
+        sub_dmat[np.ix_(self.sub2sup[0], self.sub2sup[0])] += sub.get_dmat()
+        full_coulomb = self.fs_nuc_grad_obj.get_jk(self.mol, dm_env)[0] * 4.
+        aoslices = self.mol.aoslice_by_atom()
+        p0,p1 = aoslices[0, 2:]
+        sub_coulomb = self.fs_nuc_grad_obj.get_jk(self.mol, sub_dmat)[0] * 4.
+        emb_grad = full_coulomb - sub_coulomb
+        emb_de = np.einsum('xij,ij->x', emb_grad[:,p0:p1], sub_dmat[p0:p1])
+        sub_coulomb_grad = np.einsum('xij,ij->x', sub_coulomb, sub_dmat)
+        print (emb_de)
+        print (self.mol.atom[0])
+       # for i, sub in enumerate(self.subsystems[1:], 1):
+       #     emb_dm_env[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[0]
+       #     emb_dm_env[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[1]
+       # if not (self.unrestricted or self.mol.spin != 0):
+       #     emb_dm_env = emb_dm_env[0] + emb_dm_env[1]
 
         #emb_env_vhf_grad = self.fs_nuc_grad_obj.get_veff(self.mol, emb_dm_env)
-        emb_env_vhf_grad = self.fs_nuc_grad_obj.get_jk(self.mol, emb_dm_env)[0]
-        print ('env_vhf_grad')
-        print (emb_env_vhf_grad[2])
+        #emb_env_vhf_grad = self.fs_nuc_grad_obj.get_jk(self.mol, emb_dm_env)[0]
+        #print ('env_vhf_grad')
+        #print (emb_env_vhf_grad[2])
         emb_hcore_deriv = self.fs_nuc_grad_obj.hcore_generator(self.mol)
 
         num_rank_a = self.subsystems[0].mol.nao_nr()
@@ -1389,20 +1400,20 @@ class ClusterSuperSystem:
             sub_mol = self.subsystems[0].mol
             atom_hcore_grad = emb_hcore_deriv(sup_atm)
             atom_full_hcore_grad[sub_atm] = atom_hcore_grad[:,p0:p1,p0:p1] #This needs to change when doing more than one atom. 
-            atom_emb_vhf_grad[sub_atm] = emb_env_vhf_grad[:,p0:p1,p0:p1] #Again needs to change for more than one atom
+            #atom_emb_vhf_grad[sub_atm] = emb_env_vhf_grad[:,p0:p1,p0:p1] #Again needs to change for more than one atom
 
             #Get electron-nuclear attraction:
-            nuc_deriv = helpers.nuc_grad_generator(self.fs_nuc_grad_obj)
-            nuc_de = nuc_deriv(sup_atm)
-            elec_nuc_de = np.einsum('xij,ij', nuc_de, emb_dm_env)
-            print ("ELEC NUC DE")
-            print (elec_nuc_de)
-            #sub_dm[p0:p1,p0:p1] += sub_dmat
-            #atom_vhf_grad = np.zeros_like(atom_hcore_grad)
-            #atom_vhf_grad[:,p0:p1] += env_vhf_grad[:,p0:p1]
-            #atom_fock_grad[sub_atm] = atom_hcore_grad + (atom_vhf_grad * 2.)
-            #atom_s1_grad[sub_atm] = np.zeros_like(atom_hcore_grad)
-            #atom_s1_grad[sub_atm][:,p0:p1] += env_s1_grad[:,p0:p1]
+            #nuc_deriv = helpers.nuc_grad_generator(self.fs_nuc_grad_obj)
+            #nuc_de = nuc_deriv(sup_atm)
+            #elec_nuc_de = np.einsum('xij,ij', nuc_de, emb_dm_env)
+            #print ("ELEC NUC DE")
+            #print (elec_nuc_de)
+            ##sub_dm[p0:p1,p0:p1] += sub_dmat
+            ##atom_vhf_grad = np.zeros_like(atom_hcore_grad)
+            ##atom_vhf_grad[:,p0:p1] += env_vhf_grad[:,p0:p1]
+            ##atom_fock_grad[sub_atm] = atom_hcore_grad + (atom_vhf_grad * 2.)
+            ##atom_s1_grad[sub_atm] = np.zeros_like(atom_hcore_grad)
+            ##atom_s1_grad[sub_atm][:,p0:p1] += env_s1_grad[:,p0:p1]
 
         #Get electron-nuclear attraction:
 
@@ -1512,7 +1523,7 @@ class ClusterSuperSystem:
 
 
             self.subsystems[0].atom_proj_grad = atom_proj_grad
-            self.subsystems[0].atom_emb_vhf_grad = atom_emb_vhf_grad
+            #self.subsystems[0].atom_emb_vhf_grad = atom_emb_vhf_grad
             self.subsystems[0].atom_full_hcore_grad = atom_full_hcore_grad
 
             self.subsystems[0].calc_nuc_grad()
