@@ -20,8 +20,8 @@ end
 env_method_settings
  env_method hf
  embed_settings
-  cycles 50
-  diis 5
+  max_cycle 50
+  diis_num 2
  end
 end
 

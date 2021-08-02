@@ -1418,10 +1418,11 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             #emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
             #print ("emb_hcore_grad")
             env_emb_pot_de[atm] += np.einsum('xij,ij->x', emb_hcore, env_dm)
-            #env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
+            print (env_emb_pot_de[atm])
+            env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
+            print (env_emb_pot_de[atm])
             #Need to do nuclear-electron attraction I think.
 
-            print (env_emb_pot_de[atm])
             #print ('emb_vhf_grad')
             #print (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1]))
             #env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1] * -2.)

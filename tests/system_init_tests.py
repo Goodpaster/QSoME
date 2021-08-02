@@ -575,7 +575,7 @@ class TestSuperSystem(unittest.TestCase):
         #self.assertEqual(supersystem.analysis, False)
         #self.assertEqual(supersystem.debug, False)
 
-    @unittest.skip
+    #@unittest.skip
     def test_excited_supersystem(self):
         mol = gto.Mole()
         mol.verbose = 3

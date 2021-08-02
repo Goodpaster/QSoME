@@ -209,6 +209,8 @@ def gen_scf_obj(mol, scf_method, **kwargs):
         scf_obj = scf_obj.density_fit()
 
     if 'excited' in kwargs:
+        scf_obj.excited = kwargs['excited']
+        #Setup excited object.
         pass
 
     for key in kwargs:

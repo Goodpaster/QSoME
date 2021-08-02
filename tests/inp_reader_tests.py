@@ -928,8 +928,6 @@ class TestKwargCreation(unittest.TestCase):
             else:
                 self.assertIsNone(n)
         for n in in_obj.supersystem_kwargs:
-            print (n)
-            print (correct_supersystem_kwargs)
             self.assertDictEqual(n, correct_supersystem_kwargs)
          
     def tearDown(self):

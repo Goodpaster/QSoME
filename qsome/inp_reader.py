@@ -402,8 +402,7 @@ def build_hl_dict(hl_settings, hl_params):
                            'stability_analysis', 'remove_linear_dep',
                            'fast_newton', 'newton', 'compress_approx',
                            'unrestricted', 'density_fitting', 'save_orbs',
-                           'save_density', 'save_spin_density', 'use_ext',
-                           'excited']
+                           'save_density', 'save_spin_density', 'use_ext']
 
     for base_kwarg in base_setting_kwargs:
         if base_kwarg in hl_params and hl_params[base_kwarg]:
@@ -438,6 +437,8 @@ def build_hl_dict(hl_settings, hl_params):
         dmrg_dict = vars(hl_params['dmrg_settings'])
         cleanup_keys(dmrg_dict)
         hl_settings['hl_dict'] = dmrg_dict
+    if hl_params['excited']:
+        hl_settings['hl_excited'] = hl_params['excited']
     if hl_params['excited_settings']:
         excited_dict = vars(hl_params['excited_settings'])
         cleanup_keys(excited_dict)

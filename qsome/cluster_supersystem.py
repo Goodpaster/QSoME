@@ -171,19 +171,11 @@ class ClusterSuperSystem:
         self.excited_relax = excited_relax
         self.filename = filename
 
-        #self.fs_excited = fs_excited
-
-        #self.fs_excited_dict = {}
-        #if fs_excited_dict:
-        #    self.fs_excited_dict = fs_excited_dict
-        #    self.fs_excited_nroots = fs_excited_dict.get('nroots')
-
         # freeze and thaw settings
-        #self.ft_excited_relax = ft_excited_relax
-        #self.ft_excited_dict = {}
-        #if ft_excited_dict:
-        #    self.ft_excited_dict = ft_excited_dict
-        #    self.ft_excited_nroots = ft_excited_dict.get('nroots')
+        if self.excited_relax:
+            self.excited_dict = {}
+            if excited_dict in kwargs:
+                self.excited_dict = kwargs.pop('excited_dict')
 
         for key in kwargs:
             setattr(self, key, kwargs[key])
@@ -551,7 +543,7 @@ class ClusterSuperSystem:
 
             self.fs_dmat = scf_obj.make_rdm1()
 
-            if self.fs_unrestricted:
+            if hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted:
                 rho_grid = self.fs_scf.grids
                 alpha_dmat = self.fs_dmat[0]
                 alpha_rho = scf_obj._numint.get_rho(self.mol, alpha_dmat, rho_grid,
@@ -851,7 +843,7 @@ class ClusterSuperSystem:
         print("".center(80, '*'))
         s2s = self.sub2sup
         #ONLY DO FOR THE RO SYSTEM. THIS IS KIND OF A TEST.
-        if self.mol.spin != 0 and not self.fs_unrestricted:
+        if self.mol.spin != 0 or (hasattr(self.fs_scf_obj, 'unrestricted') and self.fs_scf_obj.unrestricted):
             self.update_ro_fock()
         for i, sub in enumerate(self.subsystems):
             #Check if subsystem is HLSubSystem but rightnow it is being difficult.
@@ -911,7 +903,7 @@ class ClusterSuperSystem:
         self.env_in_env_energy += proj_e
         print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
         #Approx spin from this paper: https://aip-scitation-org.ezp3.lib.umn.edu/doi/10.1063/1.468585
-        if self.fs_unrestricted:
+        if (hasattr(self.fs_scf_obj, 'unrestricted') and self.fs_scf_obj.unrestricted):
             rho_grid = self.fs_scf.grids
             alpha_dmat = dm_env[0]
             alpha_rho = self.fs_scf._numint.get_rho(self.mol, alpha_dmat, rho_grid,
@@ -994,17 +986,21 @@ class ClusterSuperSystem:
             dmat = dmat[0] + dmat[1]
             self.emb_vhf = self.env_in_env_scf.get_veff(self.mol, dmat)
             temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
+            #TEMP
+            temp_fock = copy.copy(self.hcore) + copy.copy(self.env_in_env_scf.get_jk(self.mol, dmat)[0])
+            for i, sub in enumerate(self.subsystems):
+                temp_fock[np.ix_(s2s[i], s2s[i])] += sub.env_scf.get_veff(sub.mol, sub.get_dmat())
             self.fock = [temp_fock, temp_fock]
 
-        if self.emb_diis and diis:
-            if self.unrestricted or sub_unrestricted:
-                new_fock = self.emb_diis.update(self.fock)
-                self.fock[0] = new_fock[0]
-                self.fock[1] = new_fock[1]
-            else:
-                new_fock = self.emb_diis.update(self.fock[0])
-                self.fock[0] = new_fock
-                self.fock[1] = new_fock
+        #if self.emb_diis and diis:
+        #    if self.unrestricted or sub_unrestricted:
+        #        new_fock = self.emb_diis.update(self.fock)
+        #        self.fock[0] = new_fock[0]
+        #        self.fock[1] = new_fock[1]
+        #    else:
+        #        new_fock = self.emb_diis.update(self.fock[0])
+        #        self.fock[0] = new_fock
+        #        self.fock[1] = new_fock
 
         #Add the external potential to each fock.
         self.fock[0] += self.ext_pot[0]
@@ -1043,6 +1039,9 @@ class ClusterSuperSystem:
                     fock_ab = [None, None]
                     fock_ab[0] = self.fock[0][np.ix_(s2s[i], s2s[j])]
                     fock_ab[1] = self.fock[1][np.ix_(s2s[i], s2s[j])]
+                    #TEMP
+                    #fock_ab[0] = self.hcore[np.ix_(s2s[i], s2s[j])]
+                    #fock_ab[1] = self.hcore[np.ix_(s2s[i], s2s[j])]
                     fock_den_smat = [None, None]
                     fock_den_smat[0] = np.dot(fock_ab[0], np.dot(sub_b_dmat[0], smat_ba))
                     fock_den_smat[1] = np.dot(fock_ab[1], np.dot(sub_b_dmat[1], smat_ba))
