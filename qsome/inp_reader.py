@@ -279,7 +279,7 @@ def add_hl_settings(inp_block):
     inp_block.add_line_key('stability_analysis', type=('internal', 'external'))
     inp_block.add_boolean_key('remove_linear_dep')
     inp_block.add_line_key('use_ext', type=('molpro', 'bagel', 'molcas',
-                                            'openmolcas'))
+                                            'openmolcas','psi4'))
     inp_block.add_boolean_key('compress_approx')
     inp_block.add_boolean_key('unrestricted')
     inp_block.add_boolean_key('density_fitting')
