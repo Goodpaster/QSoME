@@ -14,7 +14,7 @@ import subprocess
 
 class Psi4Ext:
 
-    def __init__(self,  mol,  method, ext_pot, core_ham, filename, work_dir, scr_dir, nproc, pmem, nroots, root):
+    def __init__(self,  mol,  method, ext_pot, core_ham, filename, work_dir, scr_dir, nproc, pmem, hl_dict, hl_excited_dict):
         self.mol = mol            # mol object passed from PySCF
         self.method = method      # excited-state method name
         self.ext_pot = ext_pot    # external potential/embedding potential
@@ -24,8 +24,9 @@ class Psi4Ext:
         self.scr_dir = scr_dir
         self.nproc  = nproc
         self.pmem = pmem          # in GB
-        self.nroots = nroots      # # of roots for EOM-CCSD (suggest > root)
-        self.root = root          # the root to be calculated by eom-cc3 
+        if hl_excited_dict:
+            self.nroots = hl_excited_dict.get('nroots')      # # of roots for EOM-CCSD (suggest > root
+            self.root = hl_excited_dict.get('root')          # the root to be calculated by eom-cc3 
 
     def generate_psi4_input(self):
         if self.nproc is not None and self.pmem is not None:
