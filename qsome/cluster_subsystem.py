@@ -1087,7 +1087,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
     def __init__(self, mol, env_method, hl_method, hl_order=1, hl_init_guess=None,
                  hl_sr_method=None, hl_excited=None, hl_spin=None, hl_conv=None, hl_grad=None,
-                 hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
+                 hl_cycles=None, hl_damp=0., hl_shift=0., use_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
                  hl_density_fitting=False, hl_save_orbs=False,
                  hl_save_density=False, hl_save_spin_density=False,
@@ -1173,7 +1173,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_damp = hl_damp
         self.hl_shift = hl_shift
 
-        self.hl_ext = hl_ext
+        self.hl_ext = use_ext
         self.hl_unrestricted = hl_unrestricted
         self.hl_compress_approx = hl_compress_approx
         self.hl_density_fitting = hl_density_fitting
