@@ -279,7 +279,7 @@ def add_hl_settings(inp_block):
     inp_block.add_line_key('stability_analysis', type=('internal', 'external'))
     inp_block.add_boolean_key('remove_linear_dep')
     inp_block.add_line_key('use_ext', type=('molpro', 'bagel', 'molcas',
-                                            'openmolcas'))
+                                            'openmolcas','psi4'))
     inp_block.add_boolean_key('compress_approx')
     inp_block.add_boolean_key('unrestricted')
     inp_block.add_boolean_key('density_fitting')
@@ -341,7 +341,11 @@ def add_excited_settings(inp_block):
     """
 
     inp_block.add_line_key('conv_tol', type=float)
+    # the total excited states calculated by TDSCF,EOMCCSD
     inp_block.add_line_key('nroots', type=int, default=3)
+    # the desired root calculated by EOM-CC3 
+    # only one root can be calculated at a time
+    inp_block.add_line_key('root', type=int, default=1)
     inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('eom_type', type=str)
     # koopmans excitation or not for EOM-CC, default False

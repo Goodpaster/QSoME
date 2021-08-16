@@ -166,7 +166,7 @@ spin=$SPIN
 {matrop                   !read the modified core hamiltonian
 read,h01,type=h0,
 $HMAT
-save,h01,7500.1,h0}
+save,h01,1210.1,h0}
 
 $METHOD
 ''')
@@ -184,7 +184,7 @@ spin=$SPIN
 {matrop                   !read the modified core hamiltonian
 read,h01,type=h0,
 $HMAT
-save,h01,7500.1,h0}
+save,h01,1210.1,h0}
 
 $METHOD
 put,molden,$FNAME;   !save orbitals in molden format
