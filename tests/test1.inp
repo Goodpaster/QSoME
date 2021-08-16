@@ -1,30 +1,32 @@
 #Geometries taken from https://pubs.acs.org/doi/suppl/10.1021/ja4102979/suppl_file/ja4102979_si_001.pdf
 subsystem
-He 0. 0. 0.001
+O 0. 0. 0.000
 hl_method_num 1
 end
 
 subsystem
-He  0. 0.0 3.0
+H  0. -0.757 0.587
+H  0.  0.757 0.587
 end
 
 basis
- default aug-cc-pVTZ
+ default cc-pVTZ
 end
 
 env_method_settings
  env_method hf
  max_cycle 100
  embed_settings
-  max_cycle 500
-  diis_num 0
-  mu 1e5
+  max_cycle 1000
+  conv_tol 1e-10
+  diis_num 2
+  #init_guess submol
  end
 end
 
 hl_method_settings
     hl_order 1
-    hl_method rhf
+    hl_method b3lyp
 end
 
 opt_geom_settings

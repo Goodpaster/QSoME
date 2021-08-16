@@ -579,7 +579,7 @@ class ClusterEnvSubSystem:
         if mol is None:
             mol = self.mol
 
-        
+      
         self.env_energy = self.get_env_elec_energy(env_method=env_method,
                                                     fock=fock, dmat=dmat,
                                                     env_hcore=env_hcore,
@@ -1085,7 +1085,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         Saves the high level orbitals to a file.
     """
 
-    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_init_guess=None,
+    def __init__(self, mol, env_method, hl_method, hl_order=1, hl_init_guess='ft',
                  hl_sr_method=None, hl_excited=None, hl_spin=None, hl_conv=None, hl_grad=None,
                  hl_cycles=None, hl_damp=0., hl_shift=0., hl_ext=None,
                  hl_unrestricted=False, hl_compress_approx=False,
@@ -1393,8 +1393,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         env_sub_grad_obj = self.env_scf.nuc_grad_method()
         env_sub_de = env_sub_grad_obj.grad_elec(mo_energy=env_mo_en, mo_coeff=env_mo_coeff, mo_occ=env_mo_occ)
-        print ('env_sub_de')
-        print (env_sub_de)
         #Embedded potential gradient
 
         self.atom_emb_pot_grad = np.zeros_like(self.atom_full_hcore_grad)
@@ -1409,6 +1407,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         env_emb_pot_de = np.zeros_like(env_sub_de)
         env_proj_de = np.zeros_like(env_sub_de)
 
+        print ("Emb Pot")
+        print (self.emb_pot[0].shape)
+
         for atm in atmlst:
             p0, p1 = aoslices[atm,2:]
             atom_sub_hcore_grad = sub_hcore_deriv(atm)
@@ -1421,7 +1422,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             #env_emb_pot_de[atm] += (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[0], env_dm)) * 4.
             #Need to do nuclear-electron attraction I think.
 
-            print (env_emb_pot_de[atm])
+            #print (env_emb_pot_de[atm])
             #print ('emb_vhf_grad')
             #print (np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1]))
             #env_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_vhf_grad[atm][:,p0:p1], env_dm[p0:p1] * -2.)
@@ -1470,6 +1471,17 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_rdm1e = hl_sub_grad_obj.make_rdm1e(hl_mo_e, hl_mo_coeff, hl_mo_occ)
             hl_dm = self.hl_sr_scf.make_rdm1()
 
+        #DFT
+        else:
+            hl_sub_grad_obj = self.hl_sr_scf.nuc_grad_method()
+            hl_mo_e = self.hl_sr_scf.mo_energy
+            hl_mo_coeff = self.hl_sr_scf.mo_coeff
+            hl_mo_occ = self.hl_sr_scf.mo_occ
+            hl_sub_grad = hl_sub_grad_obj.grad_elec(mo_energy=hl_mo_e, mo_coeff=hl_mo_coeff, mo_occ=hl_mo_occ)
+            hl_rdm1e = hl_sub_grad_obj.make_rdm1e(hl_mo_e, hl_mo_coeff, hl_mo_occ)
+            hl_dm = self.hl_sr_scf.make_rdm1()
+
+
         #print (hl_sub_grad)
         hl_proj_de = np.zeros((len(atmlst),3))
         hl_emb_pot_de = np.zeros((len(atmlst),3))
@@ -1477,8 +1489,10 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         hl_sub_hcore_deriv = hl_sub_grad_obj.hcore_generator(self.mol)
         for atm in atmlst:
             p0, p1 = aoslices[atm,2:]
+            atom_sub_hcore_grad = sub_hcore_deriv(atm)
+            emb_hcore = self.atom_full_hcore_grad[atm] - atom_sub_hcore_grad
             hl_proj_de[atm] += np.einsum('xij,ij->x', self.atom_proj_grad[atm], hl_dm)
-            hl_emb_pot_de[atm] += np.einsum('xij,ij->x', self.atom_emb_pot_grad[atm], hl_dm)
+            hl_emb_pot_de[atm] += np.einsum('xij,ij->x', emb_hcore, hl_dm)
 
         print ("HL PROJ")
         print (hl_proj_de)

@@ -207,7 +207,7 @@ class ClusterSuperSystem:
         self.hcore = self.env_in_env_scf.get_hcore()
         self.fock = [None, None]
         self.emb_vhf = None
-        self.proj_pot = [np.array([0.0, 0.0]) for sub in self.subsystems]
+        self.proj_pot = [np.array([np.zeros_like(sub.env_scf.get_hcore()), np.zeros_like(sub.env_scf.get_hcore())]) for sub in self.subsystems]
         #DIIS Stuff
         self.sub_diis = [np.array([lib.diis.DIIS(), lib.diis.DIIS()]) for sub in self.subsystems]
         self.fs_energy = None
@@ -401,7 +401,7 @@ class ClusterSuperSystem:
         if self.init_guess == 'supmol':
             self.get_supersystem_energy(readchk=super_chk)
 
-        elif self.ft_initguess == 'rosupmol':
+        elif self.init_guess == 'rosupmol':
             rodmat = self.get_init_ro_supersystem_dmat()
 
         for i, subsystem in enumerate(subsystems):
@@ -551,7 +551,7 @@ class ClusterSuperSystem:
 
             self.fs_dmat = scf_obj.make_rdm1()
 
-            if self.fs_unrestricted:
+            if (hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted):
                 rho_grid = self.fs_scf.grids
                 alpha_dmat = self.fs_dmat[0]
                 alpha_rho = scf_obj._numint.get_rho(self.mol, alpha_dmat, rho_grid,
@@ -608,6 +608,7 @@ class ClusterSuperSystem:
                 nelec_a = scf_obj.mol.nelec[0]
                 self.local_mo_coeff[0] = lo.ER(scf_obj.mol, self.mo_coeff[0][:, :nelec_a]).kernel()
                 self.local_mo_coeff[1] = self.local_mo_coeff[0]
+
 
         #if self.fs_excited:
             #Run the Excited state calculation on the self.fs_scf object.  
@@ -851,7 +852,7 @@ class ClusterSuperSystem:
         print("".center(80, '*'))
         s2s = self.sub2sup
         #ONLY DO FOR THE RO SYSTEM. THIS IS KIND OF A TEST.
-        if self.mol.spin != 0 and not self.fs_unrestricted:
+        if self.mol.spin != 0 and not ((hasattr(self.fs_scf_obj, 'unrestricted') and self.fs_scf_obj.unrestricted)):
             self.update_ro_fock()
         for i, sub in enumerate(self.subsystems):
             #Check if subsystem is HLSubSystem but rightnow it is being difficult.
@@ -885,7 +886,7 @@ class ClusterSuperSystem:
             fock_aa = np.array([None, None])
             fock_aa[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
             fock_aa[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
-            sub.emb_fock = fock_aa
+            sub.emb_fock = fock_aa 
             sub.get_env_energy()
             env_e = sub.env_energy
             print(f"Energy Subsystem {i}:{env_e:>61.8f}")
@@ -911,7 +912,7 @@ class ClusterSuperSystem:
         self.env_in_env_energy += proj_e
         print(f"Env-in-Env Energy:{self.env_in_env_energy:>62.8f}")
         #Approx spin from this paper: https://aip-scitation-org.ezp3.lib.umn.edu/doi/10.1063/1.468585
-        if self.fs_unrestricted:
+        if (hasattr(self.fs_scf_obj, 'unrestricted') and self.fs_scf_obj.unrestricted):
             rho_grid = self.fs_scf.grids
             alpha_dmat = dm_env[0]
             alpha_rho = self.fs_scf._numint.get_rho(self.mol, alpha_dmat, rho_grid,
@@ -994,6 +995,11 @@ class ClusterSuperSystem:
             dmat = dmat[0] + dmat[1]
             self.emb_vhf = self.env_in_env_scf.get_veff(self.mol, dmat)
             temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
+            #TEMP
+            temp_fock = copy.copy(self.hcore) + self.fs_scf_obj.get_jk(self.mol, dm=dmat)[0]
+            for i, sub in enumerate(self.subsystems):
+                #temp_fock[np.ix_(s2s[i], s2s[i])] += sub.env_scf.get_jk(sub.mol, sub.get_dmat())[0] - 0.5 * sub.env_scf.get_jk(sub.mol, sub.get_dmat())[1]
+                temp_fock[np.ix_(s2s[i], s2s[i])] += -0.5 * sub.env_scf.get_jk(sub.mol, sub.get_dmat())[1]
             self.fock = [temp_fock, temp_fock]
 
         if self.emb_diis and diis:
@@ -1387,9 +1393,10 @@ class ClusterSuperSystem:
 
         dm_env = self.get_emb_dmat()
         sub_dmat = np.zeros_like(dm_env)
-        sub = self.subsystems[0]
-        sub_dmat[np.ix_(self.sub2sup[0], self.sub2sup[0])] += sub.get_dmat()
+        hl_sub = self.subsystems[0]
+        sub_dmat[np.ix_(self.sub2sup[0], self.sub2sup[0])] += hl_sub.get_dmat()
         full_coulomb = self.fs_nuc_grad_obj.get_jk(self.mol, dm_env)[0] * 4.
+        #coulomb_err =
         aoslices = self.mol.aoslice_by_atom()
         p0,p1 = aoslices[0, 2:]
         sub_coulomb = self.fs_nuc_grad_obj.get_jk(self.mol, sub_dmat)[0] * 4.
@@ -1398,14 +1405,54 @@ class ClusterSuperSystem:
         sub_coulomb_grad = np.einsum('xij,ij->x', sub_coulomb, sub_dmat)
         print (emb_de)
         print (self.mol.atom[0])
-       # for i, sub in enumerate(self.subsystems[1:], 1):
-       #     emb_dm_env[0][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[0]
-       #     emb_dm_env[1][np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[1]
-       # if not (self.unrestricted or self.mol.spin != 0):
-       #     emb_dm_env = emb_dm_env[0] + emb_dm_env[1]
+        emb_dm_env = np.zeros_like(dm_env)
+        for i, sub in enumerate(self.subsystems[1:], 1):
+            emb_dm_env[np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[0]
+            emb_dm_env[np.ix_(self.sub2sup[i], self.sub2sup[i])] += sub.env_dmat[1]
+
+        #Save DM as hdf5
+        filename = 'temp_1.hdf5'
+        #print (emb_dm_env)
+        with h5py.File(filename, 'r') as h5_file:
+            den_diff = h5_file['dmat'][:]
+
+        #print (den_diff)
+
+        #den_diff = (den_diff - emb_dm_env) / (0.002 * 1./.5291772)
+        #print (den_diff)
+        #with h5py.File(filename, 'w') as h5_file:
+        #    h5_file.create_dataset('dmat', data=den_diff)
 
         #emb_env_vhf_grad = self.fs_nuc_grad_obj.get_veff(self.mol, emb_dm_env)
-        #emb_env_vhf_grad = self.fs_nuc_grad_obj.get_jk(self.mol, emb_dm_env)[0]
+        int_2e = self.mol.intor('int2e')
+        print (int_2e.shape)
+        den_grad = np.einsum('ijkl,lk->ij', int_2e, den_diff)
+
+        emb_env_vhf_grad = self.fs_nuc_grad_obj.get_jk(self.mol, emb_dm_env)[0]
+        grad_2e_int2 = self.mol.intor('int2e_ip2')
+        grad = np.einsum('xijkl,lk->xij', grad_2e_int2, emb_dm_env)
+        print ('env_den_grad')
+        den_de = np.einsum('ij,ij->', den_grad[p0:p1], sub_dmat[p0:p1])
+        print (den_de)
+
+        print ('grad emb pot')
+        print ((emb_env_vhf_grad[2,0,0]))
+        print ((grad[2,0,0]))
+        #print ((emb_env_vhf_grad[2,p0:p1][0][0] * 2. + grad[2, p0:p1][0][0] * 2.))
+        emb_de = np.einsum('xij,ij->x', emb_env_vhf_grad[:,p0:p1], sub_dmat[p0:p1]) * 2.
+        emb_de += np.einsum('xij,ij->x', grad[:,p0:p1], sub_dmat[p0:p1]) * 2.
+        print ("Subsystem env coulomb")
+        print (emb_de)
+        sub_dmat = np.zeros_like(dm_env)
+        sub_dmat[np.ix_(self.sub2sup[0], self.sub2sup[0])] += hl_sub.hl_sr_scf.make_rdm1()
+        emb_de = np.einsum('xij,ij->x', emb_env_vhf_grad[:,p0:p1], sub_dmat[p0:p1]) * 2.
+        emb_de += np.einsum('xij,ij->x', grad[:,p0:p1], sub_dmat[p0:p1]) * 2.
+        print ("Subsystem hl coulomb")
+        print (emb_de)
+
+        print ('hl_den_grad')
+        den_de = np.einsum('ij,ij->', den_grad[p0:p1], sub_dmat[p0:p1])
+        print (den_de)
         #print ('env_vhf_grad')
         #print (emb_env_vhf_grad[2])
         emb_hcore_deriv = self.fs_nuc_grad_obj.hcore_generator(self.mol)
