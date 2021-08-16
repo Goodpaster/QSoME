@@ -345,7 +345,7 @@ def add_excited_settings(inp_block):
     inp_block.add_line_key('nroots', type=int, default=3)
     # the desired root calculated by EOM-CC3 
     # only one root can be calculated at a time
-    inp_block.add_line_key('root', type=int, default=1)
+    inp_block.add_line_key('cc3_root', type=int, default=1)
     inp_block.add_line_key('cycles', type=int)
     inp_block.add_line_key('eom_type', type=str)
     # koopmans excitation or not for EOM-CC, default False

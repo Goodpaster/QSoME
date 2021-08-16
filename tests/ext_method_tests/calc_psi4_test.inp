@@ -27,6 +27,11 @@ end
 
 hl_method_settings
     hl_order 1
-    hl_method ccsd
+    hl_method cc3
     use_ext psi4
+    excited
+    excited_settings
+      nroots 3
+      cc3_root 2
+    end
 end

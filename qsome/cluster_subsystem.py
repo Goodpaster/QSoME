@@ -1181,7 +1181,9 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         self.hl_save_density = hl_save_density
         self.hl_save_spin_density = hl_save_spin_density
         self.__set_hl_method_settings(hl_dict)
-        self.__set_hl_excited_settings(hl_excited_dict)
+        # only initialize hl_excited_dict if hl_excited==True
+        if hl_excited:
+            self.__set_hl_excited_settings(hl_excited_dict)
 
         self.hl_mo_coeff = None
         self.hl_mo_occ = None
@@ -1236,6 +1238,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             hl_excited_dict = {}
         self.hl_excited_dict = hl_excited_dict
         self.hl_excited_nroots = hl_excited_dict.get('nroots')
+        self.hl_excited_cc3_root = hl_excited_dict.get('cc3_root')
         self.hl_excited_conv = hl_excited_dict.get('conv')
         self.hl_excited_cycles = hl_excited_dict.get('cycles')
         self.hl_excited_type = hl_excited_dict.get('eom_type')
@@ -1246,6 +1249,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
 
         # set default number of excited states to 3
         if self.hl_excited_nroots is None: self.hl_excited_nroots=3
+        if self.hl_excited_cc3_root is None: self.hl_excited_cc3_root=1
         if self.hl_excited_type is None: self.hl_excited_type = 'ee'
         if self.hl_excited_type is None: self.hl_excited_type = True
 
@@ -1506,7 +1510,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         """Uses an external method to calculate high level energy.
         """
 
-        print("use external method for hl calculation")
+        print(f"use external method {self.hl_ext} for hl calculation")
         hcore = self.env_scf.get_hcore()
         emb_proj_pot = [self.emb_pot[0] + self.proj_pot[0], self.emb_pot[1] + self.proj_pot[1]]
         ext_factory = ExtFactory()
@@ -1523,7 +1527,8 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
                                           work_dir=file_path, scr_dir=scr_path,
                                           nproc=self.nproc, pmem=self.pmem,
                                           save_orbs=None, save_density=False,
-                                          hl_dict=self.hl_dict)
+                                          hl_dict=self.hl_dict,
+                                          hl_excited_dict=self.hl_excited_dict)
         energy = ext_obj.get_energy()
         self.hl_energy = energy[0]
 
