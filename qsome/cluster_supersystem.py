@@ -401,10 +401,11 @@ class ClusterSuperSystem:
             fs_unrestricted = (hasattr(fs_scf, 'unrestricted') and fs_scf.unrestricted)
             subsystem.fullsys_cs = not (fs_unrestricted or self.mol.spin != 0)
             # Ensure same gridpoints and rho_cutoff for all systems
-            if not 'hf' in subsystem.env_method:
-                subsystem.env_scf.grids = fs_scf.grids
-                subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
-                subsystem.env_scf.grids = fs_scf.grids
+            #This may not be working for gradients.
+            #if not 'hf' in subsystem.env_method:
+            #    subsystem.env_scf.grids = fs_scf.grids
+            #    subsystem.env_scf.small_rho_cutoff = fs_scf.small_rho_cutoff
+            #    subsystem.env_scf.grids = fs_scf.grids
 
             sub_guess = subsystem.env_init_guess
             if sub_guess is None:
