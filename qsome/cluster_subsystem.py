@@ -546,6 +546,8 @@ class ClusterEnvSubSystem:
         e_proj = self.get_env_proj_e(proj_pot, dmat)
         if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
+        print (e_emb)
+        print (e_proj)
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
         return subsys_e + e_emb + e_proj
 

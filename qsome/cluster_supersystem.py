@@ -393,7 +393,7 @@ class ClusterSuperSystem:
         if self.init_guess == 'supmol':
             self.get_supersystem_energy(readchk=super_chk)
 
-        elif self.ft_initguess == 'rosupmol':
+        elif self.init_guess == 'rosupmol':
             rodmat = self.get_init_ro_supersystem_dmat()
 
         for i, subsystem in enumerate(subsystems):
@@ -544,15 +544,15 @@ class ClusterSuperSystem:
             self.fs_dmat = scf_obj.make_rdm1()
 
             if hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted:
-                rho_grid = self.fs_scf.grids
+                rho_grid = self.fs_scf_obj.grids
                 alpha_dmat = self.fs_dmat[0]
                 alpha_rho = scf_obj._numint.get_rho(self.mol, alpha_dmat, rho_grid,
-                                                    self.fs_scf.max_memory)
+                                                    self.fs_scf_obj.max_memory)
                 #alpha_den = alpha_rho * rho_grid.weights
                 alpha_den = alpha_rho
                 beta_dmat = self.fs_dmat[1]
                 beta_rho = scf_obj._numint.get_rho(self.mol, beta_dmat, rho_grid,
-                                                    self.fs_scf.max_memory)
+                                                    self.fs_scf_obj.max_memory)
 
                 #beta_den = beta_rho * rho_grid.weights
                 beta_den = beta_rho
@@ -987,20 +987,20 @@ class ClusterSuperSystem:
             self.emb_vhf = self.env_in_env_scf.get_veff(self.mol, dmat)
             temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
             #TEMP
-            temp_fock = copy.copy(self.hcore) + copy.copy(self.env_in_env_scf.get_jk(self.mol, dmat)[0])
-            for i, sub in enumerate(self.subsystems):
-                temp_fock[np.ix_(s2s[i], s2s[i])] += sub.env_scf.get_veff(sub.mol, sub.get_dmat())
+            #temp_fock = copy.copy(self.hcore) + copy.copy(self.env_in_env_scf.get_jk(self.mol, dmat)[0])
+            #for i, sub in enumerate(self.subsystems):
+            #    temp_fock[np.ix_(s2s[i], s2s[i])] += sub.env_scf.get_veff(sub.mol, sub.get_dmat())
             self.fock = [temp_fock, temp_fock]
 
-        #if self.emb_diis and diis:
-        #    if self.unrestricted or sub_unrestricted:
-        #        new_fock = self.emb_diis.update(self.fock)
-        #        self.fock[0] = new_fock[0]
-        #        self.fock[1] = new_fock[1]
-        #    else:
-        #        new_fock = self.emb_diis.update(self.fock[0])
-        #        self.fock[0] = new_fock
-        #        self.fock[1] = new_fock
+        if self.emb_diis and diis:
+            if self.unrestricted or sub_unrestricted:
+                new_fock = self.emb_diis.update(self.fock)
+                self.fock[0] = new_fock[0]
+                self.fock[1] = new_fock[1]
+            else:
+                new_fock = self.emb_diis.update(self.fock[0])
+                self.fock[0] = new_fock
+                self.fock[1] = new_fock
 
         #Add the external potential to each fock.
         self.fock[0] += self.ext_pot[0]

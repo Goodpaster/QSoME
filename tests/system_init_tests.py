@@ -40,13 +40,13 @@ class TestEnvSubsystem(unittest.TestCase):
         self.assertEqual(subsys.env_method, self.env_method)
         self.assertEqual(subsys.env_order, 1)
 
-        self.assertEqual(subsys.env_smearsigma, 0.)
+        #self.assertEqual(subsys.env_smearsigma, 0.)
         self.assertEqual(subsys.env_damp, 0.)
         self.assertEqual(subsys.env_shift, 0.)
         self.assertEqual(subsys.env_subcycles, 1)
         self.assertEqual(subsys.freeze, False)
-        self.assertEqual(subsys.env_initguess, None)
-        self.assertEqual(subsys.verbose, 3)
+        self.assertEqual(subsys.env_init_guess, None)
+        self.assertEqual(subsys.mol.verbose, 3)
 
         #Check SCF object
         scf_obj = subsys.env_scf
@@ -91,22 +91,22 @@ class TestEnvSubsystem(unittest.TestCase):
 
         t_file = tempfile.NamedTemporaryFile()
         subsys = cluster_subsystem.ClusterEnvSubSystem(self.cs_mol, self.env_method,
-            env_order=2, env_smearsigma=0.5, damp=1, shift=1, subcycles=10,
-            diis=2, unrestricted=False, density_fitting=True, freeze=True,
-            verbose=2, nproc=4, pmem=300, scrdir='/path/to/scratch/',
+            env_order=2, damp=1, shift=1, subcycles=10,
+            diis_num=2, unrestricted=False, density_fitting=True, freeze=True,
+            nproc=4, pmem=300, scrdir='/path/to/scratch/',
             save_orbs=True, save_density=True, filename=t_file.name)
 
         self.assertEqual(subsys.mol, self.cs_mol)
         self.assertEqual(subsys.env_method, self.env_method)
         self.assertEqual(subsys.filename, t_file.name)
 
-        self.assertEqual(subsys.env_smearsigma, 0.5)
+        #self.assertEqual(subsys.env_smearsigma, 0.5)
         self.assertEqual(subsys.env_damp, 1)
         self.assertEqual(subsys.env_shift, 1)
         self.assertEqual(subsys.env_subcycles, 10)
         self.assertEqual(subsys.freeze, True)
-        self.assertEqual(subsys.env_initguess, None)
-        self.assertEqual(subsys.verbose, 2)
+        self.assertEqual(subsys.env_init_guess, None)
+        self.assertEqual(subsys.mol.verbose, 3)
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
 
@@ -164,13 +164,13 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.mol, self.cs_mol)
         self.assertEqual(subsys.env_method, self.env_method)
 
-        self.assertEqual(subsys.env_smearsigma, 0)
+        #self.assertEqual(subsys.env_smearsigma, 0)
         self.assertEqual(subsys.env_damp, 0)
         self.assertEqual(subsys.env_shift, 0)
         self.assertEqual(subsys.env_subcycles, 1)
         self.assertEqual(subsys.freeze, False)
-        self.assertEqual(subsys.env_initguess, None)
-        self.assertEqual(subsys.verbose, 3)
+        self.assertEqual(subsys.env_init_guess, None)
+        self.assertEqual(subsys.mol.verbose, 3)
 
         self.assertEqual(subsys.hl_method, 'ccsd')
         self.assertEqual(subsys.hl_conv, None)
@@ -178,29 +178,29 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.hl_cycles, None)
         self.assertEqual(subsys.hl_damp, 0)
         self.assertEqual(subsys.hl_shift, 0)
-        self.assertEqual(subsys.hl_initguess, None)
+        self.assertEqual(subsys.hl_init_guess, None)
 
     def test_custom_obj_set(self):
         t_file = tempfile.NamedTemporaryFile()
         hl_method  = 'caspt2'
         subsys = cluster_subsystem.ClusterHLSubSystem(self.cs_mol, self.env_method, 
             hl_method, hl_conv=1e-9, hl_grad=1e-8, hl_cycles=2, hl_damp=0.1,
-            hl_shift=0.001, hl_initguess='minao', env_smearsigma=0.5, damp=1,
-            shift=1, subcycles=10, freeze=True, initguess='supmol',
-            verbose=2, save_orbs=True, save_density=True, 
+            hl_shift=0.001, hl_init_guess='minao', damp=1,
+            shift=1, subcycles=10, freeze=True, init_guess='supmol',
+            save_orbs=True, save_density=True, 
             hl_save_orbs=True, hl_save_density=True, filename=t_file.name, hl_dict={'active_orbs':[2,3,4,5], 'loc_orbs':True})
 
         self.assertEqual(subsys.mol, self.cs_mol)
         self.assertEqual(subsys.env_method, self.env_method)
         self.assertEqual(subsys.filename, t_file.name)
 
-        self.assertEqual(subsys.env_smearsigma, 0.5)
+        #self.assertEqual(subsys.env_smearsigma, 0.5)
         self.assertEqual(subsys.env_damp, 1)
         self.assertEqual(subsys.env_shift, 1)
         self.assertEqual(subsys.env_subcycles, 10)
         self.assertEqual(subsys.freeze, True)
-        self.assertEqual(subsys.env_initguess, 'supmol')
-        self.assertEqual(subsys.verbose, 2)
+        self.assertEqual(subsys.env_init_guess, 'supmol')
+        self.assertEqual(subsys.mol.verbose, 3)
         self.assertEqual(subsys.save_orbs, True)
         self.assertEqual(subsys.save_density, True)
 
@@ -213,7 +213,7 @@ class TestActiveSubSystem(unittest.TestCase):
         self.assertEqual(subsys.hl_cycles, 2)
         self.assertEqual(subsys.hl_damp, 0.1)
         self.assertEqual(subsys.hl_shift, 0.001)
-        self.assertEqual(subsys.hl_initguess, 'minao')
+        self.assertEqual(subsys.hl_init_guess, 'minao')
         self.assertEqual(subsys.hl_save_orbs, True)
         self.assertEqual(subsys.hl_save_density, True)
 
@@ -442,7 +442,7 @@ class TestSuperSystem(unittest.TestCase):
         self.assertEqual(fs_scf_obj.init_guess, 'atom')
         self.assertEqual(fs_scf_obj.grids.level, 2)
         self.assertEqual(fs_scf_obj.small_rho_cutoff, 1e-2)
-        self.assertEqual(fs_scf_obj.verbose, 1)
+        self.assertEqual(fs_scf_obj.verbose, 3)
         self.assertEqual(fs_scf_obj.stability_analysis, 'internal')
         self.assertEqual(fs_scf_obj.save_orbs, True)
         self.assertEqual(fs_scf_obj.save_density, True)
@@ -609,8 +609,8 @@ class TestSuperSystem(unittest.TestCase):
         self.assertTrue(supersystem.ft_excited_relax)
         self.assertDictEqual(supersystem.fs_excited_dict, {'nroots':4})
         self.assertDictEqual(supersystem.ft_excited_dict, {'nroots':2})
-        self.assertEqual(supersystem.fs_excited_nroots, 4)
-        self.assertEqual(supersystem.ft_excited_nroots, 2)
+        #self.assertEqual(supersystem.fs_excited_nroots, 4)
+        #self.assertEqual(supersystem.ft_excited_nroots, 2)
 
 class TestInteractionMediator(unittest.TestCase):
 
