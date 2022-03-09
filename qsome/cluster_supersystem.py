@@ -986,10 +986,6 @@ class ClusterSuperSystem:
             dmat = dmat[0] + dmat[1]
             self.emb_vhf = self.env_in_env_scf.get_veff(self.mol, dmat)
             temp_fock = self.env_in_env_scf.get_fock(h1e=self.hcore, vhf=self.emb_vhf, dm=dmat)
-            #TEMP
-            temp_fock = copy.copy(self.hcore) + copy.copy(self.env_in_env_scf.get_jk(self.mol, dmat)[0])
-            for i, sub in enumerate(self.subsystems):
-                temp_fock[np.ix_(s2s[i], s2s[i])] += sub.env_scf.get_veff(sub.mol, sub.get_dmat())
             self.fock = [temp_fock, temp_fock]
 
         #if self.emb_diis and diis:
@@ -1039,9 +1035,6 @@ class ClusterSuperSystem:
                     fock_ab = [None, None]
                     fock_ab[0] = self.fock[0][np.ix_(s2s[i], s2s[j])]
                     fock_ab[1] = self.fock[1][np.ix_(s2s[i], s2s[j])]
-                    #TEMP
-                    #fock_ab[0] = self.hcore[np.ix_(s2s[i], s2s[j])]
-                    #fock_ab[1] = self.hcore[np.ix_(s2s[i], s2s[j])]
                     fock_den_smat = [None, None]
                     fock_den_smat[0] = np.dot(fock_ab[0], np.dot(sub_b_dmat[0], smat_ba))
                     fock_den_smat[1] = np.dot(fock_ab[1], np.dot(sub_b_dmat[1], smat_ba))
