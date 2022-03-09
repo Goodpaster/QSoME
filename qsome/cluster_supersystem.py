@@ -393,7 +393,7 @@ class ClusterSuperSystem:
         if self.init_guess == 'supmol':
             self.get_supersystem_energy(readchk=super_chk)
 
-        elif self.ft_initguess == 'rosupmol':
+        elif self.init_guess == 'rosupmol':
             rodmat = self.get_init_ro_supersystem_dmat()
 
         for i, subsystem in enumerate(subsystems):
@@ -544,15 +544,15 @@ class ClusterSuperSystem:
             self.fs_dmat = scf_obj.make_rdm1()
 
             if hasattr(scf_obj, 'unrestricted') and scf_obj.unrestricted:
-                rho_grid = self.fs_scf.grids
+                rho_grid = self.fs_scf_obj.grids
                 alpha_dmat = self.fs_dmat[0]
                 alpha_rho = scf_obj._numint.get_rho(self.mol, alpha_dmat, rho_grid,
-                                                    self.fs_scf.max_memory)
+                                                    self.fs_scf_obj.max_memory)
                 #alpha_den = alpha_rho * rho_grid.weights
                 alpha_den = alpha_rho
                 beta_dmat = self.fs_dmat[1]
                 beta_rho = scf_obj._numint.get_rho(self.mol, beta_dmat, rho_grid,
-                                                    self.fs_scf.max_memory)
+                                                    self.fs_scf_obj.max_memory)
 
                 #beta_den = beta_rho * rho_grid.weights
                 beta_den = beta_rho
