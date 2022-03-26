@@ -1,9 +1,10 @@
 
-from pyscf import lib
+from pyscf import lib, gto
 from pyscf.lib import logger
 from pyscf.scf import hf,rohf,uhf
 from pyscf.scf import jk
-from pyscf.dft import rks, roks, uks
+from pyscf.dft import rks, roks, uks, gen_grid, radi
+from pyscf.grad import rks as rks_grad
 
 #from pyscf.dft import libxc, numint
 from pyscf.dft import numint
@@ -536,3 +537,496 @@ def exc_uks(mf, emb_dm, dms, relativity=0, hermi=0,
         excsum = excsum[0]
     return nelec, excsum, vmat
 
+def get_veff_grad(ks_grad, mol=None, dm=None):
+    '''
+    First order derivative of DFT effective potential matrix (wrt electron coordinates).
+    '''
+    if mol is None: mol = ks_grad.mol
+    if dm is None: dm = ks_grad.base.make_rdm1()
+
+    #t0 = (logger.process_clock(), logger.perf_counter())
+
+    mf = ks_grad.base
+    ni = mf._numint
+    if ks_grad.grids is not None:
+        grids = ks_grad.grids
+    else:
+        grids = mf.grids
+    if grids.coords is None:
+        grids.build(with_non0tab=True)
+
+    if mf.nlc != '':
+        raise NotImplementedError
+    #enabling range-separated hybrids
+    omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, spin=mol.spin)
+
+    mem_now = lib.current_memory()[0]
+    max_memory = max(2000, ks_grad.max_memory*.9-mem_now)
+    if isinstance(mf, rks.RKS):
+        exc, vxc = get_rks_subsystem_vxc_full_response(ni, mol, grids, mf.xc, dm,
+                                         max_memory=max_memory,
+                                         verbose=ks_grad.verbose)
+        logger.debug1(ks_grad, 'sum(grids response) %s', exc.sum(axis=0))
+        #t0 = logger.timer(ks_grad, 'vxc', *t0)
+
+        if abs(hyb) < 1e-10 and abs(alpha) < 1e-10:
+            vj = ks_grad.get_j(mol, dm)
+            vxc += vj
+        else:
+            vj, vk = ks_grad.get_jk(mol, dm)
+            vk *= hyb
+            if abs(omega) > 1e-10:  # For range separated Coulomb operator
+                with mol.with_range_coulomb(omega):
+                    vk += ks_grad.get_k(mol, dm) * (alpha - hyb)
+            vxc += vj - vk * .5
+    else:
+        exc, vxc = get_uks_subsystem_vxc_full_response(ni, mol, grids, mf.xc, dm,
+                                         max_memory=max_memory,
+                                         verbose=ks_grad.verbose)
+        logger.debug1(ks_grad, 'sum(grids response) %s', exc.sum(axis=0))
+        #t0 = logger.timer(ks_grad, 'vxc', *t0)
+
+        if abs(hyb) < 1e-10:
+            vj = ks_grad.get_j(mol, dm)
+            vxc += vj[0] + vj[1]
+        else:
+            vj, vk = ks_grad.get_jk(mol, dm)
+            vk *= hyb
+            if abs(omega) > 1e-10:  # For range separated Coulomb operator
+                with mol.with_range_coulomb(omega):
+                    vk += ks_grad.get_k(mol, dm) * (alpha - hyb)
+            vxc += vj[0] + vj[1] - vk
+
+
+
+    return lib.tag_array(vxc, exc1_grid=exc)
+
+def get_rks_subsystem_vxc_full_response(ni, mol, grids, xc_code, dms, relativity=0, hermi=1,
+                                        max_memory=2000, verbose=None):
+    '''Full response including the response of the grids. The grid response is
+    different for a subsystem because of the unique grid for subsystems.'''
+    xctype = ni._xc_type(xc_code)
+    make_rho, nset, nao = ni._gen_rho_evaluator(mol, dms, hermi)
+    ao_loc = mol.ao_loc_nr()
+
+    excsum = 0
+    vmat = np.zeros((3,nao,nao))
+
+    if xctype == 'LDA':
+        ao_deriv = 1
+        vtmp = np.empty((3,nao,nao))
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory):
+            for idm in range(nset):
+                rho = make_rho(idm, ao[0], mask, 'LDA')
+                vxc = ni.eval_xc(xc_code, rho, 0, relativity, 1,
+                                 verbose=verbose)[1]
+                vrho = vxc[0]
+                aow = np.einsum('pi,p->pi', ao[0], weight*vrho)
+                rks_grad._d1_dot_(vmat[idm], mol, ao[1:4], aow, mask, ao_loc, True)
+                rho = vxc = vrho = aow = None
+
+        for atm_id, (coords, weight, weight1) in enumerate(grids_response_cc(grids)):
+            print ('grad atm_id')
+            print (atm_id)
+            mask = gen_grid.make_mask(mol, coords)
+            ao = ni.eval_ao(mol, coords, deriv=ao_deriv, non0tab=mask)
+            rho = make_rho(0, ao[0], mask, 'LDA')
+            exc, vxc = ni.eval_xc(xc_code, rho, 0, relativity, 1,
+                                  verbose=verbose)[:2]
+            vrho = vxc[0]
+
+            vtmp = np.zeros((3,nao,nao))
+            aow = np.einsum('pi,p->pi', ao[0], weight*vrho)
+            rks_grad._d1_dot_(vtmp, mol, ao[1:4], aow, mask, ao_loc, True)
+
+            # response of weights
+            #This part can be done for full system.
+            excsum += np.einsum('r,r,nxr->nx', exc, rho, weight1)
+            # response of grids coordinates
+            #This part is only done for atoms in subsystem.
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms) * 2
+            print (excsum)
+            rho = vxc = vrho = aow = None
+
+    elif xctype == 'GGA':
+        ao_deriv = 2
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory):
+            for idm in range(nset):
+                rho = make_rho(idm, ao[:4], mask, 'GGA')
+                vxc = ni.eval_xc(xc_code, rho, 0, relativity, 1,
+                                 verbose=verbose)[1]
+                wv = numint._rks_gga_wv0(rho, vxc, weight)
+                rks_grad._gga_grad_sum_(vmat[idm], mol, ao, wv, mask, ao_loc)
+                rho = vxc = vrho = wv = None
+
+        for atm_id, (coords, weight, weight1) in enumerate(grids_response_cc(grids)):
+            print ('grad atm_id')
+            print (atm_id)
+            mask = gen_grid.make_mask(mol, coords)
+            ao = ni.eval_ao(mol, coords, deriv=ao_deriv, non0tab=mask)
+            rho = make_rho(0, ao[:4], mask, 'GGA')
+            exc, vxc = ni.eval_xc(xc_code, rho, 0, relativity, 1,
+                                  verbose=verbose)[:2]
+
+            vtmp = np.zeros((3,nao,nao))
+            wv = numint._rks_gga_wv0(rho, vxc, weight)
+            rks_grad._gga_grad_sum_(vtmp, mol, ao, wv, mask, ao_loc)
+
+            # response of weights
+            excsum += np.einsum('r,r,nxr->nx', exc, rho[0], weight1)
+            # response of grids coordinates
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms) * 2
+            print (excsum)
+            rho = vxc = vrho = wv = None
+
+    elif xctype == 'NLC':
+        raise NotImplementedError('NLC')
+    elif xctype == 'MGGA':
+        raise NotImplementedError('meta-GGA')
+
+    # - sign because nabla_X = -nabla_x
+    return excsum, -vmat
+
+def get_uks_subsystem_vxc_full_response(ni, mol, grids, xc_code, dms, relativity=0, hermi=1,
+                                        max_memory=2000, verbose=None):
+    '''Full response including the response of the grids. The grid response is
+    different for a subsystem because of the unique grid for subsystems.'''
+    '''Full response including the response of the grids'''
+    xctype = ni._xc_type(xc_code)
+    make_rho, nset, nao = ni._gen_rho_evaluator(mol, dms, hermi)
+    ao_loc = mol.ao_loc_nr()
+    aoslices = mol.aoslice_by_atom()
+
+    excsum = 0
+    vmat = np.zeros((2,3,nao,nao))
+    if xctype == 'LDA':
+        ao_deriv = 1
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory):
+            rho_a = make_rho(0, ao[0], mask, 'LDA')
+            rho_b = make_rho(1, ao[0], mask, 'LDA')
+            vxc = ni.eval_xc(xc_code, (rho_a,rho_b), 1, relativity, 1,
+                             verbose=verbose)[1]
+            vrho = vxc[0]
+            aow = np.einsum('pi,p->pi', ao[0], weight*vrho[:,0])
+            rks_grad._d1_dot_(vmat[0], mol, ao[1:4], aow, mask, ao_loc, True)
+            aow = np.einsum('pi,p->pi', ao[0], weight*vrho[:,1])
+            rks_grad._d1_dot_(vmat[1], mol, ao[1:4], aow, mask, ao_loc, True)
+            vxc = vrho = aow = None
+
+        for atm_id, (coords, weight, weight1) \
+                in enumerate(rks_grad.grids_response_cc(grids)):
+            print ('grad atm_id')
+            print (atm_id)
+            mask = gen_grid.make_mask(mol, coords)
+            ao = ni.eval_ao(mol, coords, deriv=ao_deriv, non0tab=mask)
+            rho_a = make_rho(0, ao[0], mask, 'LDA')
+            rho_b = make_rho(1, ao[0], mask, 'LDA')
+            exc, vxc = ni.eval_xc(xc_code, (rho_a,rho_b), 1, relativity, 1,
+                                  verbose=verbose)[:2]
+            vrho = vxc[0]
+
+            vtmp = np.zeros((3,nao,nao))
+            aow = np.einsum('pi,p->pi', ao[0], weight*vrho[:,0])
+            rks_grad._d1_dot_(vtmp, mol, ao[1:4], aow, mask, ao_loc, True)
+            excsum += np.einsum('r,r,nxr->nx', exc, rho_a+rho_b, weight1)
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms[0]) * 2
+
+            vtmp = np.zeros((3,nao,nao))
+            aow = np.einsum('pi,p->pi', ao[0], weight*vrho[:,1])
+            rks_grad._d1_dot_(vtmp, mol, ao[1:4], aow, mask, ao_loc, True)
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms[1]) * 2
+            print (excsum)
+            vxc = vrho = aow = None
+
+    elif xctype == 'GGA':
+        ao_deriv = 2
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory):
+            print (weight.shape)
+            rho_a = make_rho(0, ao[:4], mask, 'GGA')
+            rho_b = make_rho(1, ao[:4], mask, 'GGA')
+            vxc = ni.eval_xc(xc_code, (rho_a,rho_b), 1, relativity, 1,
+                             verbose=verbose)[1]
+            wva, wvb = numint._uks_gga_wv0((rho_a,rho_b), vxc, weight)
+
+            rks_grad._gga_grad_sum_(vmat[0], mol, ao, wva, mask, ao_loc)
+            rks_grad._gga_grad_sum_(vmat[1], mol, ao, wvb, mask, ao_loc)
+            rho_a = rho_b = vxc = wva = wvb = None
+
+        for atm_id, (coords, weight, weight1) \
+                in enumerate(rks_grad.grids_response_cc(grids)):
+            print ('grad atm_id')
+            print (atm_id)
+            print (weight1.shape)
+            #I should be able to get the numerical gradient of the weights actually.
+            mask = gen_grid.make_mask(mol, coords)
+            ao = ni.eval_ao(mol, coords, deriv=ao_deriv, non0tab=mask)
+            rho_a = make_rho(0, ao[:4], mask, 'GGA')
+            rho_b = make_rho(1, ao[:4], mask, 'GGA')
+            exc, vxc = ni.eval_xc(xc_code, (rho_a,rho_b), 1, relativity, 1,
+                                  verbose=verbose)[:2]
+            wva, wvb = numint._uks_gga_wv0((rho_a,rho_b), vxc, weight)
+
+            vtmp = np.zeros((3,nao,nao))
+            rks_grad._gga_grad_sum_(vtmp, mol, ao, wva, mask, ao_loc)
+            excsum += np.einsum('r,r,nxr->nx', exc, rho_a[0]+rho_b[0], weight1)
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms[0]) * 2
+
+            vtmp = np.zeros((3,nao,nao))
+            rks_grad._gga_grad_sum_(vtmp, mol, ao, wvb, mask, ao_loc)
+            excsum[atm_id] += np.einsum('xij,ji->x', vtmp, dms[1]) * 2
+            print (excsum)
+            rho_a = rho_b = vxc = wva = wvb = None
+
+    elif xctype == 'NLC':
+        raise NotImplementedError('NLC')
+    elif xctype == 'MGGA':
+        raise NotImplementedError('meta-GGA')
+
+    # - sign because nabla_X = -nabla_x
+    return excsum, -vmat
+
+def grids_response(grids):
+    # JCP 98, 5612 (1993); DOI:10.1063/1.464906
+    mol = grids.mol
+    atom_grids_tab = grids.gen_atomic_grids(mol, grids.atom_grid,
+                                            grids.radi_method,
+                                            grids.level, grids.prune)
+    atm_coords = np.asarray(mol.atom_coords() , order='C')
+    atm_dist = gto.mole.inter_distance(mol, atm_coords)
+
+    def _radii_adjust(mol, atomic_radii):
+        charges = mol.atom_charges()
+        if grids.radii_adjust == radi.treutler_atomic_radii_adjust:
+            rad = np.sqrt(atomic_radii[charges]) + 1e-200
+        elif grids.radii_adjust == radi.becke_atomic_radii_adjust:
+            rad = atomic_radii[charges] + 1e-200
+        else:
+            fadjust = lambda i, j, g: g
+            gadjust = lambda *args: 1
+            return fadjust, gadjust
+
+        rr = rad.reshape(-1,1) * (1./rad)
+        a = .25 * (rr.T - rr)
+        a[a<-.5] = -.5
+        a[a>0.5] = 0.5
+
+        def fadjust(i, j, g):
+            return g + a[i,j]*(1-g**2)
+
+        #: d[g + a[i,j]*(1-g**2)] /dg = 1 - 2*a[i,j]*g
+        def gadjust(i, j, g):
+            return 1 - 2*a[i,j]*g
+        return fadjust, gadjust
+
+    fadjust, gadjust = _radii_adjust(mol, grids.atomic_radii)
+
+    def gen_grid_partition(coords, atom_id):
+        ngrids = coords.shape[0]
+        grid_dist = np.empty((mol.natm,ngrids))
+        for ia in range(mol.natm):
+            dc = coords - atm_coords[ia]
+            grid_dist[ia] = np.linalg.norm(dc,axis=1) + 1e-200
+
+        pbecke = np.ones((mol.natm,ngrids))
+        for i in range(mol.natm):
+            for j in range(i):
+                g = 1/atm_dist[i,j] * (grid_dist[i]-grid_dist[j])
+                g = fadjust(i, j, g)
+                g = (3 - g**2) * g * .5
+                g = (3 - g**2) * g * .5
+                g = (3 - g**2) * g * .5
+                pbecke[i] *= .5 * (1-g + 1e-200)
+                pbecke[j] *= .5 * (1+g + 1e-200)
+
+        dpbecke = np.zeros((mol.natm,mol.natm,ngrids,3))
+        for ia in range(mol.natm):
+            for ib in range(mol.natm):
+                if ib != ia:
+                    g = 1/atm_dist[ia,ib] * (grid_dist[ia]-grid_dist[ib])
+                    p0 = gadjust(ia, ib, g)
+                    g = fadjust(ia, ib, g)
+                    p1 = (3 - g **2) * g  * .5
+                    p2 = (3 - p1**2) * p1 * .5
+                    p3 = (3 - p2**2) * p2 * .5
+                    s_uab = .5 * (1 - p3 + 1e-200)
+                    t_uab = -27./16 * (1-p2**2) * (1-p1**2) * (1-g**2)
+                    t_uab /= s_uab
+                    t_uab *= p0
+
+# * When grid is on atom ia/ib, ua/ub == 0, d_uba/d_uab may have huge error
+#   How to remove this error?
+# * JCP 98, 5612 (1993); (B8) (B10) miss many terms
+                    uab = atm_coords[ia] - atm_coords[ib]
+                    if ia == atom_id:  # dA PA: dA~ib, PA~ia
+                        ua = atm_coords[ib] - coords
+                        d_uab = ua/grid_dist[ib,:,None]/atm_dist[ia,ib]
+                        v = (grid_dist[ia]-grid_dist[ib])/atm_dist[ia,ib]**3
+                        d_uab-= v[:,None] * uab
+                        dpbecke[ia,ia] += (pbecke[ia]*t_uab).reshape(-1,1) * d_uab
+                    else:  # dB PB: dB~ib, PB~ia
+                        ua = atm_coords[ia] - coords
+                        d_uab = ua/grid_dist[ia,:,None]/atm_dist[ia,ib]
+                        v = (grid_dist[ia]-grid_dist[ib])/atm_dist[ia,ib]**3
+                        d_uab-= v[:,None] * uab
+                        dpbecke[ia,ia] += (pbecke[ia]*t_uab).reshape(-1,1) * d_uab
+
+                        if ib != atom_id:  # dA PB: dA~atom_id PB~ia D~ib
+                            ua_ub = ((coords-atm_coords[ia])/grid_dist[ia,:,None] -
+                                     (coords-atm_coords[ib])/grid_dist[ib,:,None])
+                            ua_ub /= atm_dist[ia,ib]
+                            dpbecke[atom_id,ia] += (pbecke[ia]*t_uab)[:,None] * ua_ub
+
+                    uba = atm_coords[ib] - atm_coords[ia]
+                    if ib == atom_id:  # dA PB: dA~ib PB~ia
+                        ub = atm_coords[ia] - coords
+                        d_uba = ub/grid_dist[ia,:,None]/atm_dist[ia,ib]
+                        v = (grid_dist[ib]-grid_dist[ia])/atm_dist[ia,ib]**3
+                        d_uba-= v[:,None] * uba
+                        dpbecke[ib,ia] += -(pbecke[ia]*t_uab).reshape(-1,1) * d_uba
+                    else:  # dB PC: dB~ib, PC~ia and dB PA: dB~ib, PA~ia
+                        ub = atm_coords[ib] - coords
+                        d_uba = ub/grid_dist[ib,:,None]/atm_dist[ia,ib]
+                        v = (grid_dist[ib]-grid_dist[ia])/atm_dist[ia,ib]**3
+                        d_uba-= v[:,None] * uba
+                        dpbecke[ib,ia] += -(pbecke[ia]*t_uab).reshape(-1,1) * d_uba
+        return pbecke, dpbecke
+
+    ngrids = 0
+    for ia in range(mol.natm):
+        coords, vol = atom_grids_tab[mol.atom_symbol(ia)]
+        ngrids += vol.size
+
+    coords_all = np.zeros((ngrids,3))
+    w0 = np.zeros((ngrids))
+    w1 = np.zeros((mol.natm,ngrids,3))
+    p1 = 0
+    for ia in range(mol.natm):
+        coords, vol = atom_grids_tab[mol.atom_symbol(ia)]
+        coords = coords + atm_coords[ia]
+        p0, p1 = p1, p1 + vol.size
+        coords_all[p0:p1] = coords
+        pbecke, dpbecke = gen_grid_partition(coords, ia)
+        z = pbecke.sum(axis=0)
+        for ib in range(mol.natm):  # derivative wrt to atom_ib
+            dz = dpbecke[ib].sum(axis=0)
+            w1[ib,p0:p1] = dpbecke[ib,ia]/z[:,None] - (pbecke[ia]/z**2)[:,None]*dz
+            w1[ib,p0:p1] *= vol[:,None]
+
+        w0[p0:p1] = vol * pbecke[ia] / z
+    return coords_all, w0, w1
+
+# JCP 98, 5612 (1993); DOI:10.1063/1.464906
+def grids_response_cc(grids):
+    mol = grids.mol
+    atom_grids_tab = grids.gen_atomic_grids(mol, grids.atom_grid,
+                                            grids.radi_method,
+                                            grids.level, grids.prune)
+    atm_coords = np.asarray(mol.atom_coords() , order='C')
+    atm_dist = gto.inter_distance(mol, atm_coords)
+
+    def _radii_adjust(mol, atomic_radii):
+        charges = mol.atom_charges()
+        if grids.radii_adjust == radi.treutler_atomic_radii_adjust:
+            rad = np.sqrt(atomic_radii[charges]) + 1e-200
+        elif grids.radii_adjust == radi.becke_atomic_radii_adjust:
+            rad = atomic_radii[charges] + 1e-200
+        else:
+            fadjust = lambda i, j, g: g
+            gadjust = lambda *args: 1
+            return fadjust, gadjust
+
+        rr = rad.reshape(-1,1) * (1./rad)
+        a = .25 * (rr.T - rr)
+        a[a<-.5] = -.5
+        a[a>0.5] = 0.5
+
+        def fadjust(i, j, g):
+            return g + a[i,j]*(1-g**2)
+
+        #: d[g + a[i,j]*(1-g**2)] /dg = 1 - 2*a[i,j]*g
+        def gadjust(i, j, g):
+            return 1 - 2*a[i,j]*g
+        return fadjust, gadjust
+
+    fadjust, gadjust = _radii_adjust(mol, grids.atomic_radii)
+
+    def gen_grid_partition(coords, atom_id):
+        ngrids = coords.shape[0]
+        grid_dist = []
+        grid_norm_vec = []
+        for ia in range(mol.natm):
+            v = (atm_coords[ia] - coords).T
+            normv = np.linalg.norm(v,axis=0) + 1e-200
+            v /= normv
+            grid_dist.append(normv)
+            grid_norm_vec.append(v)
+
+        def get_du(ia, ib):  # JCP 98, 5612 (1993); (B10)
+            uab = atm_coords[ia] - atm_coords[ib]
+            duab = 1./atm_dist[ia,ib] * grid_norm_vec[ia]
+            duab-= uab[:,None]/atm_dist[ia,ib]**3 * (grid_dist[ia]-grid_dist[ib])
+            return duab
+
+        pbecke = np.ones((mol.natm,ngrids))
+        dpbecke = np.zeros((mol.natm,mol.natm,3,ngrids))
+        for ia in range(mol.natm):
+            for ib in range(ia):
+                g = 1/atm_dist[ia,ib] * (grid_dist[ia]-grid_dist[ib])
+                p0 = fadjust(ia, ib, g)
+                p1 = (3 - p0**2) * p0 * .5
+                p2 = (3 - p1**2) * p1 * .5
+                p3 = (3 - p2**2) * p2 * .5
+                t_uab = 27./16 * (1-p2**2) * (1-p1**2) * (1-p0**2) * gadjust(ia, ib, g)
+
+                s_uab = .5 * (1 - p3 + 1e-200)
+                s_uba = .5 * (1 + p3 + 1e-200)
+                pbecke[ia] *= s_uab
+                pbecke[ib] *= s_uba
+                pt_uab =-t_uab / s_uab
+                pt_uba = t_uab / s_uba
+
+# * When grid is on atom ia/ib, ua/ub == 0, d_uba/d_uab may have huge error
+#   How to remove this error?
+                duab = get_du(ia, ib)
+                duba = get_du(ib, ia)
+                if ia == atom_id:
+                    dpbecke[ia,ia] += pt_uab * duba
+                    dpbecke[ia,ib] += pt_uba * duba
+                else:
+                    dpbecke[ia,ia] += pt_uab * duab
+                    dpbecke[ia,ib] += pt_uba * duab
+
+                if ib == atom_id:
+                    dpbecke[ib,ib] -= pt_uba * duab
+                    dpbecke[ib,ia] -= pt_uab * duab
+                else:
+                    dpbecke[ib,ib] -= pt_uba * duba
+                    dpbecke[ib,ia] -= pt_uab * duba
+
+# * JCP 98, 5612 (1993); (B8) (B10) miss many terms
+                if ia != atom_id and ib != atom_id:
+                    ua_ub = grid_norm_vec[ia] - grid_norm_vec[ib]
+                    ua_ub /= atm_dist[ia,ib]
+                    dpbecke[atom_id,ia] -= pt_uab * ua_ub
+                    dpbecke[atom_id,ib] -= pt_uba * ua_ub
+
+        for ia in range(mol.natm):
+            dpbecke[:,ia] *= pbecke[ia]
+
+        return pbecke, dpbecke
+
+    natm = mol.natm
+    for ia in range(natm):
+        coords, vol = atom_grids_tab[mol.atom_symbol(ia)]
+        coords = coords + atm_coords[ia]
+        pbecke, dpbecke = gen_grid_partition(coords, ia)
+        z = 1./pbecke.sum(axis=0)
+        w1 = dpbecke[:,ia] * z
+        w1 -= pbecke[ia] * z**2 * dpbecke.sum(axis=1)
+        w1 *= vol
+        w0 = vol * pbecke[ia] * z
+        yield coords, w0, w1

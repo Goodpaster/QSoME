@@ -7,6 +7,7 @@ Daniel S. Graham
 import copy
 import numpy as np
 from pyscf import gto, scf, dft
+from pyscf.dft import numint
 
 def gen_link_basis(atom1_coord, atom2_coord, basis, basis_atom='H'):
     """Generate the linking ghost atom between two atoms.
