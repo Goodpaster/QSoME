@@ -9,7 +9,7 @@ from copy import deepcopy as copy
 import h5py
 import numpy as np
 import scipy as sp
-from pyscf import gto, scf, mp, cc, mcscf, mrpt, fci, tools
+from pyscf import gto, scf, dft, mp, cc, mcscf, mrpt, fci, tools
 from pyscf import hessian
 from pyscf.cc import ccsd_t, uccsd_t
 from pyscf.cc import eom_uccsd, eom_rccsd
@@ -546,8 +546,6 @@ class ClusterEnvSubSystem:
         e_proj = self.get_env_proj_e(proj_pot, dmat)
         if not (self.unrestricted or self.mol.spin != 0):
             dmat = dmat[0] + dmat[1]
-        print (e_emb)
-        print (e_proj)
         subsys_e = self.env_scf.energy_elec(dm=dmat)[0]
         return subsys_e + e_emb + e_proj
 
@@ -1413,9 +1411,6 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         env_emb_pot_de = np.zeros_like(env_sub_de)
         env_proj_de = np.zeros_like(env_sub_de)
 
-        print ("Emb Pot")
-        print (self.emb_pot[0].shape)
-
         for atm in atmlst:
             p0, p1 = aoslices[atm,2:]
             atom_sub_hcore_grad = sub_hcore_deriv(atm)
@@ -1966,3 +1961,21 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
             tools.molden.from_mo(self.mol, molden_fn, hl_mo_coeff,
                                  ene=hl_mo_energy, occ=hl_mo_occ)
         return True
+
+class ClusterEnvSubSystemGrad:
+    """A class to perform gradient calculations."""
+
+    def __init__(self, subsys):
+
+        self.subsys = subsys
+        self.grad_obj = subsys.env_scf.nuc_grad_method()
+        #Need to account for the grid adjustments.
+        if isinstance(subsys.env_scf, (dft.rks.RKS, dft.uks.UKS, dft.roks.ROKS)):
+            self.grad_obj.get_veff = lambda *args, **kwargs: (custom_pyscf_methods.get_veff_grad(self.grad_obj, *args, **kwargs))
+
+    def grad_elec(self):
+        if isinstance(self.subsys.env_scf, (scf.uhf.UHF, scf.rohf.ROHF)):
+            return self.grad_obj.grad_elec(mo_energy=self.subsys.env_mo_energy, mo_coeff=self.subsys.env_mo_coeff, mo_occ=self.subsys.env_mo_occ)
+        else:
+            return self.grad_obj.grad_elec(mo_energy=self.subsys.env_mo_energy[0], mo_coeff=self.subsys.env_mo_coeff[0], mo_occ=self.subsys.env_mo_occ[0] + self.subsys.env_mo_occ[1])
+

@@ -66,6 +66,9 @@ mocc = [None, None]
 mocc[0] = mf.mo_coeff[0][:,mf.mo_occ[0]>0]
 mocc[1] = mf.mo_coeff[1][:,mf.mo_occ[1]>0]
 dm1 = [None, None]
+print (mo1[0][0].shape)
+print (mocc[0].shape)
+print (c)
 dm1[0] = np.einsum('ypi,qi->ypq', mo1[0][0], mocc[0])
 dm1[0] += dm1[0].transpose(0,2,1)
 dm1[0] = dm1[0][2]
