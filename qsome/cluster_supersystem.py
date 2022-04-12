@@ -1416,8 +1416,214 @@ class ClusterSuperSystem:
         #return grad_smat_ba 
         return proj_pot
 
+    def gen_sub_response(self, sub_index, hermi=0, with_j=True, max_memory=None):
+        '''generates the response of the uhf response function and density matrix'''
+
+        sub = self.subsystems[sub_index]
+        mo_coeff = sub.env_mo_coeff
+        mo_occ = sub.env_mo_occ
+        mol = sub.mol
+        is_dft = getattr(sub.env_scf_obj, 'xc', None) is not None and hasattr(sub.env_scf_obj, '_numint')
+
+        if is_dft:
+            ni = sub.env_scf_obj._numint
+            ni.libxc.test_deriv_order(sub.env_scf_obj.xc, 2, raise_error=True)
+            if getattr(sub.env_scf_obj, 'nlc', '') != '':
+                logger.warn(mf, 'NLC functional found in DFT object.  Its second '
+                        'deriviative is not available. Its contribution is '
+                        'not included in the response function.')
+            omega, alpha, hyb = ni.rsh_and_hybrid_coeff(sub.env_scf_obj.xc, mol.spin)
+            hybrid = abs(hyb) > 1e-10
+
+            rho0,vxc,fxc = ni.cache_xc_kernel(mol, sub.env_scf_obj.grids, sub.env_scf_obj.xc, mo_coeff, mo_occ, 1)
+
+            dm0 = None
+            if max_memory is None:
+                mem_now = lib.current_memory()[0]
+                max_memory = max(2000, sub.env_scf_obj.max_memory*.8-mem_now)
+            def vind(dm1):
+                if hermi == 2:
+                    v1 = np.zeros_like(dm1)
+                else:
+                    v1 = ni.nr_uks_fxc(mol, sub.env_scf_obj.grids, sub.env_scf_obj.xc, dm0, dm1, 0, hermi, rho0, vxc, fxc, max_memory=max_memory)
+                if not hybrid:
+                    if with_j:
+                        vj = sub.env_scf_obj.get_j(mol, dm1, hermi=hermi)
+                        v1 += vj[0] + vj[1]
+                else:
+                    if with_j:
+                        vj, vk = sub.env_scf_obj.get_jk(mol, dm1, hermi=hermi)
+                        vk *= hyb
+                        if omega > 1e-10:
+                            vk += sub.env_scf_obj.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
+                        v1 += vj[0] + vj[1] - vk
+                    else:
+                        vk = sub.env_scf_obj.get_k(mol, dm1, hermi=hermi)
+                        vk *= hyb
+                        if omega > 1e-10:
+                            vk += sub.env_scf_obj.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
+                        v1 -= vk
+                return v1
+
+            elif with_j:
+                def vind(dm1):
+                    vj, vk = sub.env_scf_obj.get_jk(mol, dm1, hermi=hermi)
+                    v1 = vj[0] + vj[1] - vk
+                    return v1
+            else:
+                def vind(dm1):
+                    return -sub.env_scf_obj.get_k(mol, dm1, hermi=hermi)
+            return vind
+
+
+    def gen_emb_sub_response(self, sub_index):
+        pass
+
+
+
+    def solve_zvec(self):
+        zvec_0 = np.array([0. for sub in self.subsystems])
+        zvec_1 = np.array([100. for sub in self.subsystems])
+        resp_terms = np.zeros((len(self.subsystems), len(self.subsystems)))
+
+        #Generate the response functions for each subsystem
+        for i, sub in enumerate(self.subsystems):
+            for j, alt_sub in enumerate(self.subsystems):
+                if i == j:
+                    occidxa = sub.env_mo_occ[0] > 0
+                    occidxb = sub.env_mo_occ[0] > 0
+                    viridxa = ~occidxa
+                    viridxb = ~occidxb
+                    nocca = np.count_nonzero(occidxa)
+                    noccb = np.count_nonzero(occidxb)
+                    nmoa, nmob = sub.env_mo_occ[0].size, sub.env_mo_occ[1].size
+                    eai_a = sub.env_mo_energy[0][viridxa,None] - sub.env_mo_energy[0][occidxa]
+                    eai_b = sub.env_mo_energy[1][viridxb,None] - sub.env_mo_energy[1][occidxb]
+
+                    eai_a = 1./ eai_a
+                    eai_b = 1./ eai_b
+
+                    def vind_vo(z_vec):
+                        pass
+
+            x=0
+
+        while (np.max(np.abs(zvec_1 - zvec_0))):
+            for i,sub in enumerate(self.subsystems):
+                updated_X = 0.
+
+
     def get_sub_den_grad(self):
         """After F&T cycles, calculate the density derivative terms"""
+
+        #Generate full A matrix
+        #There is a much faster way to do this but it is more complicated.
+
+        self.solve_zvec() 
+        print (x)
+        a_mat_sub_index = []
+        ndim_full = 0
+        for sub in self.subsystems:
+            occ_a = np.count_nonzero(sub.env_mo_occ[0])
+            occ_b = np.count_nonzero(sub.env_mo_occ[1])
+            vir_a = sub.env_mo_occ[0].shape[0] - occ_a
+            vir_b = sub.env_mo_occ[1].shape[0] - occ_a
+            sub_ndim = (vir_a + vir_b) * (occ_a + occ_b)
+            a_mat_sub_index.append(sub_ndim)
+            ndim_full += sub_ndim
+
+
+
+        a_full = np.zeros((ndim_full,ndim_full))
+        for i, sub in enumerate(self.subsystems):
+            for j, alt_sub in enumerate(self.subsystems):
+                if i == j: 
+                    int2e_mo_iiii_aa, int2e_mo_iiii_bb, int2e_mo_iiii_ab, int2e_mo_iiii_ba = helpers.get_emb_mo(self, (i,i,i,i))
+                    for k, temp in enumerate(self.subsystems):
+                        if i != k:
+                            int2e_mo_ikii_aa, int2e_mo_ikii_bb, int2e_mo_ikii_ab, int2e_mo_ikii_ba = helpers.get_emb_mo(self, (i,k,i,i))
+                            smat_ik = self.smat[np.ix_(s2s[i], s2s[k])]
+                            smat_ki = smat_ik.T
+                            smat_mo_aa = np.einsum('nm,nk,mi', smat_ki, temp.env_mo_coeff[0], sub.env_mo_coeff[0])
+                            smat_mo_bb = np.einsum('nm,nk,mi', smat_ki, temp.env_mo_coeff[0], sub.env_mo_coeff[0])
+                            proj_term_1_aa = np.einsum('akbj,ki->aibj', int2e_mo_ikii_aa, smat_mo_aa)
+                            proj_term_1_bb = np.einsum('akbj,ki->aibj', int2e_mo_ikii_bb, smat_mo_bb)
+                            proj_term_1_ab = np.einsum('akbj,ki->aibj', int2e_mo_ikii_ab, smat_mo_aa)
+                            proj_term_1_ba = np.einsum('akbj,ki->aibj', int2e_mo_ikii_ba, smat_mo_bb)
+
+
+
+                    occ_a = np.count_nonzero(sub.env_mo_occ[0])
+                    occ_b = np.count_nonzero(sub.env_mo_occ[1])
+                    vir_a = sub.env_mo_occ[0].shape[0] - occ_a
+                    vir_b = sub.env_mo_occ[1].shape[0] - occ_b
+                    #mo energy terms
+                    mo_e_vir = np.concatenate((sub.env_mo_energy[0][occ_a:], sub.env_mo_energy[1][occ_b:]))
+                    mo_e_occ = np.concatenate((sub.env_mo_energy[0][:occ_a], sub.env_mo_energy[1][:occ_b]))
+                    mo_diff = mo_e_occ - mo_e_vir[:, np.newaxis]
+                    a_ii = np.diag(mo_diff.flatten())
+                    #proj_terms
+                    for ai in range(a_mat_sub_index[i]):
+                        for bj in range(a_mat_sub_index[j]):
+                            a_val = ai//(occ_a + occ_b)
+                            i_val = ai - ((occ_a + occ_b) * a_val)
+                            b_val = bj//(occ_a + occ_b)
+                            j_val = bj - ((occ_a + occ_b) * b_val)
+                            #AA
+                            if a_val < vir_a and i_val < occ_a and b_val < vir_a and j_val < occ_a:
+                                a_index = a_val + occ_a
+                                b_index = b_val + occ_b
+                                int2e_1 = int2e_mo_iiii_aa[a_index,i_val,b_index,j_val] - int2e_mo_iiii_aa[a_index, j_val, b_index, i_val]
+                                int2e_2 = int2e_mo_iiii_aa[a_index,i_val,j_val,b_index] - int2e_mo_iiii_aa[a_index, j_val, i_val, b_index]
+                                a_ii[ai,bj] -= (int2e_1 + int2e_2)
+                                #proj term
+                                
+                                #a_ii[ai,bj] += (int2e_1 + int2e_2)
+                            #BB
+                            #AB
+                            #BA
+                            
+
+                else:
+                    int2e_mo_iijj_aa, int2e_mo_iijj_bb, int2e_mo_iijj_ab, int2e_mo_iijj_ba = helpers.get_emb_mo(self, (i,i,j,j))
+                    int2e_mo_ijjj_aa, int2e_mo_ijjj_bb, int2e_mo_ijjj_ab, int2e_mo_ijjj_ba = helpers.get_emb_mo(self, (i,j,j,j))
+                    f_mo_ij = 0
+                    s_mo_ji = 0
+                    a_ij = np.zeros((a_mat_sub_index[i], a_mat_sub_index[j]))
+                    sub_i_occ_a = np.count_nonzero(sub.env_mo_occ[0])
+                    sub_i_occ_b = np.count_nonzero(sub.env_mo_occ[1])
+                    sub_i_vir_a = sub.env_mo_occ[0].shape[0] - sub_i_occ_a
+                    sub_i_vir_b = sub.env_mo_occ[1].shape[0] - sub_i_occ_b
+                    sub_j_occ_a = np.count_nonzero(alt_sub.env_mo_occ[0])
+                    sub_j_occ_b = np.count_nonzero(alt_sub.env_mo_occ[1])
+                    sub_j_vir_a = alt_sub.env_mo_occ[0].shape[0] - sub_j_occ_a
+                    sub_j_vir_b = alt_sub.env_mo_occ[1].shape[0] - sub_j_occ_b
+                    for ai in range(a_mat_sub_index[i]):
+                        for bj in range(a_mat_sub_index[j]):
+                            a_val = ai//(sub_i_occ_a + sub_i_occ_b)
+                            i_val = ai - ((sub_i_occ_orbs_a + sub_i_occ_orbs_b) * a_val)
+                            b_val = bj//(sub_j_occ_orbs_a + sub_j_occ_orbs_b)
+                            j_val = bj - ((sub_j_occ_orbs_a + sub_j_occ_orbs_b) * b_val)
+
+        #while not converged:
+        z_vec = np.array([0. for sub in self.subsystems])
+        z_vec_new = np.array([100. for sub in self.subsystems])
+
+        print ("HELLO")
+        print (z_vec)
+        while (np.abs(np.max(z_vec_new - z_vec)) > 1e-8):
+            z_vec = z_vec_new
+            z_vec_new = np.zeros_like(z_vec)
+            for i, sub in enumerate(self.subsystems):
+                a_ii = 0
+                for j, alt_sub in enumerate(self.subsystems):
+                    if i != j:
+                        print (z_vec)
+                z_vec_new[i] = 0.
+
+
+
+
         #Calculate A
         grad_subsys = cluster_subsystem.ClusterEnvSubSystemGrad(self.subsystems[0])
         print (grad_subsys.subsys.mol.natm)

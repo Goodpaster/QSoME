@@ -323,12 +323,12 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         occ_vir = p1[subsys1.mol.nelec[0]:,:subsys1.mol.nelec[0]]
         vir = p1[subsys1.mol.nelec[0]:,subsys1.mol.nelec[0]:]
         #occ_ua = num_sub1_ua[:subsys1.mol.nelec[0],:subsys1.mol.nelec[0]]
-        print (occ)
-        print (vir)
-        print (occ_vir)
-        print (num_sub1_ua[subsys1.mol.nelec[0]:,:subsys1.mol.nelec[0]])
+        #print (occ)
+        #print (vir)
+        #print (occ_vir)
+        #print (num_sub1_ua[subsys1.mol.nelec[0]:,:subsys1.mol.nelec[0]])
         #print (occ_ua + occ_ua.T)
-        print (x)
+        #print (x)
 
         nmoa = subsys1.env_mo_occ[0].size
         occidxa = mo_occ > 0
@@ -337,8 +337,7 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         s1_a = -s1_a[:,occidxa] * 0.5
 
         #print (num_sub1_mo_den_grad[0][subsys1.mol.nelec[0]:,subsys1.mol.nelec[0]:])
-        #supersystem.get_sub_den_grad()
-        print (x)
+        supersystem.get_sub_den_grad()
 
     #def test_rhf_grad(self):
     #    env_method = 'hf'

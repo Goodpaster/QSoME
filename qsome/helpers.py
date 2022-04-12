@@ -254,3 +254,44 @@ def nuc_grad_generator(mf, mol=None):
             return vrinv + vrinv.transpose(0,2,1)
     return nuc_deriv
 
+def get_emb_ao(supersystem, subsystem_indices):
+    slice_tuple = [0,0,0,0,0,0,0,0]
+    for i in range(subsystem_indices[0]):
+        slice_tuple[0] += supersystem.subsystems[i].mol.nbas
+    slice_tuple[1] = slice_tuple[0] + supersystem.subsystems[subsystem_indices[0]].mol.nbas
+    for j in range(subsystem_indices[1]):
+        slice_tuple[2] += supersystem.subsystems[j].mol.nbas
+    slice_tuple[3] = slice_tuple[2] + supersystem.subsystems[subsystem_indices[1]].mol.nbas
+    for k in range(subsystem_indices[2]):
+        slice_tuple[4] += supersystem.subsystems[k].mol.nbas
+    slice_tuple[5] = slice_tuple[4] + supersystem.subsystems[subsystem_indices[2]].mol.nbas
+    for l in range(subsystem_indices[3]):
+        slice_tuple[6] += supersystem.subsystems[k].mol.nbas
+    slice_tuple[7] = slice_tuple[6] + supersystem.subsystems[subsystem_indices[3]].mol.nbas
+    slice_tuple = tuple(slice_tuple)
+    return supersystem.mol.intor('int2e', shls_slice=slice_tuple)
+
+def get_emb_mo(supersystem, subsystem_indices):
+    #THIS TAKES FOREVER.
+    emb_ao = get_emb_ao(supersystem, subsystem_indices)
+    mo_coeff_i = supersystem.subsystems[subsystem_indices[0]].env_mo_coeff
+    mo_coeff_j = supersystem.subsystems[subsystem_indices[1]].env_mo_coeff
+    mo_coeff_k = supersystem.subsystems[subsystem_indices[2]].env_mo_coeff
+    mo_coeff_l = supersystem.subsystems[subsystem_indices[3]].env_mo_coeff
+    #import time
+    #start = time.time()
+    emb_mo_a = np.einsum('mnzs,mi,nj,zk,sl', emb_ao, mo_coeff_i[0], mo_coeff_j[0], mo_coeff_k[0], mo_coeff_l[0], optimize=True)
+    emb_mo_b = np.einsum('mnzs,mi,nj,zk,sl', emb_ao, mo_coeff_i[1], mo_coeff_j[1], mo_coeff_k[1], mo_coeff_l[1], optimize=True)
+    emb_mo_ab = np.einsum('mnzs,mi,nj,zk,sl', emb_ao, mo_coeff_i[0], mo_coeff_j[0], mo_coeff_k[1], mo_coeff_l[1], optimize=True)
+    emb_mo_ba = np.einsum('mnzs,mi,nj,zk,sl', emb_ao, mo_coeff_i[1], mo_coeff_j[1], mo_coeff_k[0], mo_coeff_l[0], optimize=True)
+    #print ('time elapsed')
+    #print (time.time()-start)
+    #from pyscf import ao2mo
+    #start = time.time()
+    #emb_mo_a_test = ao2mo.kernel(emb_ao, (mo_coeff_i[0], mo_coeff_j[0], mo_coeff_k[0], mo_coeff_l[0]))
+    #emb_mo_a_test = np.einsum('mnzs,mi,nj,zk,sl', emb_ao, mo_coeff_i[0], mo_coeff_j[0], mo_coeff_k[0], mo_coeff_l[0], optimize=True)
+    #print ('time elapsed')
+    #print (time.time()-start)
+    #print (np.max(np.abs(emb_mo_a - emb_mo_a_test)))
+    #emb_mo_b = np.einsum('mnzs,mi,nj,zk,sl->ijkl', emb_ao, mo_coeff_i[1], mo_coeff_j[1], mo_coeff_k[1], mo_coeff_l[1])
+    return (emb_mo_a, emb_mo_b, emb_mo_ab, emb_mo_ba)

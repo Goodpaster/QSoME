@@ -54,9 +54,6 @@ mocc = [None, None]
 mocc[0] = mf.mo_coeff[0][:,mf.mo_occ[0]>0]
 mocc[1] = mf.mo_coeff[1][:,mf.mo_occ[1]>0]
 dm1 = [None, None]
-print (mo1[0][0].shape)
-print (mocc[0].shape)
-print (c)
 dm1[0] = np.einsum('ypi,qi->ypq', mo1[0][0], mocc[0])
 dm1[0] += dm1[0].transpose(0,2,1)
 dm1[0] = dm1[0][2]
@@ -107,6 +104,8 @@ ao_2int = mol.intor('int2e')
 from pyscf import ao2mo
 int2e_mo = [None, None]
 int2e_mo_aa = ao2mo.kernel(ao_2int, mf.mo_coeff[0])
+print (int2e_mo_aa.shape)
+print ('here')
 int2e_mo_bb = ao2mo.kernel(ao_2int, mf.mo_coeff[1])
 int2e_mo_ab = ao2mo.kernel(ao_2int, (mf.mo_coeff[0],mf.mo_coeff[0],mf.mo_coeff[1],mf.mo_coeff[1]), compact=False)
 int2e_mo_ab = int2e_mo_ab.reshape([nmo,nmo,nmo,nmo])
