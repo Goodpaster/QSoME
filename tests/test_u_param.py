@@ -18,6 +18,18 @@ ao_ints_1 = mol.intor('int2e')
 ao_ovlp_1 = mol.intor('int1e_ovlp')
 dm0 = mf.make_rdm1()
 
+for i in range(mol.nelec[0]):
+    for j in range(mf.mo_coeff[0].shape[0]):
+        for k in range(mol.nelec[0]):
+            for l in range(mf.mo_coeff[0].shape[0]):
+                c1 = mf.mo_coeff[0][j,i]
+                c2 = mf.mo_coeff[0][k,l]
+                c1t = mf.mo_coeff[0][j,k]
+                c2t = mf.mo_coeff[0][i,l]
+                diff = (c1*c2) - (c1t*c2t)
+                if diff>1e-8:
+                    print (diff)
+
 mol = gto.M()
 mol.atom = '''
 O 0., 0., 0.00001
