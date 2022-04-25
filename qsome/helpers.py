@@ -295,3 +295,164 @@ def get_emb_mo(supersystem, subsystem_indices):
     #print (np.max(np.abs(emb_mo_a - emb_mo_a_test)))
     #emb_mo_b = np.einsum('mnzs,mi,nj,zk,sl->ijkl', emb_ao, mo_coeff_i[1], mo_coeff_j[1], mo_coeff_k[1], mo_coeff_l[1])
     return (emb_mo_a, emb_mo_b, emb_mo_ab, emb_mo_ba)
+
+def gen_vind_emb(supersystem):
+    num_subsys = len(supersystem.subsystems)
+    resp_terms = [[0] * num_subsys] * num_subsys
+    for i, sub in enumerate(supersystem.subsystems):
+        for j, alt_sub in enumerate(supersystem.subsystems):
+            if i == j:
+                if (supersystem.unrestricted or supersystem.mol.spin != 0):
+                    nao, nmoa = sub.env_mo_coeff[0].shape
+                    nmob = sub.env_mo_coeff[1].shape[1]
+                    mocca = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                    moccb = sub.env_mo_coeff[1][:,sub.env_mo_occ[1]>0]
+                    nocca = mocca.shape[1]
+                    noccb = moccb.shape[1]
+                    
+                    sub_vresp_term = sub.env_scf.gen_response(sub.env_mo_coeff, sub.env_mo_occ, hermi=1)
+
+                    proj_vresp_term = supersystem.gen_proj_response(i,j)
+
+                    def fx(mo1):
+                        mo1 = mo1.reshape(-1, nmoa*nocca+nmob*noccb)
+                        nset = len(mo1)
+                        dm1 = np.empty((2,nset,nao,nao))
+                        for i, x in enumerate(mol):
+                            xa = x[:nmoa*nocca].reshape(nmoa,nocca)
+                            xb = x[nmoa*nocca:].reshape(nmob,noccb)
+                            dma = reduce(np.dot, (sub.env_mo_coeff[0], xa, mocca.T))
+                            dma = reduce(np.dot, (sub.env_mo_coeff[1], xb, moccb.T))
+                            dm1[0,i] = dma + dma.T
+                            dm1[1,i] = dmb + dmb.T
+                        v1 = sub_vresp_term(dm1) + 2.*proj_vresp_term(dm1)
+                        v1vo = np.empty_like(mo1)
+                        for i in range(nset):
+                            v1vo[i,:nmoa*nocca] = reduce(np.dot, (mo_coeff[0].T, v1[0,i], mocca)).ravel()
+                            v1vo[i,nmoa*nocca:] = reduce(np.dot, (mo_coeff[1].T, v1[1,i], moccb)).ravel()
+                        return v1vo
+
+                else:
+                    nao,nmo = sub.env_mo_coeff[0].shape
+                    mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                    nocc = mocc.shape[1]
+                    sub_vresp_term = sub.env_scf.gen_response(sub.env_mo_coeff[0], sub.env_mo_occ[0]+sub.env_mo_occ[1], hermi=1)
+
+                    proj_vresp_term = supersystem.gen_proj_response(i,j)
+                    def fx(mo1):
+                        mo1 = mo1.reshape(-1, nmo, nocc)
+                        nset = len(mo1)
+                        dm1 = np.empty((nset, nao, nao))
+                        for i, x in enumerate(mo1):
+                            dm = reduce(np.dot, (sub.env_mo_coeff[0], x*2., mocc.T))
+                            dm1[i] = dm + dm.T
+                        v1 = sub_vresp_term(dm1) + 2.*proj_vresp_term(dm1)
+                        v1vo = np.empty_like(mo1)
+                        for i, x in enumerate(v1):
+                            v1vo[i] = reduce(np.dot, (sub.env_mo_coeff[0].T, x, mocc))
+                        return v1vo
+
+            else:
+                if (supersystem.unrestricted or supersystem.mol.spin != 0):
+                    nao, nmoa = sub.env_mo_coeff[0].shape
+                    nmob = sub.env_mo_coeff[1].shape[1]
+                    mocca = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                    moccb = sub.env_mo_coeff[1][:,sub.env_mo_occ[1]>0]
+                    nocca = mocca.shape[1]
+                    noccb = moccb.shape[1]
+                   
+                    fs_emb_mo_coeff = np.zeros_like(supersystem.get_emb_dmat())
+                    fs_emb_mo_occ = [np.zeros_like(fs_emb_mo_coeff[0].shape[0]), np.zeros_like(fs_emb_mo_coeff[1].shape[0])] 
+                    s2s = supersystem.sub2sup
+                    fs_emb_mo_coeff[0][np.ix_(s2s[j],s2s[j])] += alt_sub.env_mo_coeff[0]
+                    fs_emb_mo_coeff[1][np.ix_(s2s[j],s2s[j])] += alt_sub.env_mo_coeff[1]
+                    fs_emb_mo_occ[0][np.ix_(s2s[j])] += alt_sub.env_mo_occ[0]
+                    fs_emb_mo_occ[1][np.ix_(s2s[j])] += alt_sub.env_mo_occ[1]
+                    sup_vresp_term = supersystem.fs_scf_obj.gen_response(fs_emb_mo_coeff, fs_emb_mo_occ, hermi=1)
+
+                    proj_vresp_term = supersystem.gen_proj_response(i,j)
+
+
+                    def fx(mo1):
+                        mo1 = mo1.reshape(-1, nmoa*nocca+nmob*noccb)
+                        nset = len(mo1)
+                        dm1 = np.empty((2,nset,nao,nao))
+                        for i, x in enumerate(mol):
+                            xa = x[:nmoa*nocca].reshape(nmoa,nocca)
+                            xb = x[nmoa*nocca:].reshape(nmob,noccb)
+                            dma = reduce(np.dot, (sub.env_mo_coeff[0], xa, mocca.T))
+                            dma = reduce(np.dot, (sub.env_mo_coeff[1], xb, moccb.T))
+                            dm1[0,i] = dma + dma.T
+                            dm1[1,i] = dmb + dmb.T
+                        v1 = sup_vresp_term(dm1)[np.ix_([0,1],s2s[i],s2s[i])] + 2.*proj_vresp_term(dm1)
+                        v1vo = np.empty_like(mo1)
+                        for i in range(nset):
+                            v1[0,i] += 2. * reduce(np.dot, (supersystem.fock[0][np.ix_(s2s[i],s2s[j])], dm1[0], supersystem.smat[np.ix_(s2s[j],s2s[i])]))
+                            v1[1,i] += 2. * reduce(np.dot, (supersystem.fock[1][np.ix_(s2s[i],s2s[j])], dm1[1], supersystem.smat[np.ix_(s2s[j],s2s[i])]))
+                            v1vo[i,:nmoa*nocca] = reduce(np.dot, (mo_coeff[0].T, v1[0,i], mocca)).ravel()
+                            v1vo[i,nmoa*nocca:] = reduce(np.dot, (mo_coeff[1].T, v1[1,i], moccb)).ravel()
+                        return v1vo
+
+                else:
+                    nao,nmo = sub.env_mo_coeff[0].shape
+                    mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                    nocc = mocc.shape[1]
+                    fs_emb_mo_coeff = np.zeros_like(supersystem.get_emb_dmat())
+                    fs_emb_mo_occ = np.zeros((supersystem.get_emb_dmat().shape[0]))
+                    s2s = supersystem.sub2sup
+                    fs_emb_mo_coeff[np.ix_(s2s[j],s2s[j])] += alt_sub.env_mo_coeff[0]
+                    fs_emb_mo_occ[np.ix_(s2s[j])] += alt_sub.env_mo_occ[0]
+                    fs_emb_mo_occ[np.ix_(s2s[j])] += alt_sub.env_mo_occ[1]
+                    sup_vresp_term = supersystem.fs_scf_obj.gen_response(fs_emb_mo_coeff, fs_emb_mo_occ, hermi=1)
+                    proj_vresp_term = supersystem.gen_proj_response(i,j)
+                    def fx(mo1):
+                        mo1 = mo1.reshape(-1, nmo, nocc)
+                        nset = len(mo1)
+                        dm1 = np.empty((nset, nao, nao))
+                        for i, x in enumerate(mo1):
+                            dm = reduce(np.dot, (sub.env_mo_coeff[0], x*2., mocc.T))
+                            dm1[i] = dm + dm.T
+                        v1 = sub_vresp_term(dm1) + 2.*proj_vresp_term(dm1)
+                        v1 += 2. * reduce(np.dot, (supersystem.fock[0][np.ix_(s2s[i],s2s[j])], dm1, supersystem.smat[np.ix_(s2s[j],s2s[i])]))
+                        v1vo = np.empty_like(mo1)
+                        for i, x in enumerate(v1):
+                            v1vo[i] = reduce(np.dot, (sub.env_mo_coeff[0].T, x, mocc))
+                        return v1vo
+
+            resp_terms[i][j] = fx
+
+    return resp_terms
+
+def dm_cache_xc_kernel(ni, mol, grids, xc_code, dm, spin=0, max_memory=2000):
+    '''Compute the 0th order density, Vxc and fxc.  They can be used in TDDFT,
+    DFT hessian module etc. This uses the density matrix, not the mo_coeffs.
+    '''
+    xctype = ni._xc_type(xc_code)
+    ao_deriv = 0
+    if xctype == 'GGA':
+        ao_deriv = 1
+    elif xctype == 'NLC':
+        raise NotImplementedError('NLC')
+    elif xctype == 'MGGA':
+        raise NotImplementedError('meta-GGA')
+
+    if spin == 0:
+        nao = dm.shape[0]
+        rho = []
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory=max_memory):
+            rho.append(ni.eval_rho(mol, ao, dm, mask, xctype))
+        rho = numpy.hstack(rho)
+    else:
+        nao = dm[0].shape[0]
+        rhoa = []
+        rhob = []
+        for ao, mask, weight, coords \
+                in ni.block_loop(mol, grids, nao, ao_deriv, max_memory):
+            rhoa.append(ni.eval_rho(mol, ao, dm[0], mask, xctype))
+            rhob.append(ni.eval_rho(mol, ao, dm[1], mask, xctype))
+        rho = (numpy.hstack(rhoa), numpy.hstack(rhob))
+    vxc, fxc = ni.eval_xc(xc_code, rho, spin=spin, relativity=0, deriv=2,
+                          verbose=0)[1:3]
+    return rho, vxc, fxc
+

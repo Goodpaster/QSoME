@@ -288,6 +288,7 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         num_sub2_den_grad[1,0] = (np.array(env_subsys2.env_dmat)[1] - np.array(env_subsys0.env_dmat)[1])/(x_dir_diff*2.)
         num_sup_den_grad = (np.array(supersystem2.get_emb_dmat()) - np.array(supersystem0.get_emb_dmat()))/(x_dir_diff*2.)
 
+
         #Num mo_coeff terms
         num_sub1_mo_coeff_grad = np.zeros((2,3,subsys2.env_mo_coeff[0].shape[0], subsys2.env_mo_coeff[0].shape[1]))
         num_sub1_mo_coeff_grad[0,0] = (np.array(subsys2.env_mo_coeff)[0] - np.array(subsys0.env_mo_coeff)[0])/(x_dir_diff*2.)
@@ -296,32 +297,32 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         num_sub1_ovlp_grad = (subsys2.env_scf.get_ovlp() - subsys0.env_scf.get_ovlp())/(x_dir_diff*2.)
 
         #test for occ block terms.
-        s1a = -subsys1.mol.intor('int1e_ipovlp')
-        print ('here')
-        print (s1a[0])
-        print (s1a.transpose(0,2,1)[0])
-        print (s1a[0] + s1a.transpose(0,2,1)[0])
-        print (num_sub1_ovlp_grad)
-        print (np.max(num_sub1_ovlp_grad - (s1a[0] + s1a[0].transpose())))
-        mo_occ = subsys1.env_mo_occ[0]
-        mocc = subsys1.env_mo_coeff[0][:,mo_occ>0]
-        def _ao2mo(mat):
-            return np.asarray([reduce(np.dot, (subsys1.env_mo_coeff[0].T, x, mocc)) for x in mat])
+        #s1a = -subsys1.mol.intor('int1e_ipovlp')
+        #print ('here')
+        #print (s1a[0])
+        #print (s1a.transpose(0,2,1)[0])
+        #print (s1a[0] + s1a.transpose(0,2,1)[0])
+        #print (num_sub1_ovlp_grad)
+        #print (np.max(num_sub1_ovlp_grad - (s1a[0] + s1a[0].transpose())))
+        #mo_occ = subsys1.env_mo_occ[0]
+        #mocc = subsys1.env_mo_coeff[0][:,mo_occ>0]
+        #def _ao2mo(mat):
+        #    return np.asarray([reduce(np.dot, (subsys1.env_mo_coeff[0].T, x, mocc)) for x in mat])
 
-        s1vo = _ao2mo(s1a)
+        #s1vo = _ao2mo(s1a)
 
-        ovlp_grad = s1a + s1a.transpose(0,2,1)
-        num_sub1_ua = np.dot(np.linalg.inv(subsys1.env_mo_coeff[0]), num_sub1_mo_coeff_grad[0,0])
-        num_sub1_ub = np.dot(np.linalg.inv(subsys1.env_mo_coeff[1]), num_sub1_mo_coeff_grad[1,0])
-        num_smat_grad_mo = np.dot(subsys1.env_mo_coeff[0].T, np.dot(ovlp_grad[0], subsys1.env_mo_coeff[0]))
+        #ovlp_grad = s1a + s1a.transpose(0,2,1)
+        num_sub1_u = np.dot(np.linalg.inv(subsys1.env_mo_coeff[0]), num_sub1_mo_coeff_grad[0,0])
+        #num_sub1_ub = np.dot(np.linalg.inv(subsys1.env_mo_coeff[1]), num_sub1_mo_coeff_grad[1,0])
+        #num_smat_grad_mo = np.dot(subsys1.env_mo_coeff[0].T, np.dot(ovlp_grad[0], subsys1.env_mo_coeff[0]))
 
-        inv_coeff = np.linalg.inv(subsys1.env_mo_coeff[0])
-        p1 = np.dot(inv_coeff,np.dot(num_sub1_den_grad[0,0], inv_coeff.T))
+        #inv_coeff = np.linalg.inv(subsys1.env_mo_coeff[0])
+        #p1 = np.dot(inv_coeff,np.dot(num_sub1_den_grad[0,0], inv_coeff.T))
 
-        #p1 = np.dot(num_sub1_ua[:,mo_occ>0], num_sub1_ua[:,mo_occ>0].T)
-        occ = p1[:subsys1.mol.nelec[0],:subsys1.mol.nelec[0]]
-        occ_vir = p1[subsys1.mol.nelec[0]:,:subsys1.mol.nelec[0]]
-        vir = p1[subsys1.mol.nelec[0]:,subsys1.mol.nelec[0]:]
+        ##p1 = np.dot(num_sub1_ua[:,mo_occ>0], num_sub1_ua[:,mo_occ>0].T)
+        #occ = p1[:subsys1.mol.nelec[0],:subsys1.mol.nelec[0]]
+        #occ_vir = p1[subsys1.mol.nelec[0]:,:subsys1.mol.nelec[0]]
+        #vir = p1[subsys1.mol.nelec[0]:,subsys1.mol.nelec[0]:]
         #occ_ua = num_sub1_ua[:subsys1.mol.nelec[0],:subsys1.mol.nelec[0]]
         #print (occ)
         #print (vir)
@@ -330,14 +331,20 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         #print (occ_ua + occ_ua.T)
         #print (x)
 
-        nmoa = subsys1.env_mo_occ[0].size
-        occidxa = mo_occ > 0
-        nocca = np.count_nonzero(occidxa)
-        s1_a = s1vo.reshape(-1,nmoa,nocca)
-        s1_a = -s1_a[:,occidxa] * 0.5
+        #nmoa = subsys1.env_mo_occ[0].size
+        #occidxa = mo_occ > 0
+        #nocca = np.count_nonzero(occidxa)
+        #s1_a = s1vo.reshape(-1,nmoa,nocca)
+        #s1_a = -s1_a[:,occidxa] * 0.5
 
         #print (num_sub1_mo_den_grad[0][subsys1.mol.nelec[0]:,subsys1.mol.nelec[0]:])
-        supersystem.get_sub_den_grad()
+        supersystem.get_supersystem_nuc_grad()
+        occidx = subsys1.env_mo_occ[0] > 0
+        nocc = np.count_nonzero(occidx)
+        num_sub1_u_ai = num_sub1_u[nocc:, :nocc]
+        print (num_sub1_u_ai)
+        u_terms = supersystem.get_sub_den_grad()
+        print (u_terms[0][0][0])
 
     #def test_rhf_grad(self):
     #    env_method = 'hf'

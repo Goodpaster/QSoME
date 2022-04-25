@@ -234,6 +234,8 @@ class ClusterSuperSystem:
             self.emb_diis.space = 15
 
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
+        self.base_xterms = None
+        self.b_terms = None
 
     def __gen_sub2sup(self, mol=None, subsystems=None):
         #There should be a better way to do this.
@@ -1416,101 +1418,327 @@ class ClusterSuperSystem:
         #return grad_smat_ba 
         return proj_pot
 
-    def gen_sub_response(self, sub_index, hermi=0, with_j=True, max_memory=None):
-        '''generates the response of the uhf response function and density matrix'''
-
-        sub = self.subsystems[sub_index]
-        mo_coeff = sub.env_mo_coeff
-        mo_occ = sub.env_mo_occ
-        mol = sub.mol
-        is_dft = getattr(sub.env_scf_obj, 'xc', None) is not None and hasattr(sub.env_scf_obj, '_numint')
-
-        if is_dft:
-            ni = sub.env_scf_obj._numint
-            ni.libxc.test_deriv_order(sub.env_scf_obj.xc, 2, raise_error=True)
-            if getattr(sub.env_scf_obj, 'nlc', '') != '':
-                logger.warn(mf, 'NLC functional found in DFT object.  Its second '
-                        'deriviative is not available. Its contribution is '
-                        'not included in the response function.')
-            omega, alpha, hyb = ni.rsh_and_hybrid_coeff(sub.env_scf_obj.xc, mol.spin)
-            hybrid = abs(hyb) > 1e-10
-
-            rho0,vxc,fxc = ni.cache_xc_kernel(mol, sub.env_scf_obj.grids, sub.env_scf_obj.xc, mo_coeff, mo_occ, 1)
-
-            dm0 = None
-            if max_memory is None:
-                mem_now = lib.current_memory()[0]
-                max_memory = max(2000, sub.env_scf_obj.max_memory*.8-mem_now)
-            def vind(dm1):
-                if hermi == 2:
+    def gen_proj_response(self, sub_index, alt_sub_index):
+        s2s = self.sub2sup
+        hermi = 1
+        if isinstance(self.fs_scf_obj, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
+            pass
+        else:
+            if (self.unrestricted or self.mol.spin != 0):
+                def vind(dm1):
                     v1 = np.zeros_like(dm1)
-                else:
-                    v1 = ni.nr_uks_fxc(mol, sub.env_scf_obj.grids, sub.env_scf_obj.xc, dm0, dm1, 0, hermi, rho0, vxc, fxc, max_memory=max_memory)
-                if not hybrid:
-                    if with_j:
-                        vj = sub.env_scf_obj.get_j(mol, dm1, hermi=hermi)
-                        v1 += vj[0] + vj[1]
-                else:
-                    if with_j:
-                        vj, vk = sub.env_scf_obj.get_jk(mol, dm1, hermi=hermi)
-                        vk *= hyb
-                        if omega > 1e-10:
-                            vk += sub.env_scf_obj.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
-                        v1 += vj[0] + vj[1] - vk
-                    else:
-                        vk = sub.env_scf_obj.get_k(mol, dm1, hermi=hermi)
-                        vk *= hyb
-                        if omega > 1e-10:
-                            vk += sub.env_scf_obj.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
-                        v1 -= vk
-                return v1
-
-            elif with_j:
-                def vind(dm1):
-                    vj, vk = sub.env_scf_obj.get_jk(mol, dm1, hermi=hermi)
-                    v1 = vj[0] + vj[1] - vk
+                    dm1_s = np.zeros_like(self.get_emb_dmat())
+                    dm1_s[0][np.ix_(s2s[sub_index], s2s[alt_sub_index])] += np.dot(dm1[0], self.smat[np.ix_(s2s[sub_index], s2s[alt_sub_index])])
+                    dm1_s[1][np.ix_(s2s[sub_index], s2s[alt_sub_index])] += np.dot(dm1[1], self.smat[np.ix_(s2s[sub_index], s2s[alt_sub_index])])
+                    vj, vk = self.fs_scf_obj.get_jk(self.mol, dm1_s, hermi=hermi)
+                    v_full = vj[0] + vj[1] - vk
+                    v1[0] += v_full[0][np.ix_(s2s[sub_index], s2s[sub_index])]
+                    v1[1] += v_full[0][np.ix_(s2s[sub_index], s2s[sub_index])]
                     return v1
+
             else:
-                def vind(dm1):
-                    return -sub.env_scf_obj.get_k(mol, dm1, hermi=hermi)
-            return vind
+                sub = self.subsystems[sub_index]
+                alt_sub = self.subsystems[alt_sub_index]
+                if sub_index == alt_sub_index:
+                    def proj_response(dm1):
+                        v1 = np.zeros_like(dm1)
+                        for k, diff_sub in enumerate(self.subsystems):
+                            if k != alt_sub_index:
+                                dm2 = diff_sub.get_dmat()
+                                dm1_s_dm2 = np.zeros_like(self.get_emb_dmat())
+                                dm1_s_dm2[np.ix_(s2s[alt_sub_index], s2s[k])] += np.dot(dm1, np.dot(self.smat[np.ix_(s2s[alt_sub_index], s2s[k])], dm2))
+                                v_full = self.fs_scf_obj.get_veff(self.mol, dm1_s_dm2, hermi=0)#, hermi=hermi)
+                                v_full_sub = v_full[np.ix_(s2s[sub_index], s2s[sub_index])]
+                                v1 += v_full_sub + v_full_sub.T
+                        return v1
+                else:
+                    def proj_response(dm1):
+                        v1 = np.zeros_like(sub.get_dmat())
+                        for k, diff_sub in enumerate(self.subsystems):
+                            if k != alt_sub_index:
+                                dm2 = diff_sub.get_dmat()
+                                dm1_s_dm2 = np.zeros_like(self.get_emb_dmat())
+                                dm1_s_dm2[np.ix_(s2s[alt_sub_index], s2s[k])] += np.dot(dm1, np.dot(self.smat[np.ix_(s2s[alt_sub_index], s2s[k])], dm2))
+                                v_full = self.fs_scf_obj.get_veff(self.mol, dm1_s_dm2, hermi=0)#, hermi=hermi)
+                                v_full_sub = v_full[np.ix_(s2s[sub_index], s2s[sub_index])]
+                                v1 += v_full_sub + v_full_sub.T
+                        fds_1 = np.dot(self.smat[np.ix_(s2s[sub_index], s2s[alt_sub_index])], np.dot(dm1, self.fock[0][np.ix_(s2s[alt_sub_index], s2s[sub_index])]))
+                        v1 += (fds_1 + fds_1.T) * 0.5
+                        return v1
 
+        return proj_response
 
-    def gen_emb_sub_response(self, sub_index):
-        pass
+    def gen_sub_response(self, sub_index, alt_sub_index):
+        #Generate the response matrix for each subsystem.
+        proj_response = self.gen_proj_response(sub_index, alt_sub_index)
+        s2s = self.sub2sup
+        if isinstance(self.fs_scf_obj, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
+            if (self.unrestricted or self.mol.spin != 0):
+                pass
+            else:
+                pass
+        else:
+            if (self.unrestricted or self.mol.spin != 0):
+                pass
+            else:
+                sub = self.subsystems[sub_index]
+                alt_sub = self.subsystems[alt_sub_index]
+                if sub_index == alt_sub_index:
+                    sub_vresp_term = sub.env_scf.gen_response(sub.env_mo_coeff[0], sub.env_mo_occ[0]+sub.env_mo_occ[1], hermi=1)
+                else:
+                    fs_emb_mo_coeff = np.zeros_like(self.get_emb_dmat())
+                    fs_emb_mo_occ = np.zeros((self.get_emb_dmat().shape[0]))
+                    fs_emb_mo_coeff[np.ix_(s2s[alt_sub_index],s2s[alt_sub_index])] += alt_sub.env_mo_coeff[0]
+                    fs_emb_mo_occ[np.ix_(s2s[alt_sub_index])] += alt_sub.env_mo_occ[0]
+                    fs_emb_mo_occ[np.ix_(s2s[alt_sub_index])] += alt_sub.env_mo_occ[1]
+                    sup_vresp_term = self.fs_scf_obj.gen_response(fs_emb_mo_coeff, fs_emb_mo_occ, hermi=0)
+                    def sub_term(z1):
+                        z_full = np.zeros_like(self.get_emb_dmat())
+                        z_full[np.ix_(s2s[alt_sub_index],s2s[alt_sub_index])] += z1
+                        subsys_term = sup_vresp_term(z_full)[np.ix_(s2s[sub_index], s2s[sub_index])]
+                        return subsys_term
+                    sub_vresp_term = sub_term
+                def sub_emb_vresp_term(z1):
+                    return sub_vresp_term(z1) - proj_response(z1)
 
+        return sub_emb_vresp_term
 
+                
 
+    def gen_sub_vind(self, sub_index, alt_sub_index):
+        #Generate the induced potential for each subsystem
+        sub_response = self.gen_sub_response(sub_index, alt_sub_index)
+        if isinstance(self.fs_scf_obj, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
+            if (self.unrestricted or self.mol.spin != 0):
+                pass
+            else:
+                pass
+        else:
+            if (self.unrestricted or self.mol.spin != 0):
+                pass
+            else:
+                sub = self.subsystems[sub_index]
+                alt_sub = self.subsystems[alt_sub_index]
+                nao, nmo = sub.env_mo_coeff[0].shape
+                alt_nao, alt_nmo = alt_sub.env_mo_coeff[0].shape
+                mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                alt_mocc = alt_sub.env_mo_coeff[0][:,alt_sub.env_mo_occ[0]>0]
+                vir = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]==0]
+                alt_vir = alt_sub.env_mo_coeff[0][:,alt_sub.env_mo_occ[0]==0]
+                nocc = mocc.shape[1]
+                alt_nocc = alt_mocc.shape[1]
+                nvir = vir.shape[1]
+                alt_nvir = alt_vir.shape[1]
+                def fx(mo1):
+                    mo1 = mo1.reshape(alt_nvir, alt_nocc)
+                    dm1 = np.empty((alt_nao,alt_nao))
+                    dm = np.dot(alt_vir, np.dot(mo1*2., alt_mocc.T))
+                    #dm = np.dot(alt_vir, np.dot(mo1, alt_mocc.T))
+                    dm1 = dm + dm.T
+                    v1 = sub_response(dm1)
+                    v1vo = np.dot(vir.T, np.dot(v1, mocc))
+                    return v1vo
+        return fx
+
+               
     def solve_zvec(self):
-        zvec_0 = np.array([0. for sub in self.subsystems])
-        zvec_1 = np.array([100. for sub in self.subsystems])
-        resp_terms = np.zeros((len(self.subsystems), len(self.subsystems)))
+        zvec_0 = []
+        zvec_1 = []
+        s2s = self.sub2sup
+        x_terms = []
+        if (self.unrestricted or self.mol.spin != 0):
+            for i, sub in enumerate(self.subsystems):
+                occidxa = sub.env_mo_occ[0] > 0
+                occidxb = sub.env_mo_occ[0] > 0
+                viridxa = ~occidxa
+                viridxb = ~occidxb
+                nocca = np.count_nonzero(occidxa)
+                noccb = np.count_nonzero(occidxb)
+                nmoa, nmob = sub.env_mo_occ[0].size, sub.env_mo_occ[1].size
+                eai_a = sub.env_mo_energy[0][viridxa,None] - sub.env_mo_energy[0][occidxa]
+                eai_b = sub.env_mo_energy[1][viridxb,None] - sub.env_mo_energy[1][occidxb]
 
-        #Generate the response functions for each subsystem
-        for i, sub in enumerate(self.subsystems):
-            for j, alt_sub in enumerate(self.subsystems):
-                if i == j:
-                    occidxa = sub.env_mo_occ[0] > 0
-                    occidxb = sub.env_mo_occ[0] > 0
-                    viridxa = ~occidxa
-                    viridxb = ~occidxb
-                    nocca = np.count_nonzero(occidxa)
-                    noccb = np.count_nonzero(occidxb)
-                    nmoa, nmob = sub.env_mo_occ[0].size, sub.env_mo_occ[1].size
-                    eai_a = sub.env_mo_energy[0][viridxa,None] - sub.env_mo_energy[0][occidxa]
-                    eai_b = sub.env_mo_energy[1][viridxb,None] - sub.env_mo_energy[1][occidxb]
+                eai_a = 1./ eai_a
+                eai_b = 1./ eai_b
 
-                    eai_a = 1./ eai_a
-                    eai_b = 1./ eai_b
+                def vind_vo(z_vec):
+                    pass
 
-                    def vind_vo(z_vec):
-                        pass
+        else:
+            for i, sub in enumerate(self.subsystems):
 
-            x=0
+                nao, nmo = sub.env_mo_coeff[0].shape
+                mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                vir = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]==0]
+                nocc = mocc.shape[1]
+                nvir = vir.shape[1]
+                zvec_0.append(np.zeros((nvir,nocc)))
+                zvec_1.append(np.ones((nvir,nocc)))
 
-        while (np.max(np.abs(zvec_1 - zvec_0))):
+        z_diff = [100] * len(self.subsystems)
+        while (np.max(np.abs(np.array(z_diff))) > 1e-8):
+            x_terms = self.get_x_terms(zvec_0)
             for i,sub in enumerate(self.subsystems):
-                updated_X = 0.
+                occidx = sub.env_mo_occ[0] > 0
+                viridx = sub.env_mo_occ[0] == 0
+                e_ai = sub.env_mo_energy[0][viridx,None] - sub.env_mo_energy[0][occidx]
+                nocc = np.count_nonzero(occidx)
+                nvir = sub.env_mo_occ[0].size - nocc
+                e_ai = 1. / e_ai
+                def vind_vo(zvec):
+                    v = self.gen_sub_vind(i,i)(zvec)
+                    v *= e_ai
+                    return v.ravel()
+                #zvec_1_long = lib.krylov(vind_vo, new_x.ravel())
+                zvec_1_long = lib.krylov(vind_vo, x_terms[i].ravel())
+                zvec_1[i] = zvec_1_long.reshape(nvir,nocc)
+                z_diff[i] = np.max(np.abs(zvec_1[i] - zvec_0[i]))
+                print ('diff')
+                print (z_diff[i])
+            zvec_0 = copy.copy(zvec_1)
+        self.zvec = zvec_0
+
+
+    def get_b_terms(self):
+        '''Gets the b terms to solve for U.'''
+        if not self.b_terms:
+            self.b_terms = []
+            hcore_deriv = self.fs_nuc_grad_obj.hcore_generator(self.mol)
+            vhf_grad = self.fs_nuc_grad_obj.get_veff(self.mol, self.get_emb_dmat())
+            s1 = self.fs_nuc_grad_obj.get_ovlp(self.mol)
+            s2s = self.sub2sup
+            atmlist = range(self.mol.natm)
+            aoslices = self.mol.aoslice_by_atom()
+            xyz = [0,1,2]
+
+            for i, sub in enumerate(self.subsystems):
+                bterm_i = []
+                mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                vir = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]==0]
+                for k, ia in enumerate(atmlist):
+                    p0,p1 = aoslices [ia, 2:]
+                    h1ao = hcore_deriv(ia)
+                    s1ao = np.zeros_like(h1ao)
+                    s1ao[:,p0:p1] += s1[:,p0:p1]
+                    v1ao = np.zeros_like(h1ao)
+                    v1ao[:,p0:p1] += vhf_grad[:,p0:p1]
+                    v1ao += v1ao.transpose(0,2,1)
+                    proj1ao = np.zeros_like(h1ao)[np.ix_(xyz, s2s[i],s2s[i])]
+                    for j, alt_sub in enumerate(self.subsystems):
+                        if j != i :
+                            alt_dmat = alt_sub.get_dmat()
+                            fock_grad_ab = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[j])]
+                            smat_ba = self.smat[np.ix_(s2s[j], s2s[i])]
+                            fock_ab = self.fock[0][np.ix_(s2s[i], s2s[j])]
+                            smat_grad_ba = s1ao[np.ix_(xyz, s2s[j], s2s[i])]
+                            proj1ao[0] += np.dot(fock_grad_ab[0], np.dot(alt_dmat, smat_ba))
+                            proj1ao[0] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[0]))
+                            proj1ao[1] += np.dot(fock_grad_ab[1], np.dot(alt_dmat, smat_ba))
+                            proj1ao[1] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[1]))
+                            proj1ao[2] += np.dot(fock_grad_ab[2], np.dot(alt_dmat, smat_ba))
+                            proj1ao[2] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[2]))
+                            proj1ao += proj1ao.transpose(0,2,1)
+                    f1ao_emb = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[i])] + proj1ao
+
+                    f1vo_emb = np.einsum('ma,xmn,ni->xai', vir, f1ao_emb, mocc)
+                    atm_s2s = self.atm_sub2sup
+                    if ia in atm_s2s[i]:
+                        s1_vo = np.einsum('ma,xmn,ni->xai', vir, s1ao[np.ix_(xyz, s2s[i],s2s[i])], mocc)
+                        s1_vo[0] *= s1_vo[0] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+                        s1_vo[1] *= s1_vo[1] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+                        s1_vo[2] *= s1_vo[2] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+
+                        dm_s1_dm = np.einsum('mi,xmn,nj->xij', sub.get_dmat(), s1ao[np.ix_(xyz, s2s[i], s2s[i])], sub.get_dmat())
+                        full_dm_s1_dm = np.zeros_like(h1ao)
+                        full_dm_s1_dm[np.ix_(xyz, s2s[i], s2s[i])] += dm_s1_dm
+
+                        veff_term = np.zeros_like(f1ao_emb) 
+                        veff_term[0] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[0], hermi=0)
+                        veff_term[1] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[1], hermi=0)
+                        veff_term[2] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[2], hermi=0)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
+
+                        proj_veff = np.zeros_like(h1ao)
+                        proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                        proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                        proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                        proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
+                        proj_term += proj_term.transpose(0,2,1)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, proj_term, mocc)
+
+                    else:
+                        dm_s1_dm = np.einsum('mi,xmn,nj->xij', alt_sub.get_dmat(), s1ao[np.ix_(xyz, s2s[j], s2s[j])], alt_sub.get_dmat())
+                        full_dm_s1_dm = np.zeros_like(h1ao)
+                        full_dm_s1_dm[np.ix_(xyz, s2s[j], s2s[j])] += dm_s1_dm
+
+                        full_veff_term = np.zeros_like(h1ao) 
+                        full_veff_term[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                        full_veff_term[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                        full_veff_term[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                        veff_term = full_veff_term[np.ix_(xyz, s2s[i], s2s[i])]
+                        s1_vo = np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
+
+                        proj_veff = np.zeros_like(h1ao)
+                        proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                        proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                        proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                        proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
+                        proj_term += proj_term.transpose(0,2,1)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, proj_term, mocc)
+
+                        #last proj term
+                        fds_term = np.einsum('mn,xnl,lp->xmp', self.fock[0][np.ix_(s2s[i], s2s[j])], dm_s1_dm, self.smat[np.ix_(s2s[j], s2s[i])])
+                        fds_term += fds_term.transpose(0,2,1)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, fds_term, mocc)
+
+                    bterm_i.append(f1vo_emb - s1_vo)
+                self.b_terms.append(copy.copy(bterm_i))
+
+        return self.b_terms
+
+    def get_x_terms(self, zvectors, base_xterms=None):
+        '''returns the xterms'''
+        if not base_xterms:
+            base_xterms = self.base_xterms
+
+        if not base_xterms:
+            s2s = self.sub2sup
+            base_xterms = []
+            for i, sub in enumerate(self.subsystems):
+                mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
+                vir = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]==0]
+                x_term_ao = np.zeros_like(sub.env_mo_coeff[0])
+                for j, alt_sub in enumerate(self.subsystems):
+                    if i != j:
+                        s_ij = self.smat[np.ix_(s2s[i],s2s[j])]
+
+                        dm1_s_dm2 = np.dot(sub.get_dmat(), np.dot(s_ij, alt_sub.get_dmat()))
+                        full_dmat = np.zeros_like(self.get_emb_dmat())
+                        full_dmat[np.ix_(s2s[i], s2s[j])] += dm1_s_dm2
+                        full_xterm = self.fs_scf_obj.get_veff(self.mol, full_dmat, hermi=0)
+                        sub_xterm = full_xterm[np.ix_(s2s[i], s2s[i])]
+                        x_term_ao += sub_xterm + sub_xterm.T
+
+                x_term_mo = np.dot(vir.T, np.dot(x_term_ao, mocc)) * -2.
+                base_xterms.append(x_term_mo)
+            self.base_xterms = base_xterms
+
+        full_xterm = []
+        for i,sub in enumerate(self.subsystems):
+            occidx = sub.env_mo_occ[0] > 0
+            viridx = sub.env_mo_occ[0] == 0
+            new_x = copy.copy(self.base_xterms[i])
+            for j,alt_sub in enumerate(self.subsystems):
+                if i != j:
+                    new_x -= self.gen_sub_vind(i,j)(zvectors[j])
+            e_ai = sub.env_mo_energy[0][viridx,None] - sub.env_mo_energy[0][occidx]
+            nocc = np.count_nonzero(occidx)
+            nvir = sub.env_mo_occ[0].size - nocc
+            e_ai = 1. / e_ai
+            nmo = nocc + nvir
+            new_x *= -e_ai
+            full_xterm.append(new_x)
+        return full_xterm
 
 
     def get_sub_den_grad(self):
@@ -1520,121 +1748,25 @@ class ClusterSuperSystem:
         #There is a much faster way to do this but it is more complicated.
 
         self.solve_zvec() 
-        print (x)
-        a_mat_sub_index = []
-        ndim_full = 0
-        for sub in self.subsystems:
-            occ_a = np.count_nonzero(sub.env_mo_occ[0])
-            occ_b = np.count_nonzero(sub.env_mo_occ[1])
-            vir_a = sub.env_mo_occ[0].shape[0] - occ_a
-            vir_b = sub.env_mo_occ[1].shape[0] - occ_a
-            sub_ndim = (vir_a + vir_b) * (occ_a + occ_b)
-            a_mat_sub_index.append(sub_ndim)
-            ndim_full += sub_ndim
-
-
-
-        a_full = np.zeros((ndim_full,ndim_full))
+        self.get_b_terms()
+        full_xterms = self.get_x_terms(self.zvec)
+        u_terms = []
+        dm_terms = []
         for i, sub in enumerate(self.subsystems):
-            for j, alt_sub in enumerate(self.subsystems):
-                if i == j: 
-                    int2e_mo_iiii_aa, int2e_mo_iiii_bb, int2e_mo_iiii_ab, int2e_mo_iiii_ba = helpers.get_emb_mo(self, (i,i,i,i))
-                    for k, temp in enumerate(self.subsystems):
-                        if i != k:
-                            int2e_mo_ikii_aa, int2e_mo_ikii_bb, int2e_mo_ikii_ab, int2e_mo_ikii_ba = helpers.get_emb_mo(self, (i,k,i,i))
-                            smat_ik = self.smat[np.ix_(s2s[i], s2s[k])]
-                            smat_ki = smat_ik.T
-                            smat_mo_aa = np.einsum('nm,nk,mi', smat_ki, temp.env_mo_coeff[0], sub.env_mo_coeff[0])
-                            smat_mo_bb = np.einsum('nm,nk,mi', smat_ki, temp.env_mo_coeff[0], sub.env_mo_coeff[0])
-                            proj_term_1_aa = np.einsum('akbj,ki->aibj', int2e_mo_ikii_aa, smat_mo_aa)
-                            proj_term_1_bb = np.einsum('akbj,ki->aibj', int2e_mo_ikii_bb, smat_mo_bb)
-                            proj_term_1_ab = np.einsum('akbj,ki->aibj', int2e_mo_ikii_ab, smat_mo_aa)
-                            proj_term_1_ba = np.einsum('akbj,ki->aibj', int2e_mo_ikii_ba, smat_mo_bb)
+            u_sub = []
+            dm_sub = []
+            for atm in range(self.mol.natm):
+                inv_x = np.linalg.pinv(full_xterms[i].T)
+                temp_u = np.dot(inv_x, np.dot(self.zvec[i].T, self.b_terms[i][atm][0]))
+                print (temp_u)
+                print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
+                print (x)
+                u_sub.append(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
+                
 
+            u_terms.append(u_sub)
+        return u_terms
 
-
-                    occ_a = np.count_nonzero(sub.env_mo_occ[0])
-                    occ_b = np.count_nonzero(sub.env_mo_occ[1])
-                    vir_a = sub.env_mo_occ[0].shape[0] - occ_a
-                    vir_b = sub.env_mo_occ[1].shape[0] - occ_b
-                    #mo energy terms
-                    mo_e_vir = np.concatenate((sub.env_mo_energy[0][occ_a:], sub.env_mo_energy[1][occ_b:]))
-                    mo_e_occ = np.concatenate((sub.env_mo_energy[0][:occ_a], sub.env_mo_energy[1][:occ_b]))
-                    mo_diff = mo_e_occ - mo_e_vir[:, np.newaxis]
-                    a_ii = np.diag(mo_diff.flatten())
-                    #proj_terms
-                    for ai in range(a_mat_sub_index[i]):
-                        for bj in range(a_mat_sub_index[j]):
-                            a_val = ai//(occ_a + occ_b)
-                            i_val = ai - ((occ_a + occ_b) * a_val)
-                            b_val = bj//(occ_a + occ_b)
-                            j_val = bj - ((occ_a + occ_b) * b_val)
-                            #AA
-                            if a_val < vir_a and i_val < occ_a and b_val < vir_a and j_val < occ_a:
-                                a_index = a_val + occ_a
-                                b_index = b_val + occ_b
-                                int2e_1 = int2e_mo_iiii_aa[a_index,i_val,b_index,j_val] - int2e_mo_iiii_aa[a_index, j_val, b_index, i_val]
-                                int2e_2 = int2e_mo_iiii_aa[a_index,i_val,j_val,b_index] - int2e_mo_iiii_aa[a_index, j_val, i_val, b_index]
-                                a_ii[ai,bj] -= (int2e_1 + int2e_2)
-                                #proj term
-                                
-                                #a_ii[ai,bj] += (int2e_1 + int2e_2)
-                            #BB
-                            #AB
-                            #BA
-                            
-
-                else:
-                    int2e_mo_iijj_aa, int2e_mo_iijj_bb, int2e_mo_iijj_ab, int2e_mo_iijj_ba = helpers.get_emb_mo(self, (i,i,j,j))
-                    int2e_mo_ijjj_aa, int2e_mo_ijjj_bb, int2e_mo_ijjj_ab, int2e_mo_ijjj_ba = helpers.get_emb_mo(self, (i,j,j,j))
-                    f_mo_ij = 0
-                    s_mo_ji = 0
-                    a_ij = np.zeros((a_mat_sub_index[i], a_mat_sub_index[j]))
-                    sub_i_occ_a = np.count_nonzero(sub.env_mo_occ[0])
-                    sub_i_occ_b = np.count_nonzero(sub.env_mo_occ[1])
-                    sub_i_vir_a = sub.env_mo_occ[0].shape[0] - sub_i_occ_a
-                    sub_i_vir_b = sub.env_mo_occ[1].shape[0] - sub_i_occ_b
-                    sub_j_occ_a = np.count_nonzero(alt_sub.env_mo_occ[0])
-                    sub_j_occ_b = np.count_nonzero(alt_sub.env_mo_occ[1])
-                    sub_j_vir_a = alt_sub.env_mo_occ[0].shape[0] - sub_j_occ_a
-                    sub_j_vir_b = alt_sub.env_mo_occ[1].shape[0] - sub_j_occ_b
-                    for ai in range(a_mat_sub_index[i]):
-                        for bj in range(a_mat_sub_index[j]):
-                            a_val = ai//(sub_i_occ_a + sub_i_occ_b)
-                            i_val = ai - ((sub_i_occ_orbs_a + sub_i_occ_orbs_b) * a_val)
-                            b_val = bj//(sub_j_occ_orbs_a + sub_j_occ_orbs_b)
-                            j_val = bj - ((sub_j_occ_orbs_a + sub_j_occ_orbs_b) * b_val)
-
-        #while not converged:
-        z_vec = np.array([0. for sub in self.subsystems])
-        z_vec_new = np.array([100. for sub in self.subsystems])
-
-        print ("HELLO")
-        print (z_vec)
-        while (np.abs(np.max(z_vec_new - z_vec)) > 1e-8):
-            z_vec = z_vec_new
-            z_vec_new = np.zeros_like(z_vec)
-            for i, sub in enumerate(self.subsystems):
-                a_ii = 0
-                for j, alt_sub in enumerate(self.subsystems):
-                    if i != j:
-                        print (z_vec)
-                z_vec_new[i] = 0.
-
-
-
-
-        #Calculate A
-        grad_subsys = cluster_subsystem.ClusterEnvSubSystemGrad(self.subsystems[0])
-        print (grad_subsys.subsys.mol.natm)
-        s1_ao = grad_subsys.grad_obj.get_ovlp()
-        s0_mo = np.linalg.multi_dot([grad_subsys.subsys.env_mo_coeff[0].T, grad_subsys.subsys.env_scf.get_ovlp(), grad_subsys.subsys.env_mo_coeff[0]])
-        s1_mo = np.linalg.multi_dot([grad_subsys.subsys.env_mo_coeff[0].T, s1_ao[0], grad_subsys.subsys.env_mo_coeff[0]])
-        return -1. * s1_mo[:grad_subsys.subsys.mol.nelec[0], :grad_subsys.subsys.mol.nelec[0]]
-
-        print ("HERE")
-
-        #Calculate B
 
     def get_emb_nuc_grad(self, den_grad=None):
         """After a F&T embedding convergence, calculates the embedding nuclear gradient. 
