@@ -7,6 +7,8 @@ import copy as copy
 import numpy as np
 import h5py
 
+from functools import reduce
+
 from pyscf import scf, dft, lib, lo
 from pyscf.tools import cubegen, molden
 
@@ -1376,51 +1378,9 @@ class ClusterSuperSystem:
             print('Writing Supersystem FT spin density'.center(80))
             self.save_ft_spin_density_file()
 
-    def get_sub_proj_grad(self, u_matrices):
-        #Calculate the gradient of the projection potential in MO basis. 
-        self.get_supersystem_nuc_grad()
-        grad_subsys = cluster_subsystem.ClusterEnvSubSystemGrad(self.subsystems[0])
-        proj_pot = np.zeros((2,3,grad_subsys.subsys.env_dmat[0].shape[0], grad_subsys.subsys.env_dmat[0].shape[0]))
-        #Hcore part first
-        hcore_full = self.fs_nuc_grad_obj.hcore_generator()
-        atm_s2s = self.atm_sub2sup
-        s2s = self.sub2sup
-        grad_smat_full = self.fs_nuc_grad_obj.get_ovlp()
-        full_aoslices = self.mol.aoslice_by_atom()
-
-        hcore_ab = self.hcore[np.ix_(s2s[0],s2s[1])]
-        dm_b = self.subsystems[1].env_dmat
-        dm_b_grad = sub_den_grad[1]
-        smat_ba = self.smat[np.ix_(s2s[1],s2s[0])]
-        xyz = [0,1,2]
-        for atm in range(grad_subsys.subsys.mol.natm):
-            full_atm = atm_s2s[0][atm]
-            h_mat = hcore_full(atm)
-            grad_hmat_ab = h_mat[np.ix_(xyz, s2s[0],s2s[1])]
-
-            p0_full, p1_full = full_aoslices[full_atm,2:]
-            grad_smat_atm = np.zeros_like(grad_smat_full)
-            #grad_smat_atm[:,p0_full:p1_full] = grad_smat_full[:,p0_full:p1_full]
-            grad_smat_atm[:,:,p0_full:p1_full] = grad_smat_full[:,:,p0_full:p1_full]
-            grad_smat_ba = grad_smat_atm[np.ix_(xyz, s2s[1], s2s[0])] * -1.
-
-            hterm = np.einsum('xij,sjk,kl->sxil', grad_hmat_ab, dm_b, smat_ba)
-            dterm = np.einsum('ij,sxjk,kl->sxil', hcore_ab, dm_b_grad, smat_ba)
-            sterm = np.einsum('ij,sjk,xkl->sxil', hcore_ab, dm_b, grad_smat_ba)
-            dterm_test = np.einsum('ij,sjk,skl,mn->sin', hcore_ab, dm_b, dm_b, smat_ba)
-
-            dterm_num = dterm + dterm.transpose(0,1,3,2)
-            print ("dterm num")
-            print (dterm_num)
-            proj_pot += -1 * (hterm + dterm + sterm)
-            proj_pot += -1 * (hterm + dterm + sterm).transpose(0,1,3,2)
-
-        #return grad_smat_ba 
-        return proj_pot
-
     def gen_proj_response(self, sub_index, alt_sub_index):
         s2s = self.sub2sup
-        hermi = 1
+        hermi = 0
         if isinstance(self.fs_scf_obj, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
             pass
         else:
@@ -1450,6 +1410,7 @@ class ClusterSuperSystem:
                                 v_full = self.fs_scf_obj.get_veff(self.mol, dm1_s_dm2, hermi=0)#, hermi=hermi)
                                 v_full_sub = v_full[np.ix_(s2s[sub_index], s2s[sub_index])]
                                 v1 += v_full_sub + v_full_sub.T
+                                v1 *= 0.5
                         return v1
                 else:
                     def proj_response(dm1):
@@ -1462,6 +1423,7 @@ class ClusterSuperSystem:
                                 v_full = self.fs_scf_obj.get_veff(self.mol, dm1_s_dm2, hermi=0)#, hermi=hermi)
                                 v_full_sub = v_full[np.ix_(s2s[sub_index], s2s[sub_index])]
                                 v1 += v_full_sub + v_full_sub.T
+                                v1 *= 0.5
                         fds_1 = np.dot(self.smat[np.ix_(s2s[sub_index], s2s[alt_sub_index])], np.dot(dm1, self.fock[0][np.ix_(s2s[alt_sub_index], s2s[sub_index])]))
                         v1 += (fds_1 + fds_1.T) * 0.5
                         return v1
@@ -1533,7 +1495,6 @@ class ClusterSuperSystem:
                     mo1 = mo1.reshape(alt_nvir, alt_nocc)
                     dm1 = np.empty((alt_nao,alt_nao))
                     dm = np.dot(alt_vir, np.dot(mo1*2., alt_mocc.T))
-                    #dm = np.dot(alt_vir, np.dot(mo1, alt_mocc.T))
                     dm1 = dm + dm.T
                     v1 = sub_response(dm1)
                     v1vo = np.dot(vir.T, np.dot(v1, mocc))
@@ -1589,22 +1550,54 @@ class ClusterSuperSystem:
                     v = self.gen_sub_vind(i,i)(zvec)
                     v *= e_ai
                     return v.ravel()
-                #zvec_1_long = lib.krylov(vind_vo, new_x.ravel())
                 zvec_1_long = lib.krylov(vind_vo, x_terms[i].ravel())
-                zvec_1[i] = zvec_1_long.reshape(nvir,nocc)
+                zvec_1[i] = copy.copy(zvec_1_long.reshape(nvir,nocc))
                 z_diff[i] = np.max(np.abs(zvec_1[i] - zvec_0[i]))
-                print ('diff')
-                print (z_diff[i])
+                #print ('diff')
+                #print (z_diff[i])
             zvec_0 = copy.copy(zvec_1)
         self.zvec = zvec_0
 
 
-    def get_b_terms(self):
-        '''Gets the b terms to solve for U.'''
-        if not self.b_terms:
+    def get_b_terms(self, ):
+        '''Gets the b terms to solve for U. RHF only.'''
+        if self.b_terms:
+            return self.b_terms
+
+        mem_now = lib.current_memory()[0]
+        max_memory = max(2000, self.fs_scf.max_memory*0.9 - mem_now)
+        
+        if True:
+            sub1 = self.subsystems[0]
+            occidx_sub1 = sub1.env_mo_occ[0] > 0
+            viridx_sub1 = sub1.env_mo_occ[0] == 0
+            nocc_sub1 = np.count_nonzero(occidx_sub1)
+            nvir_sub1 = sub1.env_mo_occ[0].size - nocc_sub1
+            nao_sub1 = sub1.env_mo_coeff[0].shape[0]
+            mocc_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]>0]
+            vir_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]==0]
+            e_a_s1 = sub1.env_mo_energy[0][viridx_sub1]
+            e_i_s1 = sub1.env_mo_energy[0][occidx_sub1]
+            e_ai_s1 = 1. / lib.direct_sum('a-i->ai', e_a_s1, e_i_s1)
+            sub2 = self.subsystems[1]
+            occidx_sub2 = sub2.env_mo_occ[0] > 0
+            viridx_sub2 = sub2.env_mo_occ[0] == 0
+            nocc_sub2 = np.count_nonzero(occidx_sub2)
+            nvir_sub2 = sub2.env_mo_occ[0].size - nocc_sub2
+            nao_sub2 = sub2.env_mo_coeff[0].shape[0]
+            mocc_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]>0]
+            vir_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]==0]
+            e_a_s2 = sub2.env_mo_energy[0][viridx_sub2]
+            e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
+            e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
+            s2s = self.sub2sup
+            b_size = (nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2)
+            blksize = max(2, int(max_memory*1e6/8 / (b_size*3*6)))
+
+
             self.b_terms = []
             hcore_deriv = self.fs_nuc_grad_obj.hcore_generator(self.mol)
-            vhf_grad = self.fs_nuc_grad_obj.get_veff(self.mol, self.get_emb_dmat())
+            ao_grad = self.mol.intor('int2e_ip1')
             s1 = self.fs_nuc_grad_obj.get_ovlp(self.mol)
             s2s = self.sub2sup
             atmlist = range(self.mol.natm)
@@ -1620,9 +1613,15 @@ class ClusterSuperSystem:
                     h1ao = hcore_deriv(ia)
                     s1ao = np.zeros_like(h1ao)
                     s1ao[:,p0:p1] += s1[:,p0:p1]
-                    v1ao = np.zeros_like(h1ao)
-                    v1ao[:,p0:p1] += vhf_grad[:,p0:p1]
-                    v1ao += v1ao.transpose(0,2,1)
+                    s1ao[:,:,p0:p1] += s1[:,p0:p1].transpose(0,2,1)
+                    ao_grad_atm = np.zeros_like(ao_grad)
+                    ao_grad_atm[:,p0:p1] += ao_grad[:,p0:p1]
+                    ao_grad_atm += ao_grad_atm.transpose(0,2,1,3,4)
+                    ao_grad_atm += ao_grad_atm.transpose(0,3,4,1,2)
+                    ao_grad_atm *= -1
+                    v1ao = np.einsum('xijkl,kl->xij', ao_grad_atm, self.get_emb_dmat())
+                    v1ao -= np.einsum('xikjl,kl->xij', ao_grad_atm, self.get_emb_dmat()) * 0.5
+
                     proj1ao = np.zeros_like(h1ao)[np.ix_(xyz, s2s[i],s2s[i])]
                     for j, alt_sub in enumerate(self.subsystems):
                         if j != i :
@@ -1638,7 +1637,7 @@ class ClusterSuperSystem:
                             proj1ao[2] += np.dot(fock_grad_ab[2], np.dot(alt_dmat, smat_ba))
                             proj1ao[2] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[2]))
                             proj1ao += proj1ao.transpose(0,2,1)
-                    f1ao_emb = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[i])] + proj1ao
+                    f1ao_emb = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[i])] - (proj1ao * 0.5)
 
                     f1vo_emb = np.einsum('ma,xmn,ni->xai', vir, f1ao_emb, mocc)
                     atm_s2s = self.atm_sub2sup
@@ -1664,7 +1663,7 @@ class ClusterSuperSystem:
                         proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
                         proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
                         proj_term += proj_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, proj_term, mocc)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
 
                     else:
                         dm_s1_dm = np.einsum('mi,xmn,nj->xij', alt_sub.get_dmat(), s1ao[np.ix_(xyz, s2s[j], s2s[j])], alt_sub.get_dmat())
@@ -1684,12 +1683,12 @@ class ClusterSuperSystem:
                         proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
                         proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
                         proj_term += proj_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, proj_term, mocc)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
 
                         #last proj term
                         fds_term = np.einsum('mn,xnl,lp->xmp', self.fock[0][np.ix_(s2s[i], s2s[j])], dm_s1_dm, self.smat[np.ix_(s2s[j], s2s[i])])
                         fds_term += fds_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, fds_term, mocc)
+                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (fds_term*0.5), mocc)
 
                     bterm_i.append(f1vo_emb - s1_vo)
                 self.b_terms.append(copy.copy(bterm_i))
@@ -1697,7 +1696,7 @@ class ClusterSuperSystem:
         return self.b_terms
 
     def get_x_terms(self, zvectors, base_xterms=None):
-        '''returns the xterms'''
+        '''returns the xterms for rhf'''
         if not base_xterms:
             base_xterms = self.base_xterms
 
@@ -1719,7 +1718,7 @@ class ClusterSuperSystem:
                         sub_xterm = full_xterm[np.ix_(s2s[i], s2s[i])]
                         x_term_ao += sub_xterm + sub_xterm.T
 
-                x_term_mo = np.dot(vir.T, np.dot(x_term_ao, mocc)) * -2.
+                x_term_mo = np.dot(vir.T, np.dot(x_term_ao, mocc))
                 base_xterms.append(x_term_mo)
             self.base_xterms = base_xterms
 
@@ -1740,6 +1739,159 @@ class ClusterSuperSystem:
             full_xterm.append(new_x)
         return full_xterm
 
+    def gen_full_a(self):
+
+        #RHF
+        if True:
+            sub1 = self.subsystems[0]
+            occidx_sub1 = sub1.env_mo_occ[0] > 0
+            viridx_sub1 = sub1.env_mo_occ[0] == 0
+            nocc_sub1 = np.count_nonzero(occidx_sub1)
+            nvir_sub1 = sub1.env_mo_occ[0].size - nocc_sub1
+            nao_sub1 = sub1.env_mo_coeff[0].shape[0]
+            mocc_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]>0]
+            vir_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]==0]
+            e_a_s1 = sub1.env_mo_energy[0][viridx_sub1]
+            e_i_s1 = sub1.env_mo_energy[0][occidx_sub1]
+            e_ai_s1 = 1. / lib.direct_sum('a-i->ai', e_a_s1, e_i_s1)
+            sub2 = self.subsystems[1]
+            occidx_sub2 = sub2.env_mo_occ[0] > 0
+            viridx_sub2 = sub2.env_mo_occ[0] == 0
+            nocc_sub2 = np.count_nonzero(occidx_sub2)
+            nvir_sub2 = sub2.env_mo_occ[0].size - nocc_sub2
+            nao_sub2 = sub2.env_mo_coeff[0].shape[0]
+            mocc_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]>0]
+            vir_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]==0]
+            e_a_s2 = sub2.env_mo_energy[0][viridx_sub2]
+            e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
+            e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
+            s2s = self.sub2sup
+            a_size = (nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2)
+            def fx(dm1):
+                dm1 = dm1.reshape(-1, a_size)
+                dm_sub1 = dm1[:,:(nvir_sub1*nocc_sub1)]
+                dm_sub2 = dm1[:,(nvir_sub1*nocc_sub1):]
+                dm_sub1 = dm_sub1.reshape(-1, nvir_sub1, nocc_sub1)
+                dm_sub2 = dm_sub2.reshape(-1, nvir_sub2, nocc_sub2)
+                nset = len(dm1)
+                ao_dm_sub1 = np.empty((nset, nao_sub1, nao_sub1))
+                for i, x in enumerate(dm_sub1):
+                    temp_dm = reduce(np.dot, (vir_sub1, x*2., mocc_sub1.T))
+                    ao_dm_sub1[i] = copy.copy(temp_dm + temp_dm.T)
+
+                ao_dm_sub2 = np.empty((nset, nao_sub2, nao_sub2))
+                for i, x in enumerate(dm_sub2):
+                    temp_dm = reduce(np.dot, (vir_sub2, x*2., mocc_sub2.T))
+                    ao_dm_sub2[i] = copy.copy(temp_dm + temp_dm.T)
+
+                #Sub 1 part
+                a_I_I_ao = np.zeros((nset, nao_sub1, nao_sub1))
+                a_I_II_ao = np.zeros((nset, nao_sub1, nao_sub1))
+                a_I_I = np.empty_like(dm_sub1)
+                a_I_II = np.empty_like(dm_sub1)
+                smat_temp = self.smat[np.ix_(s2s[1], s2s[0])]
+                for i in range(nset):
+                    a_I_I_ao[i] += sub1.env_scf.get_veff(sub1.mol, ao_dm_sub1[i])
+                    temp_dm = np.zeros_like(self.get_emb_dmat())
+                    temp_dm[np.ix_(s2s[0], s2s[0])] += ao_dm_sub1[i]
+                    proj_temp = self.fs_scf_obj.get_veff(self.mol, temp_dm)
+                    proj_term = reduce(np.dot, (proj_temp[np.ix_(s2s[0], s2s[1])], sub2.get_dmat(), smat_temp))
+                    a_I_I_ao[i] -= 0.5 * (proj_term + proj_term.T)
+
+                    temp_dm = np.zeros_like(self.get_emb_dmat())
+                    temp_dm[np.ix_(s2s[1], s2s[1])] += ao_dm_sub2[i]
+                    a_I_II_ao[i] += self.fs_scf_obj.get_veff(self.mol, temp_dm)[np.ix_(s2s[0], s2s[0])]
+                    proj_temp = self.fs_scf_obj.get_veff(self.mol, temp_dm)
+                    proj_term = reduce(np.dot, (proj_temp[np.ix_(s2s[0], s2s[1])], sub2.get_dmat(), smat_temp))
+                    a_I_II_ao[i] -= 0.5 * (proj_term + proj_term.T)
+                    proj_term = reduce (np.dot, (self.fock[0][np.ix_(s2s[0], s2s[1])], ao_dm_sub2[i], smat_temp))
+                    a_I_II_ao[i] -= 0.5 * (proj_term + proj_term.T)
+
+                    a_I_I[i] = reduce(np.dot, (vir_sub1.T, a_I_I_ao[i], mocc_sub1))
+                    a_I_II[i] = reduce(np.dot, (vir_sub1.T, a_I_II_ao[i], mocc_sub1))
+
+
+                a_I = a_I_I + a_I_II
+                a_I *= e_ai_s1
+
+                #Sub 2 part
+                a_II_I_ao = np.zeros((nset, nao_sub2, nao_sub2))
+                a_II_II_ao = np.zeros((nset, nao_sub2, nao_sub2))
+                a_II_I = np.empty_like(dm_sub2)
+                a_II_II = np.empty_like(dm_sub2)
+                smat_temp = self.smat[np.ix_(s2s[0], s2s[1])]
+                for i in range(nset):
+                    temp_dm = np.zeros_like(self.get_emb_dmat())
+                    temp_dm[np.ix_(s2s[0], s2s[0])] += ao_dm_sub1[i]
+                    a_II_I_ao[i] += self.fs_scf_obj.get_veff(self.mol, temp_dm)[np.ix_(s2s[1], s2s[1])]
+                    proj_temp = self.fs_scf_obj.get_veff(self.mol, temp_dm)
+                    proj_term = reduce(np.dot, (proj_temp[np.ix_(s2s[1], s2s[0])], sub1.get_dmat(), smat_temp))
+                    a_II_I_ao[i] -= 0.5 * (proj_term + proj_term.T)
+                    proj_term = reduce (np.dot, (self.fock[0][np.ix_(s2s[1], s2s[0])], ao_dm_sub1[i], smat_temp))
+                    a_II_I_ao[i] -= 0.5 * (proj_term + proj_term.T)
+
+                    a_II_II_ao[i] += sub2.env_scf.get_veff(sub2.mol, ao_dm_sub2[i])
+
+                    temp_dm = np.zeros_like(self.get_emb_dmat())
+                    temp_dm[np.ix_(s2s[1], s2s[1])] += ao_dm_sub2[i]
+                    proj_temp = self.fs_scf_obj.get_veff(self.mol, temp_dm)
+                    proj_term = reduce(np.dot, (proj_temp[np.ix_(s2s[1], s2s[0])], sub1.get_dmat(), smat_temp))
+                    a_II_II_ao[i] -= 0.5 * (proj_term + proj_term.T)
+
+                    a_II_I[i] = reduce(np.dot, (vir_sub2.T, a_II_I_ao[i], mocc_sub2))
+                    a_II_II[i] = reduce(np.dot, (vir_sub2.T, a_II_II_ao[i], mocc_sub2))
+
+                a_II = a_II_I + a_II_II
+                a_II *= e_ai_s2
+
+                total_a_mat = np.concatenate((a_I.reshape(-1, (nvir_sub1*nocc_sub1)), a_II.reshape(-1, (nvir_sub2*nocc_sub2))),axis=1)
+                return total_a_mat.ravel()
+        return fx
+
+
+    def solve_u(self):
+        '''solves for full system U, Currently only for one dimension and one atom.'''
+
+        mem_now = lib.current_memory()[0]
+        max_memory = max(2000, self.fs_scf.max_memory*0.9-mem_now)
+        u_list = []
+        #RHF ONLY
+        if True:
+            vind_vo = self.gen_full_a()
+            self.get_b_terms()
+            b_vector = np.zeros((self.b_terms[0][0][0].size+self.b_terms[1][0][0].size))
+            sub1 = self.subsystems[0]
+            occidx_sub1 = sub1.env_mo_occ[0] > 0
+            viridx_sub1 = sub1.env_mo_occ[0] == 0
+            nocc_sub1 = np.count_nonzero(occidx_sub1)
+            nvir_sub1 = sub1.env_mo_occ[0].size - nocc_sub1
+            nao_sub1 = sub1.env_mo_coeff[0].shape[0]
+            mocc_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]>0]
+            vir_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]==0]
+            e_a_s1 = sub1.env_mo_energy[0][viridx_sub1]
+            e_i_s1 = sub1.env_mo_energy[0][occidx_sub1]
+            e_ai_s1 = 1. / lib.direct_sum('a-i->ai', e_a_s1, e_i_s1)
+            sub2 = self.subsystems[1]
+            occidx_sub2 = sub2.env_mo_occ[0] > 0
+            viridx_sub2 = sub2.env_mo_occ[0] == 0
+            nocc_sub2 = np.count_nonzero(occidx_sub2)
+            nvir_sub2 = sub2.env_mo_occ[0].size - nocc_sub2
+            nao_sub2 = sub2.env_mo_coeff[0].shape[0]
+            mocc_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]>0]
+            vir_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]==0]
+            e_a_s2 = sub2.env_mo_energy[0][viridx_sub2]
+            e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
+            e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
+            b_vector[:self.b_terms[0][0][0].size] += self.b_terms[0][0][0].ravel()
+            b_vector[:self.b_terms[0][0][0].size] *= -e_ai_s1.ravel()
+            b_vector[self.b_terms[0][0][0].size:] += self.b_terms[1][0][0].ravel()
+            b_vector[self.b_terms[0][0][0].size:] *= -e_ai_s2.ravel()
+            blksize = max(2, int(max_memory*1e6/8 / (((nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2))*3*6)))
+
+
+            u_total = lib.krylov(vind_vo, b_vector)
+            return (u_total[:nvir_sub1*nocc_sub1].reshape((nvir_sub1,nocc_sub1)))
+
 
     def get_sub_den_grad(self):
         """After F&T cycles, calculate the density derivative terms"""
@@ -1749,9 +1901,27 @@ class ClusterSuperSystem:
 
         self.solve_zvec() 
         self.get_b_terms()
+        return self.solve_u()
         full_xterms = self.get_x_terms(self.zvec)
         u_terms = []
         dm_terms = []
+        #THIS IS A TEST.
+        full_x = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        full_b = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        full_z = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        print (full_x.shape)
+        start_index = 0
+        for i, sub in enumerate(self.subsystems):
+            end_index = start_index + full_xterms[i].size
+            full_x[start_index:end_index] += self.base_xterms[i].ravel()
+            full_b[start_index:end_index] += self.b_terms[i][0][0].ravel()
+            full_z[start_index:end_index] += self.zvec[i].ravel()
+            start_index = end_index
+        inv_x = np.reciprocal(full_x)
+        temp_u = np.dot(inv_x.T, np.dot(full_z.T, full_b))
+        print (temp_u[:self.zvec[0].size])
+
+
         for i, sub in enumerate(self.subsystems):
             u_sub = []
             dm_sub = []
@@ -1759,7 +1929,7 @@ class ClusterSuperSystem:
                 inv_x = np.linalg.pinv(full_xterms[i].T)
                 temp_u = np.dot(inv_x, np.dot(self.zvec[i].T, self.b_terms[i][atm][0]))
                 print (temp_u)
-                print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
+                #print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
                 print (x)
                 u_sub.append(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
                 

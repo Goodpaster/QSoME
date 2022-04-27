@@ -344,7 +344,8 @@ class TestEnvSubSystemGradients(unittest.TestCase):
         num_sub1_u_ai = num_sub1_u[nocc:, :nocc]
         print (num_sub1_u_ai)
         u_terms = supersystem.get_sub_den_grad()
-        print (u_terms[0][0][0])
+        print ('u diff')
+        print (np.max(np.abs(num_sub1_u_ai - u_terms)))
 
     #def test_rhf_grad(self):
     #    env_method = 'hf'
