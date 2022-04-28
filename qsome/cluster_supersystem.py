@@ -3,6 +3,7 @@ Daniel Graham
 Dhabih V. Chulhai"""
 
 import os
+import time
 import copy as copy
 import numpy as np
 import h5py
@@ -238,6 +239,7 @@ class ClusterSuperSystem:
         self.ft_fermi = [np.array([0., 0.]) for sub in subsystems]
         self.base_xterms = None
         self.b_terms = None
+        self.ao_grad = None
 
     def __gen_sub2sup(self, mol=None, subsystems=None):
         #There should be a better way to do this.
@@ -1559,14 +1561,11 @@ class ClusterSuperSystem:
         self.zvec = zvec_0
 
 
-    def get_b_terms(self, ):
+    def get_b_terms(self, atm_index):
         '''Gets the b terms to solve for U. RHF only.'''
         if self.b_terms:
             return self.b_terms
 
-        mem_now = lib.current_memory()[0]
-        max_memory = max(2000, self.fs_scf.max_memory*0.9 - mem_now)
-        
         if True:
             sub1 = self.subsystems[0]
             occidx_sub1 = sub1.env_mo_occ[0] > 0
@@ -1591,109 +1590,107 @@ class ClusterSuperSystem:
             e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
             e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
             s2s = self.sub2sup
-            b_size = (nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2)
-            blksize = max(2, int(max_memory*1e6/8 / (b_size*3*6)))
 
-
-            self.b_terms = []
             hcore_deriv = self.fs_nuc_grad_obj.hcore_generator(self.mol)
-            ao_grad = self.mol.intor('int2e_ip1')
+            if (self.ao_grad is None):
+                self.ao_grad = self.mol.intor('int2e_ip1')
             s1 = self.fs_nuc_grad_obj.get_ovlp(self.mol)
             s2s = self.sub2sup
             atmlist = range(self.mol.natm)
             aoslices = self.mol.aoslice_by_atom()
             xyz = [0,1,2]
-
+            bterm_subsys = []
             for i, sub in enumerate(self.subsystems):
-                bterm_i = []
                 mocc = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]>0]
                 vir = sub.env_mo_coeff[0][:,sub.env_mo_occ[0]==0]
-                for k, ia in enumerate(atmlist):
-                    p0,p1 = aoslices [ia, 2:]
-                    h1ao = hcore_deriv(ia)
-                    s1ao = np.zeros_like(h1ao)
-                    s1ao[:,p0:p1] += s1[:,p0:p1]
-                    s1ao[:,:,p0:p1] += s1[:,p0:p1].transpose(0,2,1)
-                    ao_grad_atm = np.zeros_like(ao_grad)
-                    ao_grad_atm[:,p0:p1] += ao_grad[:,p0:p1]
-                    ao_grad_atm += ao_grad_atm.transpose(0,2,1,3,4)
-                    ao_grad_atm += ao_grad_atm.transpose(0,3,4,1,2)
-                    ao_grad_atm *= -1
-                    v1ao = np.einsum('xijkl,kl->xij', ao_grad_atm, self.get_emb_dmat())
-                    v1ao -= np.einsum('xikjl,kl->xij', ao_grad_atm, self.get_emb_dmat()) * 0.5
+                p0,p1 = aoslices [atm_index, 2:]
+                h1ao = hcore_deriv(atm_index)
+                s1ao = np.zeros_like(h1ao)
+                s1ao[:,p0:p1] += s1[:,p0:p1]
+                s1ao[:,:,p0:p1] += s1[:,p0:p1].transpose(0,2,1)
+                ao_grad_atm = np.zeros_like(self.ao_grad)
+                ao_grad_atm[:,p0:p1] += self.ao_grad[:,p0:p1]
+                ao_grad_atm += ao_grad_atm.transpose(0,2,1,3,4)
+                ao_grad_atm += ao_grad_atm.transpose(0,3,4,1,2)
+                ao_grad_atm *= -1
+                v1ao = np.einsum('xijkl,kl->xij', ao_grad_atm, self.get_emb_dmat())
+                v1ao -= np.einsum('xikjl,kl->xij', ao_grad_atm, self.get_emb_dmat()) * 0.5
 
-                    proj1ao = np.zeros_like(h1ao)[np.ix_(xyz, s2s[i],s2s[i])]
-                    for j, alt_sub in enumerate(self.subsystems):
-                        if j != i :
-                            alt_dmat = alt_sub.get_dmat()
-                            fock_grad_ab = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[j])]
-                            smat_ba = self.smat[np.ix_(s2s[j], s2s[i])]
-                            fock_ab = self.fock[0][np.ix_(s2s[i], s2s[j])]
-                            smat_grad_ba = s1ao[np.ix_(xyz, s2s[j], s2s[i])]
-                            proj1ao[0] += np.dot(fock_grad_ab[0], np.dot(alt_dmat, smat_ba))
-                            proj1ao[0] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[0]))
-                            proj1ao[1] += np.dot(fock_grad_ab[1], np.dot(alt_dmat, smat_ba))
-                            proj1ao[1] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[1]))
-                            proj1ao[2] += np.dot(fock_grad_ab[2], np.dot(alt_dmat, smat_ba))
-                            proj1ao[2] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[2]))
-                            proj1ao += proj1ao.transpose(0,2,1)
-                    f1ao_emb = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[i])] - (proj1ao * 0.5)
+                proj1ao = np.zeros_like(h1ao)[np.ix_(xyz, s2s[i],s2s[i])]
+                for j, alt_sub in enumerate(self.subsystems):
+                    if j != i :
+                        alt_dmat = alt_sub.get_dmat()
+                        fock_grad_ab = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[j])]
+                        smat_ba = self.smat[np.ix_(s2s[j], s2s[i])]
+                        fock_ab = self.fock[0][np.ix_(s2s[i], s2s[j])]
+                        smat_grad_ba = s1ao[np.ix_(xyz, s2s[j], s2s[i])]
+                        proj1ao[0] += np.dot(fock_grad_ab[0], np.dot(alt_dmat, smat_ba))
+                        proj1ao[0] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[0]))
+                        proj1ao[1] += np.dot(fock_grad_ab[1], np.dot(alt_dmat, smat_ba))
+                        proj1ao[1] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[1]))
+                        proj1ao[2] += np.dot(fock_grad_ab[2], np.dot(alt_dmat, smat_ba))
+                        proj1ao[2] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[2]))
+                        proj1ao += proj1ao.transpose(0,2,1)
+                f1ao_emb = (h1ao + v1ao)[np.ix_(xyz, s2s[i], s2s[i])] - (proj1ao * 0.5)
 
-                    f1vo_emb = np.einsum('ma,xmn,ni->xai', vir, f1ao_emb, mocc)
-                    atm_s2s = self.atm_sub2sup
-                    if ia in atm_s2s[i]:
-                        s1_vo = np.einsum('ma,xmn,ni->xai', vir, s1ao[np.ix_(xyz, s2s[i],s2s[i])], mocc)
-                        s1_vo[0] *= s1_vo[0] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
-                        s1_vo[1] *= s1_vo[1] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
-                        s1_vo[2] *= s1_vo[2] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+                f1vo_emb = np.einsum('ma,xmn,ni->xai', vir, f1ao_emb, mocc)
+                atm_s2s = self.atm_sub2sup
+                if atm_index in atm_s2s[i]:
+                    s1_vo = np.einsum('ma,xmn,ni->xai', vir, s1ao[np.ix_(xyz, s2s[i],s2s[i])], mocc)
+                    s1_vo[0] *= s1_vo[0] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+                    s1_vo[1] *= s1_vo[1] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
+                    s1_vo[2] *= s1_vo[2] * sub.env_mo_energy[0][sub.env_mo_occ[0]>0]
 
-                        dm_s1_dm = np.einsum('mi,xmn,nj->xij', sub.get_dmat(), s1ao[np.ix_(xyz, s2s[i], s2s[i])], sub.get_dmat())
-                        full_dm_s1_dm = np.zeros_like(h1ao)
-                        full_dm_s1_dm[np.ix_(xyz, s2s[i], s2s[i])] += dm_s1_dm
+                    dm_s1_dm = np.einsum('mi,xmn,nj->xij', sub.get_dmat(), s1ao[np.ix_(xyz, s2s[i], s2s[i])], sub.get_dmat())
+                    full_dm_s1_dm = np.zeros_like(h1ao)
+                    full_dm_s1_dm[np.ix_(xyz, s2s[i], s2s[i])] += dm_s1_dm
 
-                        veff_term = np.zeros_like(f1ao_emb) 
-                        veff_term[0] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[0], hermi=0)
-                        veff_term[1] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[1], hermi=0)
-                        veff_term[2] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[2], hermi=0)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
+                    veff_term = np.zeros_like(f1ao_emb) 
+                    veff_term[0] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[0], hermi=0)
+                    veff_term[1] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[1], hermi=0)
+                    veff_term[2] += sub.env_scf.get_veff(sub.mol, dm_s1_dm[2], hermi=0)
+                    s1_vo += np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
 
-                        proj_veff = np.zeros_like(h1ao)
-                        proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
-                        proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
-                        proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
-                        proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
-                        proj_term += proj_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
+                    proj_veff = np.zeros_like(h1ao)
+                    proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                    proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                    proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                    proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
+                    proj_term += proj_term.transpose(0,2,1)
+                    s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
 
-                    else:
-                        dm_s1_dm = np.einsum('mi,xmn,nj->xij', alt_sub.get_dmat(), s1ao[np.ix_(xyz, s2s[j], s2s[j])], alt_sub.get_dmat())
-                        full_dm_s1_dm = np.zeros_like(h1ao)
-                        full_dm_s1_dm[np.ix_(xyz, s2s[j], s2s[j])] += dm_s1_dm
+                else:
+                    dm_s1_dm = np.einsum('mi,xmn,nj->xij', alt_sub.get_dmat(), s1ao[np.ix_(xyz, s2s[j], s2s[j])], alt_sub.get_dmat())
+                    full_dm_s1_dm = np.zeros_like(h1ao)
+                    full_dm_s1_dm[np.ix_(xyz, s2s[j], s2s[j])] += dm_s1_dm
 
-                        full_veff_term = np.zeros_like(h1ao) 
-                        full_veff_term[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
-                        full_veff_term[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
-                        full_veff_term[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
-                        veff_term = full_veff_term[np.ix_(xyz, s2s[i], s2s[i])]
-                        s1_vo = np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
+                    full_veff_term = np.zeros_like(h1ao) 
+                    full_veff_term[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                    full_veff_term[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                    full_veff_term[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                    veff_term = full_veff_term[np.ix_(xyz, s2s[i], s2s[i])]
+                    s1_vo = np.einsum('ma,xmn,ni->xai', vir, veff_term, mocc)
 
-                        proj_veff = np.zeros_like(h1ao)
-                        proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
-                        proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
-                        proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
-                        proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
-                        proj_term += proj_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
+                    proj_veff = np.zeros_like(h1ao)
+                    proj_veff[0] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[0], hermi=0)
+                    proj_veff[1] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[1], hermi=0)
+                    proj_veff[2] += self.fs_scf_obj.get_veff(self.mol, full_dm_s1_dm[2], hermi=0)
+                    proj_term = np.einsum('xmn,nl,lp->xmp', proj_veff[np.ix_(xyz, s2s[i], s2s[j])], alt_sub.get_dmat(), self.smat[np.ix_(s2s[j], s2s[i])])
+                    proj_term += proj_term.transpose(0,2,1)
+                    s1_vo += np.einsum('ma,xmn,ni->xai', vir, (proj_term*0.5), mocc)
 
-                        #last proj term
-                        fds_term = np.einsum('mn,xnl,lp->xmp', self.fock[0][np.ix_(s2s[i], s2s[j])], dm_s1_dm, self.smat[np.ix_(s2s[j], s2s[i])])
-                        fds_term += fds_term.transpose(0,2,1)
-                        s1_vo += np.einsum('ma,xmn,ni->xai', vir, (fds_term*0.5), mocc)
+                    #last proj term
+                    fds_term = np.einsum('mn,xnl,lp->xmp', self.fock[0][np.ix_(s2s[i], s2s[j])], dm_s1_dm, self.smat[np.ix_(s2s[j], s2s[i])])
+                    fds_term += fds_term.transpose(0,2,1)
+                    s1_vo += np.einsum('ma,xmn,ni->xai', vir, (fds_term*0.5), mocc)
 
-                    bterm_i.append(f1vo_emb - s1_vo)
-                self.b_terms.append(copy.copy(bterm_i))
+                bterm_subsys.append(f1vo_emb - s1_vo)
 
-        return self.b_terms
+        bterm_subsys[0] *= -e_ai_s1
+        bterm_subsys[1] *= -e_ai_s2
+        bterm = np.concatenate((bterm_subsys[0].reshape(-1, (nvir_sub1*nocc_sub1)), bterm_subsys[1].reshape(-1, (nvir_sub2*nocc_sub2))), axis=1)
+        
+        return bterm
 
     def get_x_terms(self, zvectors, base_xterms=None):
         '''returns the xterms for rhf'''
@@ -1858,8 +1855,6 @@ class ClusterSuperSystem:
         #RHF ONLY
         if True:
             vind_vo = self.gen_full_a()
-            self.get_b_terms()
-            b_vector = np.zeros((self.b_terms[0][0][0].size+self.b_terms[1][0][0].size))
             sub1 = self.subsystems[0]
             occidx_sub1 = sub1.env_mo_occ[0] > 0
             viridx_sub1 = sub1.env_mo_occ[0] == 0
@@ -1882,26 +1877,47 @@ class ClusterSuperSystem:
             e_a_s2 = sub2.env_mo_energy[0][viridx_sub2]
             e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
             e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
-            b_vector[:self.b_terms[0][0][0].size] += self.b_terms[0][0][0].ravel()
-            b_vector[:self.b_terms[0][0][0].size] *= -e_ai_s1.ravel()
-            b_vector[self.b_terms[0][0][0].size:] += self.b_terms[1][0][0].ravel()
-            b_vector[self.b_terms[0][0][0].size:] *= -e_ai_s2.ravel()
+            #b_vector[:self.b_terms[0][0][0].size] += self.b_terms[0][0][0].ravel()
+            #b_vector[:self.b_terms[0][0][0].size] *= -e_ai_s1.ravel()
+            #b_vector[self.b_terms[0][0][0].size:] += self.b_terms[1][0][0].ravel()
+            #b_vector[self.b_terms[0][0][0].size:] *= -e_ai_s2.ravel()
+            atmlist = range(self.mol.natm)
             blksize = max(2, int(max_memory*1e6/8 / (((nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2))*3*6)))
+            total_u = [[None]*self.mol.natm,[None]*self.mol.natm]
+            for ia0, ia1 in lib.prange(0, len(atmlist), blksize):
+                b_terms = []
+                for i0 in range(ia0, ia1):
+                    atm_index = atmlist[i0]
+                    b_terms.append(self.get_b_terms(atm_index))
+                b_terms = np.vstack(b_terms)
+                u_temp = lib.krylov(vind_vo, b_terms.ravel())
+                u_temp = u_temp.reshape(b_terms.shape)
+                u_sub1 = u_temp[:,:(nvir_sub1*nocc_sub1)].reshape(-1,3,nvir_sub1, nocc_sub1)
+                u_sub2 = u_temp[:,(nvir_sub1*nocc_sub1):].reshape(-1,3,nvir_sub2, nocc_sub2)
 
+                for k in range(ia1-ia0):
+                    ia = atmlist[k+ia0]
+                    total_u[0][ia] = u_sub1[k]
+                    total_u[1][ia] = u_sub2[k]
 
-            u_total = lib.krylov(vind_vo, b_vector)
-            return (u_total[:nvir_sub1*nocc_sub1].reshape((nvir_sub1,nocc_sub1)))
+            self.total_u = total_u
+            return True
 
 
     def get_sub_den_grad(self):
         """After F&T cycles, calculate the density derivative terms"""
 
-        #Generate full A matrix
-        #There is a much faster way to do this but it is more complicated.
+        self.solve_u()
 
-        self.solve_zvec() 
-        self.get_b_terms()
-        return self.solve_u()
+
+
+
+
+
+
+
+
+
         full_xterms = self.get_x_terms(self.zvec)
         u_terms = []
         dm_terms = []
