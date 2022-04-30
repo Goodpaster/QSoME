@@ -1877,10 +1877,6 @@ class ClusterSuperSystem:
             e_a_s2 = sub2.env_mo_energy[0][viridx_sub2]
             e_i_s2 = sub2.env_mo_energy[0][occidx_sub2]
             e_ai_s2 = 1. / lib.direct_sum('a-i->ai', e_a_s2, e_i_s2)
-            #b_vector[:self.b_terms[0][0][0].size] += self.b_terms[0][0][0].ravel()
-            #b_vector[:self.b_terms[0][0][0].size] *= -e_ai_s1.ravel()
-            #b_vector[self.b_terms[0][0][0].size:] += self.b_terms[1][0][0].ravel()
-            #b_vector[self.b_terms[0][0][0].size:] *= -e_ai_s2.ravel()
             atmlist = range(self.mol.natm)
             blksize = max(2, int(max_memory*1e6/8 / (((nvir_sub1*nocc_sub1) + (nvir_sub2*nocc_sub2))*3*6)))
             total_u = [[None]*self.mol.natm,[None]*self.mol.natm]
@@ -1908,50 +1904,98 @@ class ClusterSuperSystem:
         """After F&T cycles, calculate the density derivative terms"""
 
         self.solve_u()
+        atmlist = range(self.mol.natm)
+        self.ao_dm_grad = [[None] * self.mol.natm, [None]*self.mol.natm]
+        atm_s2s = self.atm_sub2sup
+        s2s = self.sub2sup
+
+        full_s1 = -self.mol.intor('int1e_ipovlp', comp=3)
+        full_aoslices = self.mol.aoslice_by_atom()
+
+        sub1 = self.subsystems[0]
+        occidx_sub1 = sub1.env_mo_occ[0] > 0
+        viridx_sub1 = sub1.env_mo_occ[0] == 0
+        nocc_sub1 = np.count_nonzero(occidx_sub1)
+        nvir_sub1 = sub1.env_mo_occ[0].size - nocc_sub1
+        nao_sub1 = sub1.env_mo_coeff[0].shape[0]
+        mocc_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]>0]
+        vir_sub1 = sub1.env_mo_coeff[0][:,sub1.env_mo_occ[0]==0]
+        sub2 = self.subsystems[1]
+        occidx_sub2 = sub2.env_mo_occ[0] > 0
+        viridx_sub2 = sub2.env_mo_occ[0] == 0
+        nocc_sub2 = np.count_nonzero(occidx_sub2)
+        nvir_sub2 = sub2.env_mo_occ[0].size - nocc_sub2
+        nao_sub2 = sub2.env_mo_coeff[0].shape[0]
+        mocc_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]>0]
+        vir_sub2 = sub2.env_mo_coeff[0][:,sub2.env_mo_occ[0]==0]
+        xyz = [0,1,2]
+        for atm in atmlist:
+            dm_grad_sub1 = np.zeros((3, sub1.env_mo_coeff[0].shape[0], sub1.env_mo_coeff[0].shape[0]))
+            dm_grad_sub2 = np.zeros((3, sub2.env_mo_coeff[0].shape[0], sub2.env_mo_coeff[0].shape[0]))
+
+            p0,p1 = full_aoslices[atm, 2:]
+
+            s1_ao_atm = np.zeros_like(full_s1)
+            s1_ao_atm[:,p0:p1] += full_s1[:,p0:p1]
+            s1_ao_atm[:,:,p0:p1] += full_s1[:,p0:p1].transpose(0,2,1)
+            s1_ao_sub1 = copy.copy(s1_ao_atm[np.ix_(xyz, s2s[0], s2s[0])])
+            s1_ao_sub2 = copy.copy(s1_ao_atm[np.ix_(xyz, s2s[1], s2s[1])])
+
+            occ_sub1 = np.einsum('mi,xmn,nj->xij', mocc_sub1, s1_ao_sub1, mocc_sub1)
+            occ_sub2 = np.einsum('mi,xmn,nj->xij', mocc_sub2, s1_ao_sub2, mocc_sub2)
+            occ_sub1 *= -1
+            occ_sub2 *= -1
+            dm_grad_sub1[:,:nocc_sub1, :nocc_sub1] += occ_sub1
+            dm_grad_sub2[:,:nocc_sub2, :nocc_sub2] += occ_sub2
+
+            dm_grad_sub1[:, nocc_sub1:, :nocc_sub1] += self.total_u[0][atm]
+            dm_grad_sub1[:, :nocc_sub1, nocc_sub1:] += self.total_u[0][atm].transpose(0,2,1)
+
+            dm_grad_sub2[:,nocc_sub2:, :nocc_sub2] += self.total_u[1][atm]
+            dm_grad_sub2[:,:nocc_sub2, nocc_sub2:] += self.total_u[1][atm].transpose(0,2,1)
+
+            self.ao_dm_grad[0][atm] = 2.* np.einsum('mr,xrs,ns->xmn', sub1.env_mo_coeff[0], dm_grad_sub1, sub1.env_mo_coeff[0])
+            self.ao_dm_grad[1][atm] = 2.* np.einsum('mr,xrs,ns->xmn', sub2.env_mo_coeff[0], dm_grad_sub2, sub2.env_mo_coeff[0])
+
+        return self.ao_dm_grad
 
 
 
 
+        #full_xterms = self.get_x_terms(self.zvec)
+        #u_terms = []
+        #dm_terms = []
+        ##THIS IS A TEST.
+        #full_x = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        #full_b = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        #full_z = np.zeros((full_xterms[0].size + full_xterms[1].size))
+        #print (full_x.shape)
+        #start_index = 0
+        #for i, sub in enumerate(self.subsystems):
+        #    end_index = start_index + full_xterms[i].size
+        #    full_x[start_index:end_index] += self.base_xterms[i].ravel()
+        #    full_b[start_index:end_index] += self.b_terms[i][0][0].ravel()
+        #    full_z[start_index:end_index] += self.zvec[i].ravel()
+        #    start_index = end_index
+        #inv_x = np.reciprocal(full_x)
+        #temp_u = np.dot(inv_x.T, np.dot(full_z.T, full_b))
+        #print (temp_u[:self.zvec[0].size])
 
 
+        #for i, sub in enumerate(self.subsystems):
+        #    u_sub = []
+        #    dm_sub = []
+        #    for atm in range(self.mol.natm):
+        #        inv_x = np.linalg.pinv(full_xterms[i].T)
+        #        temp_u = np.dot(inv_x, np.dot(self.zvec[i].T, self.b_terms[i][atm][0]))
+        #        print (temp_u)
+        #        #print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
+        #        print (x)
+        #        u_sub.append(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
+        #        
 
-
-
-
-        full_xterms = self.get_x_terms(self.zvec)
-        u_terms = []
-        dm_terms = []
-        #THIS IS A TEST.
-        full_x = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        full_b = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        full_z = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        print (full_x.shape)
-        start_index = 0
-        for i, sub in enumerate(self.subsystems):
-            end_index = start_index + full_xterms[i].size
-            full_x[start_index:end_index] += self.base_xterms[i].ravel()
-            full_b[start_index:end_index] += self.b_terms[i][0][0].ravel()
-            full_z[start_index:end_index] += self.zvec[i].ravel()
-            start_index = end_index
-        inv_x = np.reciprocal(full_x)
-        temp_u = np.dot(inv_x.T, np.dot(full_z.T, full_b))
-        print (temp_u[:self.zvec[0].size])
-
-
-        for i, sub in enumerate(self.subsystems):
-            u_sub = []
-            dm_sub = []
-            for atm in range(self.mol.natm):
-                inv_x = np.linalg.pinv(full_xterms[i].T)
-                temp_u = np.dot(inv_x, np.dot(self.zvec[i].T, self.b_terms[i][atm][0]))
-                print (temp_u)
-                #print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
-                print (x)
-                u_sub.append(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
-                
-
-            u_terms.append(u_sub)
-        return u_terms
+        #    u_terms.append(u_sub)
+        #return u_terms
 
 
     def get_emb_nuc_grad(self, den_grad=None):
