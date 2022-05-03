@@ -1,3 +1,4 @@
+from functools import reduce
 from pyscf import gto, scf
 import numpy as np
 
@@ -16,15 +17,54 @@ mf = scf.RHF(cs_mol)
 mf.kernel()
 mf_grad = mf.nuc_grad_method()
 hcore_deriv = mf_grad.hcore_generator(cs_mol)
-hcore_ao_grad = hcore_deriv(0)
 aoslices = cs_mol.aoslice_by_atom()
-p0,p1 = aoslices[0,2:]
-
-
 veff_ao = mf_grad.get_veff(cs_mol, mf.make_rdm1())
-veff_ao_atm = np.zeros_like(veff_ao)
-veff_ao_atm[:,p0:p1] += veff_ao[:,p0:p1]
-veff_ao_atm[:,:,p0:p1] += veff_ao[:,:,p0:p1]
+ovlp_grad = mf_grad.get_ovlp()
+mocc = mf.mo_coeff[:,mf.mo_occ>0]
+vir = mf.mo_coeff[:,mf.mo_occ==0]
+for atm in range(cs_mol.natm):
+    p0,p1 = aoslices[atm,2:]
+    hcore_ao_grad = hcore_deriv(atm)
+
+    veff_ao_atm = np.zeros_like(veff_ao)
+    veff_ao_atm[:,p0:p1] += veff_ao[:,p0:p1]
+    veff_ao_atm[:,:,p0:p1] += veff_ao[:,:,p0:p1]
+
+    ovlp_ao_atm = np.zeros_like(ovlp_grad)
+    ovlp_ao_atm[:,p0:p1] += ovlp_grad[:,p0:p1]
+    ovlp_ao_atm[:,:,p0:p1] += ovlp_grad[:,p0:p1].transpose(0,2,1)
+    ovlp_mo_atm = np.asarray([reduce(np.dot, (vir.T, x, mocc)) for x in ovlp_ao_atm])
+
+    ovlp_e = np.zeros_like(ovlp_mo_atm)
+    for i in range(vir.shape[1]):
+        for j in range(mocc.shape[1]):
+            ovlp_e[:,i,j] = ovlp_mo_atm[:,i,j] * mf.mo_energy[j]
+
+    s1_vo = np.einsum('ma,xmn,ni->xai', vir, ovlp_ao_atm, mocc)
+    print (np.max(np.abs(s1_vo - ovlp_mo_atm)))
+    s1_vo = np.einsum('xai,i->xai', s1_vo, mf.mo_energy[mf.mo_occ>0])
+    print (np.max(np.abs(s1_vo - ovlp_e)))
+
+            
+
+
+x_dir_diff = 0.000001
+coord_0 = cs_mol.atom_coords()
+coord_0[0][0] = coord_0[0][0] - x_dir_diff
+mol0 = cs_mol.set_geom_(coord_0, 'B', inplace=False)
+mol0.build()
+
+mf0 = scf.RHF(mol0)
+mf0.kernel()
+j0 = mf0.get_jk(mol0, mf0.make_rdm1())[0]
+veff0 = mf0.get_veff(mol0, mf0.make_rdm1())
+smat0 = mf0.get_ovlp()
+
+coord_2 = cs_mol.atom_coords()
+coord_2[0][0] = coord_2[0][0] + x_dir_diff
+mol2 = cs_mol.set_geom_(coord_2, 'B', inplace=False)
+mol2.build()
+
 
 x_dir_diff = 0.000001
 coord_0 = cs_mol.atom_coords()
