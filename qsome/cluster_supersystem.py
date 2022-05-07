@@ -10,8 +10,11 @@ import h5py
 
 from functools import reduce
 
-from pyscf import scf, dft, lib, lo, hessian
+from pyscf import scf, dft, lib, lo, hessian, grad
 from pyscf.tools import cubegen, molden
+from pyscf.cc import ccsd_rdm
+from pyscf.grad.mp2 import _shell_prange, _index_frozen_active
+from pyscf.grad import rhf as rhf_grad
 
 from qsome import custom_diis, helpers
 from qsome import custom_pyscf_methods
@@ -834,7 +837,7 @@ class ClusterSuperSystem:
 
         s2s = self.sub2sup
         for i, subsystem in enumerate(self.subsystems):
-            subsystem.update_fock()
+            subsystem.update_subsys_fock()
             fock_aa = [None, None]
             fock_aa[0] = self.fock[0][np.ix_(s2s[i], s2s[i])]
             fock_aa[1] = self.fock[1][np.ix_(s2s[i], s2s[i])]
@@ -1382,30 +1385,17 @@ class ClusterSuperSystem:
 
     def get_b_terms(self, atm_index):
         '''Gets the b terms to solve for U. '''
-        if isinstance(self.fs_scf_obj, dft.rks.RKS):
-            if self.fa1emb_ao is None:
-                s2s = self.sub2sup
-                full_mo_coeff = np.zeros_like(self.get_emb_dmat())
-                full_mo_coeff[np.ix_(s2s[0], s2s[0])] += self.subsystems[0].env_mo_coeff[0]
-                full_mo_coeff[np.ix_(s2s[1], s2s[1])] += self.subsystems[1].env_mo_coeff[0]
+        if self.fa1emb_ao is None:
+            s2s = self.sub2sup
+            full_mo_coeff = np.zeros_like(self.get_emb_dmat())
+            full_mo_coeff[np.ix_(s2s[0], s2s[0])] += self.subsystems[0].env_mo_coeff[0]
+            full_mo_coeff[np.ix_(s2s[1], s2s[1])] += self.subsystems[1].env_mo_coeff[0]
 
-                full_mo_occ = np.zeros_like(self.fs_scf_obj.mo_occ)
-                full_mo_occ[np.ix_(s2s[0])] += self.subsystems[0].env_mo_occ[0]*2.
-                full_mo_occ[np.ix_(s2s[1])] += self.subsystems[1].env_mo_occ[0]*2.
-                hess_obj = hessian.rks.Hessian(self.fs_scf_obj)
-                self.fa1emb_ao = hess_obj.make_h1(full_mo_coeff, full_mo_occ)
-        else:
-            if self.fa1emb_ao is None:
-                s2s = self.sub2sup
-                full_mo_coeff = np.zeros_like(self.get_emb_dmat())
-                full_mo_coeff[np.ix_(s2s[0], s2s[0])] += self.subsystems[0].env_mo_coeff[0]
-                full_mo_coeff[np.ix_(s2s[1], s2s[1])] += self.subsystems[1].env_mo_coeff[0]
-
-                full_mo_occ = np.zeros_like(self.fs_scf_obj.mo_occ)
-                full_mo_occ[np.ix_(s2s[0])] += self.subsystems[0].env_mo_occ[0]*2.
-                full_mo_occ[np.ix_(s2s[1])] += self.subsystems[1].env_mo_occ[0]*2.
-                hess_obj = hessian.rhf.Hessian(self.fs_scf_obj)
-                self.fa1emb_ao = hess_obj.make_h1(full_mo_coeff, full_mo_occ)
+            full_mo_occ = np.zeros_like(self.fs_scf_obj.mo_occ)
+            full_mo_occ[np.ix_(s2s[0])] += self.subsystems[0].env_mo_occ[0]*2.
+            full_mo_occ[np.ix_(s2s[1])] += self.subsystems[1].env_mo_occ[0]*2.
+            hess_obj = self.fs_scf_obj.Hessian()
+            self.fa1emb_ao = hess_obj.make_h1(full_mo_coeff, full_mo_occ)
 
         sub1 = self.subsystems[0]
         occidx_sub1 = sub1.env_mo_occ[0] > 0
@@ -1618,9 +1608,7 @@ class ClusterSuperSystem:
                     atm_index = atmlist[i0]
                     b_terms.append(self.get_b_terms(atm_index))
                 b_terms = np.vstack(b_terms)
-                print ('pre krylov')
                 u_temp = lib.krylov(vind_vo, b_terms.ravel())
-                print ('post krylov')
                 u_temp = u_temp.reshape(b_terms.shape)
                 u_sub1 = u_temp[:,:(nvir_sub1*nocc_sub1)].reshape(-1,3,nvir_sub1, nocc_sub1)
                 u_sub2 = u_temp[:,(nvir_sub1*nocc_sub1):].reshape(-1,3,nvir_sub2, nocc_sub2)
@@ -1693,504 +1681,282 @@ class ClusterSuperSystem:
 
         return self.ao_dm_grad
 
+    def embed_grad_hcore(self):
+        '''generates the embedded potential as a hcore grad'''
+        atmlist = range(self.mol.natm)
+        emb_hcore = [[None] * len(atmlist), [None] * len(atmlist)]
+        sub_fa1_ao = []
+        s2s = self.sub2sup
+        atm_s2s = self.atm_sub2sup
+        xyz = [0,1,2]
+        full_fa1 = self.fa1emb_ao
+        for i, sub in enumerate(self.subsystems):
+            sub_hess = sub.env_scf.Hessian()
+            sub_fa1_ao.append(sub_hess.make_h1(sub.env_mo_coeff[0], sub.env_mo_occ[0]*2.))
+
+        full_s1_ao = self.fs_nuc_grad_obj.get_ovlp(self.mol)
+        aoslices = self.mol.aoslice_by_atom()
+
+        for atm in atmlist:
+            p0,p1 = aoslices [atm, 2:]
+            full_atm_s1ao = np.zeros_like(full_fa1[atm])
+            full_atm_s1ao[:,p0:p1] += full_s1_ao[:,p0:p1]
+            full_atm_s1ao[:,:,p0:p1] += full_s1_ao[:,p0:p1].transpose(0,2,1)
+            full_dm_grad = np.zeros_like(full_fa1[atm])
+            full_dm_grad[np.ix_(xyz, s2s[0], s2s[0])] = self.ao_dm_grad[0][atm]
+            full_dm_grad[np.ix_(xyz, s2s[1], s2s[1])] = self.ao_dm_grad[1][atm]
+
+            full_vhf_dmat_grad = np.zeros_like(full_dm_grad)
+            full_fock_dmat_grad = np.zeros_like(full_dm_grad)
+            full_mo_coeff = np.zeros_like(self.get_emb_dmat())
+            full_mo_coeff[np.ix_(s2s[0], s2s[0])] += self.subsystems[0].env_mo_coeff[0]
+            full_mo_coeff[np.ix_(s2s[1], s2s[1])] += self.subsystems[1].env_mo_coeff[0]
+            full_mo_occ = np.zeros_like(self.fs_scf_obj.mo_occ)
+            full_mo_occ[np.ix_(s2s[0])] += self.subsystems[0].env_mo_occ[0]*2.
+            full_mo_occ[np.ix_(s2s[1])] += self.subsystems[1].env_mo_occ[0]*2.
+            full_response = self.fs_scf_obj.gen_response(full_mo_coeff, full_mo_occ)
+            full_vhf_dmat_grad[0] = full_response(full_dm_grad[0])
+            full_vhf_dmat_grad[1] = full_response(full_dm_grad[1])
+            full_vhf_dmat_grad[2] = full_response(full_dm_grad[2])
+            full_fock_dmat_grad[0] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[0]
+            full_fock_dmat_grad[1] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[0]
+            full_fock_dmat_grad[2] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[0]
+            #full_fock_dmat_grad[0] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[0]
+            #full_vhf_dmat_grad[1] = self.fs_scf_obj.get_veff(dm=full_dm_grad[1])
+            #full_fock_dmat_grad[1] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[1]
+            #full_vhf_dmat_grad[2] = self.fs_scf_obj.get_veff(dm=full_dm_grad[2])
+            #full_fock_dmat_grad[2] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[2]
+            #full_vhf_dmat_grad[0] = self.fs_scf_obj.get_veff(dm=full_dm_grad[0])
+            #full_fock_dmat_grad[0] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[0]
+            #full_vhf_dmat_grad[1] = self.fs_scf_obj.get_veff(dm=full_dm_grad[1])
+            #full_fock_dmat_grad[1] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[1]
+            #full_vhf_dmat_grad[2] = self.fs_scf_obj.get_veff(dm=full_dm_grad[2])
+            #full_fock_dmat_grad[2] = self.fs_scf_obj.get_hcore() + full_vhf_dmat_grad[2]
+
+            for i, sub in enumerate(self.subsystems):
+                sub_nuc_grad_obj = sub.env_scf.nuc_grad_method()
+                sub_vhf_dmat_grad = np.zeros_like(full_vhf_dmat_grad[np.ix_(xyz, s2s[i], s2s[i])])
+                #sub_vhf_dmat_grad[0] += sub.env_scf.get_veff(dm=self.ao_dm_grad[i][atm][0])
+                #sub_vhf_dmat_grad[1] += sub.env_scf.get_veff(dm=self.ao_dm_grad[i][atm][1])
+                #sub_vhf_dmat_grad[2] += sub.env_scf.get_veff(dm=self.ao_dm_grad[i][atm][2])
+                sub_response = sub.env_scf.gen_response(sub.env_mo_coeff[0], sub.env_mo_occ[0]*2.)
+                sub_vhf_dmat_grad[0] += sub_response(self.ao_dm_grad[i][atm][0])
+                sub_vhf_dmat_grad[1] += sub_response(self.ao_dm_grad[i][atm][1])
+                sub_vhf_dmat_grad[2] += sub_response(self.ao_dm_grad[i][atm][2])
+                hcore = full_vhf_dmat_grad[np.ix_(xyz, s2s[i], s2s[i])] - sub_vhf_dmat_grad
+                proj1ao = np.zeros_like(hcore)
+                proj_grad_term = np.zeros_like(proj1ao)
+                for j, alt_sub in enumerate(self.subsystems):
+                    if i != j:
+                        alt_dmat = alt_sub.get_dmat()
+                        fock_grad_ab = full_fa1[atm][np.ix_(xyz, s2s[i], s2s[j])]
+                        smat_ba = self.smat[np.ix_(s2s[j], s2s[i])]
+                        fock_ab = self.fock[0][np.ix_(s2s[i], s2s[j])]
+                        smat_grad_ba = full_atm_s1ao[np.ix_(xyz, s2s[j], s2s[i])]
+                        proj1ao[0] += np.dot(fock_grad_ab[0], np.dot(alt_dmat, smat_ba))
+                        proj1ao[0] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[0]))
+                        proj1ao[1] += np.dot(fock_grad_ab[1], np.dot(alt_dmat, smat_ba))
+                        proj1ao[1] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[1]))
+                        proj1ao[2] += np.dot(fock_grad_ab[2], np.dot(alt_dmat, smat_ba))
+                        proj1ao[2] += np.dot(fock_ab, np.dot(alt_dmat, smat_grad_ba[2]))
+                        proj1ao += proj1ao.transpose(0,2,1)
+
+                        vhf_dmat_grad_ab = full_vhf_dmat_grad[np.ix_(xyz, s2s[i], s2s[j])]
+                        proj_grad_term[0] += np.dot(vhf_dmat_grad_ab[0], np.dot(alt_dmat, smat_ba))
+                        proj_grad_term[0] += np.dot(fock_ab, np.dot(self.ao_dm_grad[j][atm][0], smat_ba))
+                        proj_grad_term[1] += np.dot(vhf_dmat_grad_ab[1], np.dot(alt_dmat, smat_ba))
+                        proj_grad_term[1] += np.dot(fock_ab, np.dot(self.ao_dm_grad[j][atm][1], smat_ba))
+                        proj_grad_term[2] += np.dot(vhf_dmat_grad_ab[2], np.dot(alt_dmat, smat_ba))
+                        proj_grad_term[2] += np.dot(fock_ab, np.dot(self.ao_dm_grad[j][atm][2], smat_ba))
+                        proj_grad_term += proj_grad_term.transpose(0,2,1)
+
+                hcore += full_fa1[atm][np.ix_(xyz, s2s[i], s2s[i])] - (0.5 * (proj1ao))
+                hcore -= proj_grad_term * 0.5
+                if atm in atm_s2s[i]:
+                    hcore -= sub_fa1_ao[i][atm_s2s[i].index(atm)]
+                    hcore += sub_nuc_grad_obj.hcore_generator(sub.mol)(atm_s2s[i].index(atm))
+                emb_hcore[i][atm] = hcore
+
+        return emb_hcore
 
 
 
-        #full_xterms = self.get_x_terms(self.zvec)
-        #u_terms = []
-        #dm_terms = []
-        ##THIS IS A TEST.
-        #full_x = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        #full_b = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        #full_z = np.zeros((full_xterms[0].size + full_xterms[1].size))
-        #print (full_x.shape)
-        #start_index = 0
-        #for i, sub in enumerate(self.subsystems):
-        #    end_index = start_index + full_xterms[i].size
-        #    full_x[start_index:end_index] += self.base_xterms[i].ravel()
-        #    full_b[start_index:end_index] += self.b_terms[i][0][0].ravel()
-        #    full_z[start_index:end_index] += self.zvec[i].ravel()
-        #    start_index = end_index
-        #inv_x = np.reciprocal(full_x)
-        #temp_u = np.dot(inv_x.T, np.dot(full_z.T, full_b))
-        #print (temp_u[:self.zvec[0].size])
+    def get_env_nuc_grad(self):
+        self.get_sub_den_grad()
+        emb_hcore = self.embed_grad_hcore()
+        atmlst = range(self.mol.natm)
+        sub_nuc_grad = [np.zeros((len(atmlst),3)), np.zeros((len(atmlst), 3))]
+        atm_s2s = self.atm_sub2sup
+        for i, sub in enumerate(self.subsystems):
+            sub_nuc_grad_obj = sub.env_scf.nuc_grad_method()
+            s1 = sub_nuc_grad_obj.get_ovlp(sub.mol)
+            dm0 = sub.get_dmat()
+
+            vhf = sub_nuc_grad_obj.get_veff(sub.mol, dm0)
+            dme0 = sub_nuc_grad_obj.make_rdm1e(sub.env_mo_energy[0], sub.env_mo_coeff[0], sub.env_mo_occ[0]*2.)
+
+            hcore_grad = emb_hcore[i]
+            aoslices = sub.mol.aoslice_by_atom()
+
+            for atm in atmlst:
+                sub_nuc_grad[i][atm] += np.einsum('xij,ij->x', hcore_grad[atm], dm0)
+                if atm in atm_s2s[i]:
+                    atm_index = atm_s2s[i].index(atm)
+                    p0,p1 = aoslices[atm_index,2:]
+                    sub_nuc_grad[i][atm] += np.einsum('xij,ij->x', vhf[:,p0:p1], dm0[p0:p1]) * 2.
+                    sub_nuc_grad[i][atm] -= np.einsum('xij,ij->x', s1[:,p0:p1], dme0[p0:p1]) * 2.
+
+        return sub_nuc_grad
 
 
-        #for i, sub in enumerate(self.subsystems):
-        #    u_sub = []
-        #    dm_sub = []
-        #    for atm in range(self.mol.natm):
-        #        inv_x = np.linalg.pinv(full_xterms[i].T)
-        #        temp_u = np.dot(inv_x, np.dot(self.zvec[i].T, self.b_terms[i][atm][0]))
-        #        print (temp_u)
-        #        #print(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
-        #        print (x)
-        #        u_sub.append(np.einsum('ai,ai,xai->xai', inv_x, self.zvec[i], self.b_terms[i][atm]))
-        #        
+    def get_hl_nuc_grad(self):
+        """THIS IS HARD CODED FOR CCSD"""
+        emb_hcore = self.embed_grad_hcore()
+        sub_hl_nuc_grad = np.zeros((self.mol.natm,3))
+        atm_s2s = self.atm_sub2sup
 
-        #    u_terms.append(u_sub)
-        #return u_terms
+        #CC PART
+        cc_grad = grad.ccsd.Gradients(self.subsystems[0].hl_obj)
+        mycc = cc_grad.base
+        t1 = mycc.t1
+        t2 = mycc.t2
+        eris = mycc.ao2mo()
+        l1, l2 = mycc.solve_lambda(eris=eris)
 
+        d1 = ccsd_rdm._gamma1_intermediates(mycc, t1, t2, l1, l2)
+        doo, dov, dvo, dvv = d1
+        fdm2 = lib.H5TmpFile()
+        d2 = ccsd_rdm._gamma2_outcore(mycc, t1, t2, l1, l2, fdm2, True)
+        mol = cc_grad.mol
+        mo_coeff = mycc.mo_coeff
+        mo_energy = mycc._scf.mo_energy
+        nao, nmo = mo_coeff.shape
+        nocc = np.count_nonzero(mycc.mo_occ > 0)
+        with_frozen = not ((mycc.frozen is None)
+                           or (isinstance(mycc.frozen, (int, np.integer)) and mycc.frozen == 0)
+                           or (len(mycc.frozen) == 0))
+        OA, VA, OF, VF = _index_frozen_active(mycc.get_frozen_mask(), mycc.mo_occ)
 
-    def get_emb_nuc_grad(self, den_grad=None):
+        # Roughly, dm2*2 is computed in _rdm2_mo2ao
+        mo_active = mo_coeff[:,np.hstack((OA,VA))]
+        grad.ccsd._rdm2_mo2ao(mycc, d2, mo_active, fdm2)  # transform the active orbitals
+        hf_dm1 = mycc._scf.make_rdm1(mycc.mo_coeff, mycc.mo_occ)
+
+        atmlst = range(mol.natm)
+        offsetdic = mol.offset_nr_by_atom()
+        diagidx = np.arange(nao)
+        diagidx = diagidx*(diagidx+1)//2 + diagidx
+        de = np.zeros((len(atmlst),3))
+        Imat = np.zeros((nao,nao))
+        vhf1 = fdm2.create_dataset('vhf1', (len(atmlst),3,nao,nao), 'f8')
+
+        # 2e AO integrals dot 2pdm
+        max_memory = max(0, mycc.max_memory - lib.current_memory()[0])
+        blksize = max(1, int(max_memory*.9e6/8/(nao**3*2.5)))
+
+        for k, ia in enumerate(atmlst):
+            shl0, shl1, p0, p1 = offsetdic[ia]
+            ip1 = p0
+            vhf = np.zeros((3,nao,nao))
+            for b0, b1, nf in _shell_prange(mol, shl0, shl1, blksize):
+                ip0, ip1 = ip1, ip1 + nf
+                dm2buf = grad.ccsd._load_block_tril(fdm2['dm2'], ip0, ip1, nao)
+                dm2buf[:,:,diagidx] *= .5
+                shls_slice = (b0,b1,0,mol.nbas,0,mol.nbas,0,mol.nbas)
+                eri0 = mol.intor('int2e', aosym='s2kl', shls_slice=shls_slice)
+                Imat += lib.einsum('ipx,iqx->pq', eri0.reshape(nf,nao,-1), dm2buf)
+                eri0 = None
+
+                eri1 = mol.intor('int2e_ip1', comp=3, aosym='s2kl',
+                             shls_slice=shls_slice).reshape(3,nf,nao,-1)
+                de[k] -= np.einsum('xijk,ijk->x', eri1, dm2buf) * 2
+                dm2buf = None
+        # HF part
+                for i in range(3):
+                    eri1tmp = lib.unpack_tril(eri1[i].reshape(nf*nao,-1))
+                    eri1tmp = eri1tmp.reshape(nf,nao,nao,nao)
+                    vhf[i] += np.einsum('ijkl,ij->kl', eri1tmp, hf_dm1[ip0:ip1])
+                    vhf[i] -= np.einsum('ijkl,il->kj', eri1tmp, hf_dm1[ip0:ip1]) * .5
+                    vhf[i,ip0:ip1] += np.einsum('ijkl,kl->ij', eri1tmp, hf_dm1)
+                    vhf[i,ip0:ip1] -= np.einsum('ijkl,jk->il', eri1tmp, hf_dm1) * .5
+                eri1 = eri1tmp = None
+            vhf1[k] = vhf
+
+        Imat = reduce(np.dot, (mo_coeff.T, Imat, mycc._scf.get_ovlp(), mo_coeff)) * -1
+
+        dm1mo = np.zeros((nmo,nmo))
+        if with_frozen:
+            dco = Imat[OF[:,None],OA] / (mo_energy[OF,None] - mo_energy[OA])
+            dfv = Imat[VF[:,None],VA] / (mo_energy[VF,None] - mo_energy[VA])
+            dm1mo[OA[:,None],OA] = doo + doo.T
+            dm1mo[OF[:,None],OA] = dco
+            dm1mo[OA[:,None],OF] = dco.T
+            dm1mo[VA[:,None],VA] = dvv + dvv.T
+            dm1mo[VF[:,None],VA] = dfv
+            dm1mo[VA[:,None],VF] = dfv.T
+        else:
+            dm1mo[:nocc,:nocc] = doo + doo.T
+            dm1mo[nocc:,nocc:] = dvv + dvv.T
+
+        dm1 = reduce(np.dot, (mo_coeff, dm1mo, mo_coeff.T))
+        vhf = mycc._scf.get_veff(mycc.mol, dm1) * 2
+        Xvo = reduce(np.dot, (mo_coeff[:,nocc:].T, vhf, mo_coeff[:,:nocc]))
+        Xvo+= Imat[:nocc,nocc:].T - Imat[nocc:,:nocc]
+
+        dm1mo += grad.ccsd._response_dm1(mycc, Xvo, eris)
+
+        Imat[nocc:,:nocc] = Imat[:nocc,nocc:].T
+        im1 = reduce(np.dot, (mo_coeff, Imat, mo_coeff.T))
+
+        # Initialize hcore_deriv with the underlying SCF object because some
+        # extensions (e.g. QM/MM, solvent) modifies the SCF object only.
+        mf_grad = cc_grad.base._scf.nuc_grad_method()
+        #hcore_deriv = mf_grad.hcore_generator(mol)
+        s1 = mf_grad.get_ovlp(mol)
+
+        zeta = lib.direct_sum('i+j->ij', mo_energy, mo_energy) * .5
+        zeta[nocc:,:nocc] = mo_energy[:nocc]
+        zeta[:nocc,nocc:] = mo_energy[:nocc].reshape(-1,1)
+        zeta = reduce(np.dot, (mo_coeff, zeta*dm1mo, mo_coeff.T))
+
+        dm1 = reduce(np.dot, (mo_coeff, dm1mo, mo_coeff.T))
+        p1 = np.dot(mo_coeff[:,:nocc], mo_coeff[:,:nocc].T)
+        vhf_s1occ = reduce(np.dot, (p1, mycc._scf.get_veff(mol, dm1+dm1.T), p1))
+
+        # Hartree-Fock part contribution
+        dm1p = hf_dm1 + dm1*2
+        dm1 += hf_dm1
+        zeta += rhf_grad.make_rdm1e(mo_energy, mo_coeff, mycc.mo_occ)
+
+        for k, ia in enumerate(atmlst):
+            shl0, shl1, p0, p1 = offsetdic[ia]
+# s[    1] dot I, note matrix im1 is not hermitian
+            de[k] += np.einsum('xij,ij->x', s1[:,p0:p1], im1[p0:p1])
+            de[k] += np.einsum('xji,ij->x', s1[:,p0:p1], im1[:,p0:p1])
+# h[    1] \dot DM, contribute to f1
+            h1ao = emb_hcore[0][ia]
+            de[k] += np.einsum('xij,ji->x', h1ao, dm1)
+# -s    [1]*e \dot DM,  contribute to f1
+            de[k] -= np.einsum('xij,ij->x', s1[:,p0:p1], zeta[p0:p1]  )
+            de[k] -= np.einsum('xji,ij->x', s1[:,p0:p1], zeta[:,p0:p1])
+# -v    hf[s_ij[1]],  contribute to f1, *2 for s1+s1.T
+            de[k] -= np.einsum('xij,ij->x', s1[:,p0:p1], vhf_s1occ[p0:p1]) * 2
+            de[k] -= np.einsum('xij,ij->x', vhf1[k], dm1p)
+            sub_hl_nuc_grad[k] += de[k]
+
+        atmlst = range(self.mol.natm)
+        for atm in atmlst:
+            if atm not in atm_s2s[0]:
+                h1ao = emb_hcore[0][atm]
+                sub_hl_nuc_grad[atm] += np.einsum('xij,ji->x', h1ao, dm1)
+
+        return sub_hl_nuc_grad
+
+    def get_emb_nuc_grad(self):
         """After a F&T embedding convergence, calculates the embedding nuclear gradient. 
         Currently only for 1 subsystem and the HL has to be subsystem 0."""
 
         #Get numerical components
-        s2s = self.sub2sup
-        xyz = [0,1,2]
-        full_aoslices = self.mol.aoslice_by_atom()
-        atm_s2s = self.atm_sub2sup
-        self.get_supersystem_nuc_grad()
-        #Always the first of the first (HL) subsystem. All of this is in Bohr
-        if not den_grad is None:
-            num_sub1_den_grad, num_sub2_den_grad = den_grad
-
-       
-        full_sub1_den_grad = np.zeros((2,3,self.fs_dmat[0].shape[0], self.fs_dmat[0].shape[1]))
-        full_sub1_den_grad[np.ix_([0,1],xyz, s2s[0], s2s[0])] += num_sub1_den_grad
-        full_sub2_den_grad = np.zeros((2,3,self.fs_dmat[0].shape[0], self.fs_dmat[0].shape[1]))
-        full_sub2_den_grad[np.ix_([0,1],xyz, s2s[1], s2s[1])] += num_sub2_den_grad
-        full_emb_den_grad = full_sub1_den_grad + full_sub2_den_grad
-
-
-        full_sub1_den = np.zeros_like(self.fs_dmat)
-        full_sub1_den[np.ix_([0,1], s2s[0], s2s[0])] += self.subsystems[0].env_dmat
-        full_sub2_den = np.zeros_like(self.fs_dmat)
-        full_sub2_den[np.ix_([0,1], s2s[1], s2s[1])] += self.subsystems[1].env_dmat
-        full_emb_den = full_sub1_den + full_sub2_den
-
-        grad_subsys = cluster_subsystem.ClusterEnvSubSystemGrad(self.subsystems[0])
-        sub1_env_en_grad = grad_subsys.grad_elec()
-        sub_aoslices = grad_subsys.subsys.mol.aoslice_by_atom()
-
-        #Get emb and proj components
-        emb_grad = np.zeros_like(sub1_env_en_grad)
-        proj_grad = np.zeros_like(sub1_env_en_grad)
-        hcore_full = self.fs_nuc_grad_obj.hcore_generator()
-        hcore_sub = grad_subsys.grad_obj.hcore_generator()
-        ao2int_full = self.mol.intor('int2e')
-        ao2int_sub = self.mol.intor('int2e')
-        ao2int_grad_full = self.mol.intor('int2e_ip1')
-        ao2int_grad_sub = self.mol.intor('int2e_ip1')
-        for atm in range(grad_subsys.subsys.mol.natm):
-            full_atm = atm_s2s[0][atm]
-            h_mat = hcore_full(full_atm)
-            hmat_full = h_mat[np.ix_(xyz,s2s[0],s2s[0])]
-            hcore_emb_grad = hmat_full - hcore_sub(atm)
-            hcore_emb_e = np.einsum('xij,ij->x', hcore_emb_grad, grad_subsys.subsys.env_dmat[0] + grad_subsys.subsys.env_dmat[1])
-            p0_sub, p1_sub = sub_aoslices[atm, 2:]
-            p0_full, p1_full = full_aoslices[full_atm,2:]
-       
-            if isinstance(grad_subsys.subsys.env_scf, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
-                #veff_emb
-                #This term is tricky. Need to figure out how to get grad of veff emb.
-                atm_index = self.atm_sub2sup[0][0]
-                p0, p1 = aoslices [atm_index, 2:]
-
-                #coul term
-                atm_ao_2int_grad = np.zeros_like(ao_2int_grad)
-                atm_ao_2int_grad[:,p0:p1] += ao_2int_grad[:,p0:p1]
-                atm_ao_2int_grad += atm_ao_2int_grad.transpose(0,2,1,3,4) + atm_ao_2int_grad.transpose(0,3,4,1,2) + atm_ao_2int_grad.transpose(0,3,4,2,1)
-                atm_ao_2int_grad *= -1.
-
-                ana_coul_emb = np.einsum('xijkl,ji->xkl',atm_ao_2int_grad,(sub_b_dmat[0] + sub_b_dmat[1]))
-                ana_coul_emb[0] += np.einsum('ijkl,ji->kl',ao_2int, (sub_b_dmat_grad[0] + sub_b_dmat_grad[1]))
-
-                #exch term
-                omega, alph, hyb = self.env_in_env_scf._numint.rsh_and_hybrid_coeff(self.env_in_env_scf.xc, spin=self.mol.spin)
-                ana_exc_emb = np.array([np.zeros_like(ana_coul_emb), np.zeros_like(ana_coul_emb)])
-                if abs(hyb) >= 1e-10:
-                    ana_exc_emb[0] = np.einsum('xijkl,jk->xil', atm_ao_2int_grad, sub_b_dmat[0])
-                    ana_exc_emb[1] = np.einsum('xijkl,jk->xil', atm_ao_2int_grad, sub_b_dmat[1])
-                    ana_exc_emb[0][0] += np.einsum('ijkl,jk->il', ao_2int, sub_b_dmat_grad[0])
-                    ana_exc_emb[1][0] += np.einsum('ijkl,jk->il', ao_2int, sub_b_dmat_grad[1])
-                    ana_exc_emb *= hyb
-
-                #fxc term
-                #Something is wrong with this term.
-                #could be the grid term.
-                fxc_emb = self.env_in_env_scf._numint.nr_fxc(self.mol, self.env_in_env_scf.grids, self.env_in_env_scf.xc, sub_b_dmat, sub_b_dmat_grad, spin=self.mol.spin)
-
-                sub_ana_coul_emb_grad = ana_coul_emb[np.ix_(xyz, s2s[0], s2s[0])]
-                sub_ana_exc_emb_grad = ana_exc_emb[np.ix_([0,1], xyz, s2s[0], s2s[0])]
-                sub_ana_fxc_emb_grad = fxc_emb[np.ix_([0,1], s2s[0], s2s[0])]
-            #Using hf for embedding potential
-            else:
-                #J
-                atm_ao2int_grad_full = np.zeros_like(ao2int_grad_full)
-                atm_ao2int_grad_full[:,p0_full:p1_full] += ao2int_grad_full[:,p0_full:p1_full]
-                atm_ao2int_grad_full += atm_ao2int_grad_full.transpose(0,2,1,3,4) + atm_ao2int_grad_full.transpose(0,3,4,1,2) + atm_ao2int_grad_full.transpose(0,3,4,2,1)
-                atm_ao2int_grad_full *= -1.
-                sub1_coul_emb = np.einsum('xijkl,ji->xkl', atm_ao2int_grad_full, (full_sub2_den[0] + full_sub2_den[1]))
-                sub1_coul_emb += np.einsum('ijkl,xji->xkl', ao2int_full, (full_sub2_den_grad[0] + full_sub2_den_grad[1]))
-                #K
-                #sub1_exch_emb = [None, None]
-                sub1_exch_emb = np.einsum('xijkl,sjk->sxil', atm_ao2int_grad_full, full_sub2_den)
-                #sub1_exch_emb[1] = np.einsum('xijkl,sjk->sxil', atm_ao2int_grad_full, full_sub2_den[1])
-                sub1_exch_emb += np.einsum('ijkl,sxjk->sxil', ao2int_full, full_sub2_den_grad)
-
-                sub1_veff_emb = sub1_coul_emb[np.ix_(xyz,s2s[0],s2s[0])] - sub1_exch_emb[np.ix_([0,1],xyz,s2s[0],s2s[0])]
-                sub1_veff_emb_e = np.einsum('sxij,sij->x', sub1_veff_emb[:,:,p0_sub:p1_sub], np.array(grad_subsys.subsys.env_dmat)[:,p0_sub:p1_sub])
-
-            emb_grad[atm] += hcore_emb_e + sub1_veff_emb_e
-
-            #proj part
-            if isinstance(grad_subsys.subsys.env_scf, (dft.rks.RKS, dft.roks.ROKS, dft.uks.UKS)):
-                pass
-            else:
-                #F'DS + FD'S + FDS' + S'DF + SD'F + SDF'
-                fock_grad_ab = np.array([h_mat[np.ix_(xyz, s2s[0],s2s[1])], h_mat[np.ix_(xyz,s2s[0],s2s[1])]])
-                fock_grad_ab[0] += np.einsum('xijkl,ji->xkl', atm_ao2int_grad_full, (full_emb_den[0] + full_emb_den[1]))[np.ix_(xyz, s2s[0],s2s[1])]
-                fock_grad_ab[1] += np.einsum('xijkl,ji->xkl', atm_ao2int_grad_full, (full_emb_den[0] + full_emb_den[1]))[np.ix_(xyz, s2s[0],s2s[1])]
-                fock_grad_ab[0] += np.einsum('ijkl,xji->xkl', ao2int_full, (full_emb_den_grad[0] + full_emb_den_grad[1]))[np.ix_(xyz,s2s[0],s2s[1])]
-                fock_grad_ab[1] += np.einsum('ijkl,xji->xkl', ao2int_full, (full_emb_den_grad[0] + full_emb_den_grad[1]))[np.ix_(xyz,s2s[0],s2s[1])]
-                fock_grad_ab -= np.einsum('xijkl,sjk->sxil', atm_ao2int_grad_full, full_emb_den)[np.ix_([0,1], xyz, s2s[0],s2s[1])]
-                fock_grad_ab -= np.einsum('ijkl,sxjk->sxil', ao2int_full, full_emb_den_grad)[np.ix_([0,1], xyz,s2s[0],s2s[1])]
-                smat_ba = self.smat[np.ix_(s2s[1],s2s[0])]
-                fgradds = np.einsum('sxnj,sji,il->sxnl', fock_grad_ab, self.subsystems[1].env_dmat, smat_ba)
-                fock_ab = np.array(self.fock)[np.ix_([0,1],s2s[0],s2s[1])]
-                fdgrads = np.einsum('snj,sxji,il->sxnl', fock_ab, num_sub2_den_grad, smat_ba)
-                atm_smat_grad = np.zeros_like(self.fs_nuc_grad_obj.get_ovlp())
-                atm_smat_grad[:, p0_full:p1_full] += self.fs_nuc_grad_obj.get_ovlp()[:, p0_full:p1_full]
-                smat_grad_ab = atm_smat_grad[np.ix_(xyz,s2s[0],s2s[1])]
-                smat_grad_ba = smat_grad_ab.transpose(0,2,1)
-                fdsgrad = np.einsum('snj,sji,xil->sxnl', fock_ab, self.subsystems[1].env_dmat, smat_grad_ba)
-
-                proj = fgradds + fdgrads + fdsgrad
-                proj += proj.transpose(0,1,3,2)
-                proj *= -1
-                proj_grad[atm] = np.einsum('sxij,sij->x', proj, grad_subsys.subsys.env_dmat)
-
-        return sub1_env_en_grad + emb_grad + proj_grad
-        #Hcore num grad
-        #num_sub1_h_energy_grad = np.trace(np.dot(subsys1.env_hcore, subsys1.env_dmat[0]+subsys1.env_dmat[1]))
-        #num_sub1_h_energy_grad -= np.trace(np.dot(subsys0.env_hcore, subsys0.env_dmat[0]+subsys0.env_dmat[1]))
-        #num_sub1_h_energy_grad /= (x_dir_diff*2.)
-
-        #num_sub1_h_pot_grad = (subsys1.env_hcore - subsys0.env_hcore)/(x_dir_diff*2.)
-        #num_sub2_h_pot_grad = (env_subsys1.env_hcore - env_subsys0.env_hcore)/(x_dir_diff*2.)
-
-        ##VHF num grad
-        #subsys0_grid_weights = custom_pyscf_methods.grids_response(subsys0.env_scf.grids)[1]
-        #subsys1_grid_weights = custom_pyscf_methods.grids_response(subsys1.env_scf.grids)[1]
-        #num_sub1_grid_weights_grad = (subsys1_grid_weights - subsys0_grid_weights)/(x_dir_diff*2.)
-
-        #subsys0_vhf = subsys0.env_scf.get_veff(dm=subsys0.env_dmat)
-        #subsys1_vhf = subsys1.env_scf.get_veff(dm=subsys1.env_dmat)
-        #env_subsys0_vhf = env_subsys0.env_scf.get_veff(dm=env_subsys0.env_dmat)
-        #env_subsys1_vhf = env_subsys1.env_scf.get_veff(dm=env_subsys1.env_dmat)
-
-        ##num_sub1_exc_grad = (subsys1_vhf.exc - subsys0_vhf.exc)/(x_dir_diff*2.)
-        ##num_sub2_exc_grad = (env_subsys1_vhf.exc - env_subsys0_vhf.exc)/(x_dir_diff*2.)
-        ###num_sub1_j_energy_grad = (subsys1_vhf.ecoul - subsys0_vhf.ecoul)/(x_dir_diff*2.)
-        ###num_sub2_j_energy_grad = (env_subsys1_vhf.ecoul - env_subsys0_vhf.ecoul)/(x_dir_diff*2.)
-
-        ##num_sub1_j_pot_grad = (subsys1_vhf.vj - subsys0_vhf.vj)/(x_dir_diff*2.)
-        ##num_sub2_j_pot_grad = (env_subsys1_vhf.vj - env_subsys0_vhf.vj)/(x_dir_diff*2.)
-        ##num_sub1_k_pot_grad = (subsys1_vhf.vk - subsys0_vhf.vk)/(x_dir_diff*2.)
-        ##num_sub2_k_pot_grad = (env_subsys1_vhf.vk - env_subsys0_vhf.vk)/(x_dir_diff*2.)
-        ##num_sub1_vhf_pot_grad = (subsys1_vhf - subsys0_vhf)/(x_dir_diff*2.)
-        ##num_sub2_vhf_pot_grad = (env_subsys1_vhf - env_subsys0_vhf)/(x_dir_diff*2.)
-
-        ##num_sub1_xcfun_pot_grad = num_sub1_vhf_pot_grad - num_sub1_j_pot_grad + num_sub1_k_pot_grad
-        ##num_sub2_xcfun_pot_grad = num_sub2_vhf_pot_grad - num_sub2_j_pot_grad + num_sub2_k_pot_grad
-
-        ##Proj Pot num grad
-        ##num_sub1_p_energy_grad = np.trace(np.dot(subsys1.proj_pot[0], subsys1.env_dmat[0]))
-        ##num_sub1_p_energy_grad += np.trace(np.dot(subsys1.proj_pot[1], subsys1.env_dmat[1]))
-        ##num_sub1_p_energy_grad -= np.trace(np.dot(subsys0.proj_pot[0], subsys0.env_dmat[0]))
-        ##num_sub1_p_energy_grad -= np.trace(np.dot(subsys0.proj_pot[1], subsys0.env_dmat[1]))
-        ##num_sub1_p_energy_grad /= (x_dir_diff*2.)
-
-        #num_sub1_p_pot_grad = (np.array(subsys1.proj_pot) - np.array(subsys0.proj_pot))/(x_dir_diff*2.)
-
-        ##Embed Pot num grad
-        #emb_pot1 = subsys1.emb_fock - subsys1.subsys_fock
-        #emb_pot0 = subsys0.emb_fock - subsys0.subsys_fock
-        ##num_sub1_e_energy_grad = np.trace(np.dot(emb_pot1[0], subsys1.env_dmat[0]))
-        ##num_sub1_e_energy_grad += np.trace(np.dot(emb_pot1[1], subsys1.env_dmat[1]))
-        ##num_sub1_e_energy_grad -= np.trace(np.dot(emb_pot0[0], subsys0.env_dmat[0]))
-        ##num_sub1_e_energy_grad -= np.trace(np.dot(emb_pot0[1], subsys0.env_dmat[1]))
-        ##num_sub1_e_energy_grad /= (x_dir_diff*2.)
-
-        #emb_hcore1 = supersystem1.hcore[np.ix_(s2s[0],s2s[0])] - subsys1.env_hcore
-        #emb_hcore0 = supersystem0.hcore[np.ix_(s2s[0],s2s[0])] - subsys0.env_hcore
-
-        #num_sub1_embhcore_pot_grad = (emb_hcore1 - emb_hcore0)/(x_dir_diff*2.)
-
-        #sub1_emb_pot = subsys1.emb_fock - subsys1.subsys_fock
-        #sub0_emb_pot = subsys0.emb_fock - subsys0.subsys_fock
-        #env_sub1_emb_pot = env_subsys1.emb_fock - env_subsys1.subsys_fock
-        #env_sub0_emb_pot = env_subsys0.emb_fock - env_subsys0.subsys_fock
-        #num_sub1_emb_pot_grad = (np.array(sub1_emb_pot) - np.array(sub0_emb_pot))/(x_dir_diff*2.)
-        #num_sub2_emb_pot_grad = (np.array(env_sub1_emb_pot) - np.array(env_sub0_emb_pot))/(x_dir_diff*2.)
-
-        #print ('num sub1 energy grad')
-        #print (num_sub1_energy_grad)
-
-        ##SUM TO GET NUMERICAL TERMS
-        ##hcore
-        #grad_subsys = self.subsystems[0]
-        #dm = grad_subsys.env_dmat
-        ##emb
-        #emb_pot = grad_subsys.emb_fock - grad_subsys.subsys_fock
-        #num_sub1_emb_energy_grad = np.trace(np.dot(num_sub1_emb_pot_grad[0], dm[0]))
-        #num_sub1_emb_energy_grad += np.trace(np.dot(num_sub1_emb_pot_grad[1], dm[1]))
-        #num_sub1_emb_energy_grad += np.trace(np.dot(emb_pot[0], num_sub1_den_grad[0]))
-        #num_sub1_emb_energy_grad += np.trace(np.dot(emb_pot[1], num_sub1_den_grad[1]))
-        ##proj
-        #proj_pot = grad_subsys.proj_pot
-        #num_sub1_proj_energy_grad = np.trace(np.dot(num_sub1_p_pot_grad[0], dm[0]))
-        #num_sub1_proj_energy_grad += np.trace(np.dot(num_sub1_p_pot_grad[1], dm[1]))
-        #num_sub1_proj_energy_grad += np.trace(np.dot(proj_pot[0], num_sub1_den_grad[0]))
-        #num_sub1_proj_energy_grad += np.trace(np.dot(proj_pot[1], num_sub1_den_grad[1]))
-
-        ##sub1 terms
-        ##hcore
-        #num_sub1_hcore_energy_grad = np.trace(np.dot(num_sub1_h_pot_grad, dm[0] + dm[1]))
-        #num_sub1_hcore_energy_grad += np.trace(np.dot(grad_subsys.env_hcore, num_sub1_den_grad[0] + num_sub1_den_grad[1]))
-        ##veff
-        ##sub_vhf = grad_subsys.env_scf.get_veff(dm=dm)
-        ##num_sub1_coul_energy_grad = np.trace(np.dot(num_sub1_j_pot_grad, dm[0] + dm[1]))
-        ##num_sub1_coul_energy_grad += np.trace(np.dot(sub_vhf.vj, num_sub1_den_grad[0] + num_sub1_den_grad[1]))
-        ##num_sub1_coul_energy_grad *= 0.5
-
-        ##num_sub1_x_energy_grad = np.trace(np.dot(num_sub1_k_pot_grad[0], dm[0]))
-        ##num_sub1_x_energy_grad += np.trace(np.dot(num_sub1_k_pot_grad[1], dm[1]))
-        ##num_sub1_x_energy_grad += np.trace(np.dot(sub_vhf.vk[0], num_sub1_den_grad[0]))
-        ##num_sub1_x_energy_grad += np.trace(np.dot(sub_vhf.vk[1], num_sub1_den_grad[1]))
-        ##num_sub1_x_energy_grad *= 0.5 
-
-        ##num_sub1_xc_energy_grad = np.trace(np.dot(num_sub1_xcfun_pot_grad[0], dm[0]))
-        ##num_sub1_xc_energy_grad += np.trace(np.dot(num_sub1_xcfun_pot_grad[1], dm[1]))
-        ##num_sub1_xc_energy_grad += np.trace(np.dot(sub_vhf[0] - sub_vhf.vj + sub_vhf.vk[0], num_sub1_den_grad[0]))
-        ##num_sub1_xc_energy_grad += np.trace(np.dot(sub_vhf[1] - sub_vhf.vj + sub_vhf.vk[1], num_sub1_den_grad[1]))
-
-        ##SUM TO GET NUMERICAL TERMS
-
-        ##Potential components:
-        #num_sub1_emb_deriv = np.trace(np.dot(num_sub1_emb_pot_grad[0], dm[0]))
-        #num_sub1_emb_deriv += np.trace(np.dot(num_sub1_emb_pot_grad[1], dm[1]))
-
-        #num_sub1_proj_deriv = np.trace(np.dot(num_sub1_p_pot_grad[0], dm[0]))
-        #num_sub1_proj_deriv += np.trace(np.dot(num_sub1_p_pot_grad[1], dm[1]))
-
-        ##Analytical gradients.
-        #self.get_supersystem_nuc_grad()
-        ##emb
-        #grad_subsys_obj = grad_subsys.env_scf.nuc_grad_method()
-        #emb_pot = grad_subsys.emb_fock - grad_subsys.subsys_fock
-
-        ##hcore_emb
-        #s2s = self.sub2sup
-        #aoslices = self.mol.aoslice_by_atom()
-        #hcore_full = self.fs_nuc_grad_obj.hcore_generator()
-        #hcore_sub = grad_subsys_obj.hcore_generator()
-
-        #sub_b_dmat = np.zeros_like(self.fs_dmat)
-        #sub_b_dmat[0][np.ix_(s2s[1],s2s[1])] += self.subsystems[1].env_dmat[0]
-        #sub_b_dmat[1][np.ix_(s2s[1],s2s[1])] += self.subsystems[1].env_dmat[1]
-
-        #sub_b_dmat_grad = np.zeros_like(self.fs_dmat)
-        #sub_b_dmat_grad[0][np.ix_(s2s[1],s2s[1])] += num_sub2_den_grad[0]
-        #sub_b_dmat_grad[1][np.ix_(s2s[1],s2s[1])] += num_sub2_den_grad[1]
-
-        #sub_a_dmat = np.zeros_like(self.fs_dmat)
-        #sub_a_dmat[0][np.ix_(s2s[0],s2s[0])] += self.subsystems[0].env_dmat[0]
-        #sub_a_dmat[1][np.ix_(s2s[0],s2s[0])] += self.subsystems[0].env_dmat[1]
-
-        #ao_2int_grad = self.mol.intor('int2e_ip1')
-        #ao_2int = self.mol.intor('int2e')
-
-        ##veff_grad = self.fs_nuc_grad_obj.get_veff(dm=sub_b_dmat)
-        #self.fs_nuc_grad_obj.grid_response = True
-        #veff_grad = self.fs_nuc_grad_obj.get_veff(dm=sub_a_dmat)
-        #print ('exc relax')
-        #print (veff_grad.exc1_grid)
-
-        ##xyz = [0,1,2]
-        ##for atm in range(grad_subsys.mol.natm):
-        ##    h_mat = hcore_full(atm)
-        ##    hmat_full = h_mat[np.ix_(xyz,s2s[0],s2s[0])]
-        ##    hcore_emb = hmat_full - hcore_sub(atm)
-        ##    hcore_emb_e = np.einsum('xij,ij->x', hcore_emb, grad_subsys.env_dmat[0] + grad_subsys.env_dmat[1])
-        ##
-        ##    #veff_emb
-        ##    #This term is tricky. Need to figure out how to get grad of veff emb.
-        ##    atm_index = self.atm_sub2sup[0][0]
-        ##    p0, p1 = aoslices [atm_index, 2:]
-
-        ##    #coul term
-        ##    atm_ao_2int_grad = np.zeros_like(ao_2int_grad)
-        ##    atm_ao_2int_grad[:,p0:p1] += ao_2int_grad[:,p0:p1]
-        ##    atm_ao_2int_grad += atm_ao_2int_grad.transpose(0,2,1,3,4) + atm_ao_2int_grad.transpose(0,3,4,1,2) + atm_ao_2int_grad.transpose(0,3,4,2,1)
-        ##    atm_ao_2int_grad *= -1.
-
-        ##    ana_coul_emb = np.einsum('xijkl,ji->xkl',atm_ao_2int_grad,(sub_b_dmat[0] + sub_b_dmat[1]))
-        ##    ana_coul_emb[0] += np.einsum('ijkl,ji->kl',ao_2int, (sub_b_dmat_grad[0] + sub_b_dmat_grad[1]))
-
-        ##    #exch term
-        ##    omega, alph, hyb = self.env_in_env_scf._numint.rsh_and_hybrid_coeff(self.env_in_env_scf.xc, spin=self.mol.spin)
-        ##    ana_exc_emb = np.array([np.zeros_like(ana_coul_emb), np.zeros_like(ana_coul_emb)])
-        ##    if abs(hyb) >= 1e-10:
-        ##        ana_exc_emb[0] = np.einsum('xijkl,jk->xil', atm_ao_2int_grad, sub_b_dmat[0])
-        ##        ana_exc_emb[1] = np.einsum('xijkl,jk->xil', atm_ao_2int_grad, sub_b_dmat[1])
-        ##        ana_exc_emb[0][0] += np.einsum('ijkl,jk->il', ao_2int, sub_b_dmat_grad[0])
-        ##        ana_exc_emb[1][0] += np.einsum('ijkl,jk->il', ao_2int, sub_b_dmat_grad[1])
-        ##        ana_exc_emb *= hyb
-
-        ##    #fxc term
-        ##    #Something is wrong with this term.
-        ##    #could be the grid term.
-        ##    fxc_emb = self.env_in_env_scf._numint.nr_fxc(self.mol, self.env_in_env_scf.grids, self.env_in_env_scf.xc, sub_b_dmat, sub_b_dmat_grad, spin=self.mol.spin)
-
-        ##    sub_ana_coul_emb_grad = ana_coul_emb[np.ix_(xyz, s2s[0], s2s[0])]
-        ##    sub_ana_exc_emb_grad = ana_exc_emb[np.ix_([0,1], xyz, s2s[0], s2s[0])]
-        ##    sub_ana_fxc_emb_grad = fxc_emb[np.ix_([0,1], s2s[0], s2s[0])]
-        ##    print ("ana veff terms")
-        ##    print (sub_ana_coul_emb_grad[0])
-        ##    print (sub_ana_exc_emb_grad[0][0])
-        ##    print (sub_ana_fxc_emb_grad[0])
-        ##    print (emb_veff_grad_xc[0])
-        ##    #print (x)
-
-        ##    veff_emb_e = np.einsum('xij,ij->x', veff_grad[0][:,p0:p1,p0:p1], grad_subsys.env_dmat[0])
-        ##    veff_emb_e += np.einsum('xij,ij->x', veff_grad[1][:,p0:p1,p0:p1], grad_subsys.env_dmat[1])
-
-        ##    #Use the fxc and numerical integration with density derivative to get veff emb.
-
-
-        ##    print ('hcore emb')
-        ##    print (hcore_emb_e)
-        ##    print ('veff emb')
-        ##    print (veff_emb_e)
-        ##
-        ##    num_sub1_e_grad = np.trace(np.dot(num_sub1_emb_grad[0], dm[0]))
-        ##    num_sub1_e_grad += np.trace(np.dot(num_sub1_emb_grad[1], dm[1]))
-
-        ##    print ('sub emb e')
-        ##    print (num_sub1_e_grad)
-
-        ##    #proj
-        ##    proj_pot = grad_subsys.proj_pot
-        ##    num_sub1_p_grad = np.trace(np.dot(num_sub1_proj_grad[0], dm[0]))
-        ##    num_sub1_p_grad += np.trace(np.dot(num_sub1_proj_grad[1], dm[1]))
-
-        ##    #analytical portion.
-        ##    #FDS + SDF
-        ##    f_ab = [None, None]
-        ##    f_ba = [None, None]
-        ##    f_ab[0] = self.fock[0][np.ix_(s2s[0], s2s[1])]
-        ##    f_ab[1] = self.fock[1][np.ix_(s2s[0], s2s[1])]
-        ##    f_ba[0] = self.fock[0][np.ix_(s2s[1], s2s[0])]
-        ##    f_ba[1] = self.fock[1][np.ix_(s2s[1], s2s[0])]
-
-        ##    d_bb = self.subsystems[1].env_dmat
-        ##    s_ba = self.smat[np.ix_(s2s[1], s2s[0])]
-        ##    s_ab = self.smat[np.ix_(s2s[0], s2s[1])]
-
-        ##    atm = 0
-        ##    vhf_grad = 0.
-        ##    d_bb_grad = num_sub2_den_grad
-
-        ##    p0,p1 = aoslices [0,2:]
-
-        ##    s_grad = self.fs_nuc_grad_obj.get_ovlp()[:,p0:p1]
-        ##    s_ab_grad = s_grad[0][np.ix_(s2s[0], s2s[1])]
-        ##    s_grad = self.fs_nuc_grad_obj.get_ovlp()[:,:,p0:p1]
-        ##    s_ba_grad = s_grad[0][np.ix_(s2s[1], s2s[0])]
-
-        ##    f_ab_grad = [None, None]
-        ##    f_ab_grad[0] = (hcore_full(atm) + vhf_grad)[0][np.ix_(s2s[0], s2s[1])]
-        ##    f_ab_grad[1] = (hcore_full(atm) + vhf_grad)[0][np.ix_(s2s[0], s2s[1])]
-        ##    f_ba_grad = [None, None]
-        ##    f_ba_grad[0] = (hcore_full(atm) + vhf_grad)[0][np.ix_(s2s[1], s2s[0])]
-        ##    f_ba_grad[1] = (hcore_full(atm) + vhf_grad)[0][np.ix_(s2s[1], s2s[0])]
-
-
-        ##    ana_proj_grad = [None, None]
-        ##    ana_proj_grad[0] = np.linalg.multi_dot([f_ab_grad[0],d_bb[0],s_ba])
-        ##    ana_proj_grad[1] = np.linalg.multi_dot([f_ab_grad[1],d_bb[1],s_ba])
-        ##    ana_proj_grad[0] += np.linalg.multi_dot([f_ab[0],d_bb_grad[0],s_ba])
-        ##    ana_proj_grad[1] += np.linalg.multi_dot([f_ab[1],d_bb_grad[1],s_ba])
-        ##    ana_proj_grad[0] += np.linalg.multi_dot([f_ab[0],d_bb[0],s_ba_grad])
-        ##    ana_proj_grad[1] += np.linalg.multi_dot([f_ab[1],d_bb[1],s_ba_grad])
-
-        ##    print (np.trace(np.dot(grad_subsys.env_dmat[0],ana_proj_grad[0])))
-        ##    print (np.trace(np.dot(grad_subsys.env_dmat[1],ana_proj_grad[1])))
-        ##    ana_proj_grad[0] += np.linalg.multi_dot([s_ab_grad,d_bb[0],f_ba[0]])
-        ##    ana_proj_grad[1] += np.linalg.multi_dot([s_ab_grad,d_bb[1],f_ba[1]])
-        ##    ana_proj_grad[0] += np.linalg.multi_dot([s_ab,d_bb_grad[0],f_ba[0]])
-        ##    ana_proj_grad[1] += np.linalg.multi_dot([s_ab,d_bb_grad[1],f_ba[1]])
-        ##    ana_proj_grad[0] += np.linalg.multi_dot([s_ab,d_bb[0],f_ba_grad[0]])
-        ##    ana_proj_grad[1] += np.linalg.multi_dot([s_ab,d_bb[1],f_ba_grad[1]])
-        ##    print ("proj_grad")
-        ##    print (np.trace(np.dot(grad_subsys.env_dmat[0],ana_proj_grad[0])))
-        ##    print (np.trace(np.dot(grad_subsys.env_dmat[1],ana_proj_grad[1])))
-        ##    print (num_sub1_p_grad)
-
-
-
-        ##This is currently only for one atom in x dimension.
-        ##Need to break down this term again into components. I think there is an issue with grids.
-        #coords, w0, w1 = custom_pyscf_methods.grids_response(grad_subsys.env_scf.grids)
-        #print (np.max(num_sub1_grid_weights_grad - w1[0,:,0]))
-        #grad_subsys = cluster_subsystem.ClusterEnvSubSystemGrad(grad_subsys)
-        ##grad_subsys_obj.grid_response = True
-        ##density gradient terms
-        ##ana_sub1_dm0 = np.array(grad_subsys.env_dmat)
-        ##numerical terms.
-        ##print ('veff num')
-        ##print (num_sub1_vhf_grad[0])
-        ##print (np.einsum('sij,sij', num_sub1_vhf_grad, ana_sub1_dm0))
-
-
-        ##analytical terms.
-        ##p0,p1 = aoslices[0,2:]
-        ##vhf_grad = grad_subsys_obj.get_veff(grad_subsys.mol, grad_subsys.env_dmat)
-        ##print (vhf_grad.shape)
-        ##print (vhf_grad[0][0]) 
-        ##ana_sub1_vhf_grad_terms = np.einsum('sxij,sij->x', vhf_grad[:,:,p0:p1], ana_sub1_dm0[:,p0:p1]) * 2.
-        ##print (ana_sub1_vhf_grad_terms)
-        ##print (x)
-
-        ##Density grad terms are already small but within a factor of 10^-9
-        ##hcore grad terms are already small but within a factor of 10^-12
-
-        ##Need to customize the grid correction term.
-        #ana_sub1_en_grad = grad_subsys.grad_elec()
-
-        #print ('ana sub1_en_grad')
-        #print (ana_sub1_en_grad)
-        #print ("sub1 energy grad")
-        #print (ana_sub1_en_grad[0][0] + num_sub1_emb_deriv + num_sub1_proj_deriv)
-        ##Grid term accounts for large grid used for the subsystems.
-        ##Need to update the grid response term for subsystems with large grids.
-        ##num_rank = self.mol.nao_nr()
-        ##grid_dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
-        ##grid_dmat[0][np.ix_(s2s[0], s2s[0])] += (grad_subsys.env_dmat[0])
-        ##grid_dmat[1][np.ix_(s2s[0], s2s[0])] += (grad_subsys.env_dmat[1])
-        ##self.fs_nuc_grad_obj.grid_response = True
-        ##vhf_sub = self.fs_nuc_grad_obj.get_veff(dm=grid_dmat)
-        ##grid_response = vhf_sub.exc1_grid[0]
-        ##print ('grid 1')
-        ##print (grid_response)
-        ##grid_dmat = [np.zeros((num_rank, num_rank)), np.zeros((num_rank, num_rank))]
-        ##grid_dmat[0][np.ix_(s2s[1], s2s[1])] += (self.subsystems[1].env_dmat[0])
-        ##grid_dmat[1][np.ix_(s2s[1], s2s[1])] += (self.subsystems[1].env_dmat[1])
-        ##self.fs_nuc_grad_obj.grid_response = True
-        ##vhf_sub = self.fs_nuc_grad_obj.get_veff(dm=grid_dmat)
-        ##grid_response = vhf_sub.exc1_grid[0]
-        ##print ('grid 2')
-        ##print (grid_response)
-        ##print (ana_sub1_en_grad[0][0] + num_sub1_e_grad + num_sub1_p_grad - grid_response[0])
-        #print (num_sub1_energy_grad)
-
-
-        #print (ana_sub1_en_grad[0][0] + num_sub1_e_grad + num_sub1_p_grad-num_sub1_energy_grad)
-
-
-        #active_atms = self.atm_sub2sup[0]
-        #self.emb_nuc_grad = 0
-        #return self.emb_nuc_grad
+        env_nuc_grad = self.get_env_nuc_grad()[0]
+        hl_nuc_grad = self.get_hl_nuc_grad()
+        return (self.fs_nuc_grad - env_nuc_grad + hl_nuc_grad)

@@ -1693,7 +1693,7 @@ class ClusterHLSubSystem(ClusterEnvSubSystem):
         else:
             ecc = hl_cc.kernel()[0]
         self.hl_energy += ecc
-
+        self.hl_obj = hl_cc
         if "(t)" in self.hl_method:
             if self.hl_unrestricted or self.mol.spin != 0:
                 ecc_t = uccsd_t.kernel(hl_cc, eris=eris)
