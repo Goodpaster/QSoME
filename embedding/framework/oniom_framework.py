@@ -153,22 +153,44 @@ class ONIOM_Framework:
         total_energy = 0.
         subsys_list = self.subsystems
         external_potential = None
+        mediators_list = copy(self.embed_mediators)
 
         #This iterative loop does the embedding. Goes one level deeper every time.
         while type(subsys_list[-1]) is list:
             env_subsys = subsys_list[0]
             model_subsys_list = subsys_list[-1]
             model_subsys = create_model_subsys(env_subsys, model_subsys_list)
+
             #do full system calculation
             comb_system = combine_subsystems(env_subsys, model_subsys)
+            if external_potential is None:
+                external_potential = np.zeros_like(comb_system.mf_scf.mo_coeff)
+            comb_system.embed_pot = external_potential
             total_energy += comb_system.kernel()
 
             #do embedding
+            embed_mediator = mediators_list.pop()
+            ft_err = 1.
+            ft_iter = 0
+            while (ft_err > env_subsys.conv_tol and ft_iter < env_subsys.max_cycle):
+                ft_err = 0.
+                ft_iter += 1
+                old_dmat = [env_subsys.make_rdm1(), model_subsys.make_rdm1()]
+                #set the fock emb for each subsys
+                e_terms = embed_mediator.get_embed_pot(env_subsys, model_subsys)
+                
+                #diagonalize subsys
+                env_subsys.relax()
+                model_subsys.relax()
+                new_dmat = [env_subsys.make_rdm1(), model_subsys.make_rdm1()]
+
+                ft_err += np.max(np.abs(new_dmat[0] - old_dmat[0]))
+                ft_err += np.max(np.abs(new_dmat[1] - old_dmat[1]))
+
+            #update the external potential
+
             subsys_list = subsys_list[-1]
+
         #do final energy calculation of highest level system
 
-            
-        #calculates energy of large system
-        #performs freeze and thaw embedding for subsystems
-        #goes a level deeper.
-        pass
+        return total_energy

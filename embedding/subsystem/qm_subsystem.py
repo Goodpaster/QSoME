@@ -17,6 +17,7 @@ class QMSubsystem:
         self.proj_pot = 0.
         self.emb_pot = 0.
         self.emb_fock = 0.
+        self.subsys_get_fock = self.mf_obj.get_fock
         self.mf_obj.get_hcore = scf.hf.get_hcore(self.mol) + self.emb_pot + self.proj_pot
 
     def use_emb_fock(self):
@@ -25,12 +26,10 @@ class QMSubsystem:
 
     def reset_fock(self):
         #Resets the get_fock method to be just for the subsystem not an embedded fock matrix.
-
-        pass
+        self.mf_obj.get_fock = self.subsys_get_fock
 
     def relax(cycles, emb_fock=None):
         if emb_fock: #This should reduce computational time by not calculating the subsystem fock multiple times.
-            self.mf_obj.get_fock = get_fock(*args, **kwargs, emb_fock)
         else: #Return get fock to normal operation.
             pass
 
@@ -44,4 +43,13 @@ class QMSubsystem:
         pass
 
     def kernel():
+        if issubclass(type(self.qm_obj), scf.hf.SCF):
+            return self.qm_obj.scf()
+        elif (type(self.qm_obj) is str):
+            print ('external method')
+        else:
+            print ('init')
+            self.mf_obj.kernel()
+            self.qm_obj.__init__(
+        
         pass
