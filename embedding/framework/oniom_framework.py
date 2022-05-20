@@ -161,6 +161,7 @@ class ONIOM_Framework:
             model_subsys = create_model_subsys(env_subsys, model_subsys_list)
             #do full system calculation
             comb_system = combine_subsystems(env_subsys, model_subsys)
+            total_energy += comb_system.kernel()
 
             #do embedding
             subsys_list = subsys_list[-1]
