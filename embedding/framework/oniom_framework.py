@@ -1,9 +1,9 @@
 #Sets up the oniom framework object.
 #Would we ever want two model subsystems?
-from pyscf import gto
+from pyscf import gto, scf
 import numpy as np
 
-from embed import subsystems
+from embedding import subsystem
 from copy import deepcopy as copy
 
 #Performs resursive concatenation to create one mol object.
@@ -130,7 +130,7 @@ def create_model_subsys(env_subsys, model_subsystems):
         scf_obj.mol = model_mol
         qm_obj = copy(env_subsys.qm_obj)
         qm_obj.__init__(scf_obj)
-    model_subsys = subsystems.qm_subsystem.QMSubsystem(qm_obj)
+    model_subsys = subsystem.qm_subsystem.QMSubsystem(qm_obj)
     return model_subsys
 
 def combine_subsystems(subsys1, subsys2):
