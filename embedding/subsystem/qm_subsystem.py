@@ -37,8 +37,11 @@ class QMSubsystem:
         if subcycle is None:
             subcycle = self.subcycle
         prev_max_cycle = self.qm_obj.max_cycle
+        prev_verbose = self.qm_obj.verbose
+        self.qm_obj.verbose = 0
         self.qm_obj.max_cycle = subcycle
         out_val = self.qm_obj.scf(dm0=self.make_rdm1())
+        self.qm_obj.verbose = prev_verbose
         self.qm_obj.max_cycle = prev_max_cycle
         return out_val
 
@@ -66,3 +69,4 @@ class QMSubsystem:
         else:
             print ('init')
             self.mf_obj.kernel()
+            #initialize the qm object again with the new mf_obj
