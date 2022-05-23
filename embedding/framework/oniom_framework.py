@@ -7,9 +7,17 @@ import numpy as np
 from embedding import subsystem
 from copy import deepcopy as copy
 
-#Performs resursive concatenation to create one mol object.
 
-#Copies an scf object to a new object.
+#Save density using cubegen
+#save orbitals using molden
+
+def save_chkfile(subsystem, sub_index, filename=None):
+    #saves mo coefficients to hdf5 object
+    pass
+
+def read_chkfile(sub_index, filename=None):
+    #returns the mo coefficients and occupation
+    pass
 
 def gen_sub2sup(mol, subsystems):
     """Generate the translation matrix between subsystem to supersystem.
@@ -224,7 +232,7 @@ class ONIOM_Framework:
         external_potential = None
         mediators_list = copy(self.embed_mediators)
 
-        comb_sub_num = 1
+        layer_num = 1
         #This iterative loop does the embedding. Goes one level deeper every time.
         while type(subsys_list[-1]) is list:
             env_subsys = subsys_list[0]
@@ -232,7 +240,7 @@ class ONIOM_Framework:
             model_subsys = create_model_subsys(env_subsys, model_subsys_list)
 
             #do full system calculation
-            logger.note(env_subsys.mol, 'combined system %i calculation', comb_sub_num)
+            logger.note(env_subsys.mol, 'combined system layer %i calculation', layer_num)
             comb_system = combine_subsystems(env_subsys, model_subsys)
             comb_system.init_den()
             if external_potential is None:
@@ -260,7 +268,7 @@ class ONIOM_Framework:
             model_subsys.init_den(model_dmat)
 
             #do embedding
-            logger.note(env_subsys.mol, 'freeze and thaw for system %i', comb_sub_num)
+            logger.note(env_subsys.mol, 'freeze and thaw for layer %i', layer_num)
             embed_mediator = mediators_list.pop()
             embed_mediator.s2s = s2s
             embed_mediator.comb_subsys = comb_system
@@ -284,9 +292,9 @@ class ONIOM_Framework:
                 model_subsys.relax()
                 new_dmat = [env_subsys.make_rdm1(), model_subsys.make_rdm1()]
                 ddm = np.max(np.abs(new_dmat[0] - old_dmat[0]))
-                logger.note(env_subsys.mol, 'iter:0:%i  ddm:%e', ft_iter, ddm)
+                logger.note(env_subsys.mol, 'subsystem:0 iteration:%i  ddm:%e', ft_iter, ddm)
                 ddm = np.max(np.abs(new_dmat[1] - old_dmat[1]))
-                logger.note(model_subsys.mol, 'iter:1:%i  ddm:%e', ft_iter, ddm)
+                logger.note(model_subsys.mol, 'subsystem:1 iteration:%i  ddm:%e', ft_iter, ddm)
 
                 ft_err += np.max(np.abs(new_dmat[0] - old_dmat[0]))
                 ft_err += np.max(np.abs(new_dmat[1] - old_dmat[1]))
@@ -295,7 +303,7 @@ class ONIOM_Framework:
             #update the external potential
             model_subsys.reset_fock()
             ext_model = model_subsys.emb_fock - model_subsys.qm_obj.get_fock()
-            logger.note(model_subsys.mol, 'converged model subsystem %i energy:%.15g', comb_sub_num, model_subsys.energy_tot())
+            logger.note(model_subsys.mol, 'converged model subsystem layer %i energy:%.15g', layer_num, model_subsys.energy_tot())
 
             if external_potential.ndim > 2:
                 external_potential = external_potential[np.ix_([0,1], s2s[1], s2s[1])] + ext_model
@@ -306,11 +314,11 @@ class ONIOM_Framework:
             total_energy -= model_subsys.energy_tot()
             external_potential += model_subsys.proj_pot
             subsys_list = subsys_list[-1]
-            comb_sub_num += 1
+            layer_num += 1
 
 
         for sub in subsys_list:
-            logger.note(sub.mol, 'model subsystem %i calculation', comb_sub_num)
+            logger.note(sub.mol, 'model subsystem layer %i calculation', layer_num)
             sub.emb_pot = external_potential
             sub_e = sub.kernel()
             total_energy += sub_e
